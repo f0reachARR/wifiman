@@ -1,0 +1,20 @@
+{
+  "name": "wifiman",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "pnpm --filter @wifiman/api dev",
+    "build": "pnpm -r build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "test": "pnpm -r test",
+    "test:unit": "pnpm -r test:unit",
+    "db:generate": "pnpm --filter @wifiman/api db:generate",
+    "db:migrate": "pnpm --filter @wifiman/api db:migrate"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "typescript": "^5.8.3"
+  }
+}
