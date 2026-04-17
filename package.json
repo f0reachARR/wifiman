@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "dev": "pnpm --filter @wifiman/api dev",
+    "dev": "dotenv -- pnpm --filter @wifiman/api dev",
     "build": "pnpm -r build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
@@ -16,5 +16,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "dotenv-cli": "^11.0.0"
   }
 }
