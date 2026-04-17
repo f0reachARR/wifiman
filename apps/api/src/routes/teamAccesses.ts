@@ -1,4 +1,4 @@
-import { zValidator } from '@hono/zod-validator';
+import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   CreateTeamAccessSchema,
   generateAccessToken,
@@ -8,7 +8,7 @@ import {
   verifyAccessToken,
 } from '@wifiman/shared';
 import { eq } from 'drizzle-orm';
-import { Hono } from 'hono';
+import type { ContextVariableMap } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { db } from '../db/index.js';
 import { teamAccesses } from '../db/schema/index.js';
@@ -17,63 +17,116 @@ import { notFound, unauthorized } from '../errors.js';
 import { createMailer } from '../mailer/index.js';
 import { requireOperator } from '../middleware/auth.js';
 
-const app = new Hono();
+const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
+
+const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 
 // POST /api/teams/:teamId/team-accesses - 編集リンク発行 (operator)
-app.post(
-  '/teams/:teamId/team-accesses',
-  requireOperator,
-  zValidator('json', CreateTeamAccessSchema.omit({ teamId: true })),
-  async (c) => {
-    const teamId = c.req.param('teamId');
-    const body = c.req.valid('json');
-
-    const token = generateAccessToken();
-    const hash = hashAccessToken(token);
-
-    const [access] = await db
-      .insert(teamAccesses)
-      .values({
-        teamId,
-        email: body.email,
-        accessTokenHash: hash,
-        role: body.role,
-      })
-      .returning();
-    if (!access) throw new Error('insert failed');
-
-    // メール送信 (失敗してもエラーにしない: ログのみ)
-    const link = `${env.APP_ORIGIN}/team-access?token=${token}&id=${access.id}`;
-    try {
-      const mailer = createMailer();
-      if (mailer) {
-        await mailer.sendTeamAccessLink(body.email, teamId, link);
-      }
-    } catch (err) {
-      console.error('チーム編集リンク送信失敗:', err);
-    }
-
-    return c.json(
-      { id: access.id, teamId: access.teamId, email: access.email, role: access.role, link },
-      201,
-    );
+const createTeamAccess = createRoute({
+  method: 'post',
+  path: '/teams/{teamId}/team-accesses',
+  tags: ['team-accesses'],
+  middleware: [requireOperator] as const,
+  request: {
+    params: z.object({ teamId: z.string() }),
+    body: {
+      content: {
+        'application/json': { schema: CreateTeamAccessSchema.omit({ teamId: true }) },
+      },
+      required: true,
+    },
   },
-);
+  responses: {
+    201: { content: { 'application/json': { schema: z.any() } }, description: '編集リンク発行' },
+    400: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'バリデーションエラー',
+    },
+    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+  },
+});
+app.openapi(createTeamAccess, async (c) => {
+  const { teamId } = c.req.valid('param');
+  const body = c.req.valid('json');
+
+  const token = generateAccessToken();
+  const hash = hashAccessToken(token);
+
+  const [access] = await db
+    .insert(teamAccesses)
+    .values({
+      teamId,
+      email: body.email,
+      accessTokenHash: hash,
+      role: body.role,
+    })
+    .returning();
+  if (!access) throw new Error('insert failed');
+
+  // メール送信 (失敗してもエラーにしない: ログのみ)
+  const link = `${env.APP_ORIGIN}/team-access?token=${token}&id=${access.id}`;
+  try {
+    const mailer = createMailer();
+    if (mailer) {
+      await mailer.sendTeamAccessLink(body.email, teamId, link);
+    }
+  } catch (err) {
+    console.error('チーム編集リンク送信失敗:', err);
+  }
+
+  return c.json(
+    { id: access.id, teamId: access.teamId, email: access.email, role: access.role, link },
+    201,
+  );
+});
 
 // POST /api/team-accesses/:id/revoke - 編集リンク失効 (operator)
-app.post('/team-accesses/:id/revoke', requireOperator, async (c) => {
-  const id = c.req.param('id')!;
+const revokeTeamAccess = createRoute({
+  method: 'post',
+  path: '/team-accesses/{id}/revoke',
+  tags: ['team-accesses'],
+  middleware: [requireOperator] as const,
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: z.any() } }, description: '失効成功' },
+    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+  },
+});
+app.openapi(revokeTeamAccess, async (c) => {
+  const { id } = c.req.valid('param');
   const [row] = await db
     .update(teamAccesses)
     .set({ revokedAt: new Date(), updatedAt: new Date() })
     .where(eq(teamAccesses.id, id))
     .returning();
   if (!row) throw notFound('チームアクセストークンが見つかりません');
-  return c.json({ message: '失効しました' });
+  return c.json({ message: '失効しました' }, 200);
 });
 
-// POST /api/auth/team-link - チーム編集リンク認証 (public)
-app.post('/auth/team-link', zValidator('json', VerifyTeamLinkSchema), async (c) => {
+// POST /api/team-accesses/verify - チーム編集リンク認証 (public)
+const verifyTeamLink = createRoute({
+  method: 'post',
+  path: '/team-accesses/verify',
+  tags: ['auth'],
+  request: {
+    body: { content: { 'application/json': { schema: VerifyTeamLinkSchema } }, required: true },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: z.any() } }, description: '認証成功' },
+    400: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'バリデーションエラー',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '無効なトークン',
+    },
+  },
+});
+app.openapi(verifyTeamLink, async (c) => {
   const { token } = c.req.valid('json');
 
   // トークンの前半16文字からアクセスIDを探す (全件スキャン回避のためハッシュで検索)
@@ -104,7 +157,7 @@ app.post('/auth/team-link', zValidator('json', VerifyTeamLinkSchema), async (c) 
   setCookie(c, 'team_access_token', token, cookieOptions);
   setCookie(c, 'team_access_id', access.id, cookieOptions);
 
-  return c.json({ teamId: access.teamId, role: access.role });
+  return c.json({ teamId: access.teamId, role: access.role }, 200);
 });
 
 export default app;

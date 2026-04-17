@@ -1,94 +1,144 @@
-import { zValidator } from '@hono/zod-validator';
+import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   BulkCreateObservedWifiSchema,
   CreateObservedWifiSchema,
   isValidChannel,
 } from '@wifiman/shared';
 import { eq } from 'drizzle-orm';
-import { Hono } from 'hono';
+import type { ContextVariableMap } from 'hono';
 import { db } from '../db/index.js';
 import { observedWifis } from '../db/schema/index.js';
 import { validationError } from '../errors.js';
 import { requireOperator } from '../middleware/auth.js';
 
-const app = new Hono();
+const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
+
+const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 
 // GET /api/tournaments/:tournamentId/observed-wifis - 野良 WiFi 一覧 (public)
-app.get('/tournaments/:tournamentId/observed-wifis', async (c) => {
-  const { tournamentId } = c.req.param();
+const listObservedWifis = createRoute({
+  method: 'get',
+  path: '/tournaments/{tournamentId}/observed-wifis',
+  tags: ['observed-wifis'],
+  request: { params: z.object({ tournamentId: z.string() }) },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: z.array(z.any()) } },
+      description: '野良 WiFi 一覧',
+    },
+  },
+});
+app.openapi(listObservedWifis, async (c) => {
+  const { tournamentId } = c.req.valid('param');
   const rows = await db
     .select()
     .from(observedWifis)
     .where(eq(observedWifis.tournamentId, tournamentId));
-  return c.json(rows);
+  return c.json(rows, 200);
 });
 
 // POST /api/tournaments/:tournamentId/observed-wifis - 野良 WiFi 手動登録 (operator)
-app.post(
-  '/tournaments/:tournamentId/observed-wifis',
-  requireOperator,
-  zValidator('json', CreateObservedWifiSchema.omit({ tournamentId: true })),
-  async (c) => {
-    const { tournamentId } = c.req.param();
-    const body = c.req.valid('json');
-
-    if (!isValidChannel(body.band, body.channel)) {
-      throw validationError(`帯域 ${body.band} に対してチャンネル ${body.channel} は無効です`);
-    }
-
-    const [row] = await db
-      .insert(observedWifis)
-      .values({
-        ...body,
-        tournamentId,
-        observedAt: new Date(body.observedAt),
-      })
-      .returning();
-    if (!row) throw new Error('insert failed');
-    return c.json(row, 201);
+const createObservedWifi = createRoute({
+  method: 'post',
+  path: '/tournaments/{tournamentId}/observed-wifis',
+  tags: ['observed-wifis'],
+  middleware: [requireOperator] as const,
+  request: {
+    params: z.object({ tournamentId: z.string() }),
+    body: {
+      content: {
+        'application/json': { schema: CreateObservedWifiSchema.omit({ tournamentId: true }) },
+      },
+      required: true,
+    },
   },
-);
+  responses: {
+    201: { content: { 'application/json': { schema: z.any() } }, description: '野良 WiFi 登録' },
+    400: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'バリデーションエラー',
+    },
+    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+  },
+});
+app.openapi(createObservedWifi, async (c) => {
+  const { tournamentId } = c.req.valid('param');
+  const body = c.req.valid('json');
+
+  if (!isValidChannel(body.band, body.channel)) {
+    throw validationError(`帯域 ${body.band} に対してチャンネル ${body.channel} は無効です`);
+  }
+
+  const [row] = await db
+    .insert(observedWifis)
+    .values({
+      ...body,
+      tournamentId,
+      observedAt: new Date(body.observedAt),
+    })
+    .returning();
+  if (!row) throw new Error('insert failed');
+  return c.json(row, 201);
+});
 
 // POST /api/tournaments/:tournamentId/observed-wifis/bulk - CSV 一括登録 (operator)
-app.post(
-  '/tournaments/:tournamentId/observed-wifis/bulk',
-  requireOperator,
-  zValidator('json', BulkCreateObservedWifiSchema),
-  async (c) => {
-    const { tournamentId } = c.req.param();
-    const { items } = c.req.valid('json');
-
-    // バリデーション: チャンネル・帯域の整合性確認
-    const errors: Array<{ row: number; message: string }> = [];
-    for (const [i, item] of items.entries()) {
-      if (!isValidChannel(item.band, item.channel)) {
-        errors.push({
-          row: i + 1,
-          message: `帯域 ${item.band} に対してチャンネル ${item.channel} は無効です`,
-        });
-      }
-    }
-
-    if (errors.length > 0) {
-      throw validationError('CSV に無効なデータが含まれています', { errors });
-    }
-
-    // トランザクション内で全件挿入
-    const inserted = await db.transaction(async (tx) => {
-      return tx
-        .insert(observedWifis)
-        .values(
-          items.map((item) => ({
-            ...item,
-            tournamentId,
-            observedAt: new Date(item.observedAt),
-          })),
-        )
-        .returning();
-    });
-
-    return c.json({ count: inserted.length, items: inserted }, 201);
+const bulkCreateObservedWifis = createRoute({
+  method: 'post',
+  path: '/tournaments/{tournamentId}/observed-wifis/bulk',
+  tags: ['observed-wifis'],
+  middleware: [requireOperator] as const,
+  request: {
+    params: z.object({ tournamentId: z.string() }),
+    body: {
+      content: { 'application/json': { schema: BulkCreateObservedWifiSchema } },
+      required: true,
+    },
   },
-);
+  responses: {
+    201: { content: { 'application/json': { schema: z.any() } }, description: '一括登録' },
+    400: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'バリデーションエラー',
+    },
+    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+  },
+});
+app.openapi(bulkCreateObservedWifis, async (c) => {
+  const { tournamentId } = c.req.valid('param');
+  const { items } = c.req.valid('json');
+
+  // バリデーション: チャンネル・帯域の整合性確認
+  const errors: Array<{ row: number; message: string }> = [];
+  for (const [i, item] of items.entries()) {
+    if (!isValidChannel(item.band, item.channel)) {
+      errors.push({
+        row: i + 1,
+        message: `帯域 ${item.band} に対してチャンネル ${item.channel} は無効です`,
+      });
+    }
+  }
+
+  if (errors.length > 0) {
+    throw validationError('CSV に無効なデータが含まれています', { errors });
+  }
+
+  // トランザクション内で全件挿入
+  const inserted = await db.transaction(async (tx) => {
+    return tx
+      .insert(observedWifis)
+      .values(
+        items.map((item) => ({
+          ...item,
+          tournamentId,
+          observedAt: new Date(item.observedAt),
+        })),
+      )
+      .returning();
+  });
+
+  return c.json({ count: inserted.length, items: inserted }, 201);
+});
 
 export default app;

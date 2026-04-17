@@ -1,4 +1,6 @@
-import { Hono } from 'hono';
+import { swaggerUI } from '@hono/swagger-ui';
+import { OpenAPIHono } from '@hono/zod-openapi';
+import type { ContextVariableMap } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { auth } from './auth.js';
@@ -15,8 +17,10 @@ import teamRoutes from './routes/teams.js';
 import tournamentRoutes from './routes/tournaments.js';
 import wifiConfigRoutes from './routes/wifiConfigs.js';
 
+type AppEnv = { Variables: ContextVariableMap };
+
 export function createApp() {
-  const app = new Hono();
+  const app = new OpenAPIHono<AppEnv>();
 
   // CORS
   app.use(
@@ -39,9 +43,9 @@ export function createApp() {
   app.use('/api/*', setAuthContext);
 
   // Routes
-  const api = new Hono();
+  const api = new OpenAPIHono<AppEnv>();
 
-  api.route('/tournaments', tournamentRoutes);
+  api.route('/', tournamentRoutes);
   api.route('/', teamRoutes);
   api.route('/', teamAccessRoutes);
   api.route('/', wifiConfigRoutes);
@@ -50,6 +54,16 @@ export function createApp() {
   api.route('/', issueReportRoutes);
   api.route('/', bestPracticeRoutes);
   api.route('/', noticeRoutes);
+
+  // OpenAPI ドキュメント
+  api.doc('/openapi.json', {
+    openapi: '3.1.0',
+    info: { title: 'WiFiMan API', version: '1.0.0' },
+    servers: [{ url: '/api', description: 'WiFiMan API server' }],
+  });
+
+  // Swagger UI
+  api.get('/docs', swaggerUI({ url: '/api/openapi.json' }));
 
   app.route('/api', api);
 
