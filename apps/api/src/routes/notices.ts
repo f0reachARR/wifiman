@@ -97,12 +97,35 @@ app.openapi(updateNotice, async (c) => {
   const { publishedAt: publishedAtStr, expiresAt: expiresAtStr, ...restBody } = body;
   const updateData = {
     ...restBody,
+    updatedAt: new Date(),
     ...(publishedAtStr !== undefined ? { publishedAt: new Date(publishedAtStr) } : {}),
     ...(expiresAtStr !== undefined ? { expiresAt: new Date(expiresAtStr) } : {}),
   };
   const [row] = await db.update(notices).set(updateData).where(eq(notices.id, id)).returning();
   if (!row) throw notFound('お知らせが見つかりません');
   return c.json(row, 200);
+});
+
+// DELETE /api/notices/:id - お知らせ削除 (operator)
+const deleteNotice = createRoute({
+  method: 'delete',
+  path: '/notices/{id}',
+  tags: ['notices'],
+  middleware: [requireOperator] as const,
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: z.any() } }, description: '削除成功' },
+    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+  },
+});
+app.openapi(deleteNotice, async (c) => {
+  const { id } = c.req.valid('param');
+  const existing = await db.query.notices.findFirst({ where: eq(notices.id, id) });
+  if (!existing) throw notFound('お知らせが見つかりません');
+  await db.delete(notices).where(eq(notices.id, id));
+  return c.json({ message: '削除しました' }, 200);
 });
 
 export default app;

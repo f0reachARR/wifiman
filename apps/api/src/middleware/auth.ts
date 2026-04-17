@@ -75,6 +75,17 @@ export function requireOperator(c: Context, next: Next) {
 }
 
 /**
+ * 何らかの認証済みユーザ（operator / チームトークン所持者 / ログイン済みユーザ）を要求するミドルウェア。
+ */
+export function requireAnyViewer(c: Context, next: Next) {
+  const authCtx = c.get('auth');
+  if (authCtx?.userRole === 'operator') return next();
+  if (authCtx?.teamId) return next();
+  if (authCtx?.userId) return next();
+  throw unauthorized();
+}
+
+/**
  * チームの閲覧権限を要求するミドルウェア。
  * 運営者はすべてのチームを閲覧可能。
  * チームトークン所持者は自チームのみ閲覧可能。
@@ -124,4 +135,16 @@ export function requireTeamEditor(teamIdParam = 'teamId') {
     }
     throw forbidden('対象チームの編集権限がありません');
   };
+}
+
+/**
+ * 大会参加者（任意チームのアクセストークン所持者）または運営者を要求するミドルウェア。
+ * 単なる userId ログインは拒否する。
+ */
+export function requireParticipant(c: Context, next: Next) {
+  const authCtx = c.get('auth');
+  if (authCtx?.userRole === 'operator') return next();
+  if (authCtx?.teamId) return next();
+  if (!authCtx?.userId) throw unauthorized();
+  throw forbidden('チーム参加者または運営者権限が必要です');
 }

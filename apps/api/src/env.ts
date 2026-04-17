@@ -5,6 +5,8 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().url(),
   APP_ORIGIN: z.string().url(),
+  /** カンマ区切りで追加する CORS 許可オリジン（開発用途など） */
+  CORS_ORIGINS: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   // SMTP (optional)

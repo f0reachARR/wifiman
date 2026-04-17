@@ -12,11 +12,12 @@ export const deviceSpecs = pgTable('device_specs', {
   kind: text('kind')
     .$type<'ap' | 'client' | 'usb_dongle' | 'router' | 'bridge' | 'other'>()
     .notNull(),
-  supportedBands: text('supported_bands').notNull(), // JSON array stored as text
+  supportedBands: text('supported_bands').array().notNull(), // text[]
   notes: text('notes'),
   knownIssues: text('known_issues'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  archivedAt: timestamp('archived_at'),
 });
 
 export type DeviceSpecRow = typeof deviceSpecs.$inferSelect;

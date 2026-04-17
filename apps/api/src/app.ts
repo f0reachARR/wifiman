@@ -23,10 +23,18 @@ export function createApp() {
   const app = new OpenAPIHono<AppEnv>();
 
   // CORS
+  const corsOrigins = [
+    env.APP_ORIGIN,
+    ...(env.CORS_ORIGINS
+      ? env.CORS_ORIGINS.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : []),
+  ];
   app.use(
     '/api/*',
     cors({
-      origin: [env.APP_ORIGIN, 'http://localhost:5173'],
+      origin: corsOrigins,
       credentials: true,
     }),
   );

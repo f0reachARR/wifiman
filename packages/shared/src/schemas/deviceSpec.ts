@@ -12,12 +12,14 @@ export const DeviceSpecSchema = z.object({
   knownIssues: z.string().max(2000).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  archivedAt: z.string().datetime().nullable().optional(),
 });
 
 export const CreateDeviceSpecSchema = DeviceSpecSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  archivedAt: true,
 });
 
 export const UpdateDeviceSpecSchema = CreateDeviceSpecSchema.omit({ teamId: true }).partial();

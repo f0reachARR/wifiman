@@ -37,7 +37,7 @@ export const issueReports = pgTable('issue_reports', {
   locationLabel: text('location_label'),
   reproducibility: text('reproducibility').$type<'always' | 'sometimes' | 'once'>(),
   description: text('description'),
-  mitigationTried: text('mitigation_tried'), // JSON array stored as text
+  mitigationTried: text('mitigation_tried').array(), // text[]
   improved: boolean('improved'),
   apDeviceModel: text('ap_device_model'),
   clientDeviceModel: text('client_device_model'),

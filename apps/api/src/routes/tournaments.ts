@@ -1,11 +1,20 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import type { ChannelMapEntry } from '@wifiman/shared';
 import { CreateTournamentSchema, UpdateTournamentSchema } from '@wifiman/shared';
-import { eq } from 'drizzle-orm';
+import { and, count, eq, isNotNull, ne } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { ContextVariableMap } from 'hono';
 import { db } from '../db/index.js';
-import { tournaments } from '../db/schema/index.js';
+import {
+  deviceSpecs,
+  issueReports,
+  observedWifis,
+  teams,
+  tournaments,
+  wifiConfigs,
+} from '../db/schema/index.js';
 import { notFound } from '../errors.js';
-import { requireOperator } from '../middleware/auth.js';
+import { requireAnyViewer, requireOperator } from '../middleware/auth.js';
 
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
@@ -110,6 +119,125 @@ app.openapi(updateTournament, async (c) => {
     .returning();
   if (!row) throw notFound('大会が見つかりません');
   return c.json(row, 200);
+});
+
+// GET /api/tournaments/:tournamentId/channel-map - チャンネルマップ (any_viewer)
+const getChannelMap = createRoute({
+  method: 'get',
+  path: '/tournaments/{tournamentId}/channel-map',
+  tags: ['tournaments'],
+  middleware: [requireAnyViewer] as const,
+  request: { params: z.object({ tournamentId: z.string() }) },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: z.array(z.any()) } },
+      description: 'チャンネルマップ',
+    },
+    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+  },
+});
+app.openapi(getChannelMap, async (c) => {
+  const { tournamentId } = c.req.valid('param');
+
+  const tournament = await db.query.tournaments.findFirst({
+    where: eq(tournaments.id, tournamentId),
+  });
+  if (!tournament) throw notFound('大会が見つかりません');
+
+  // 閲覧者の teamId (own_team / participant_team 判定に使用)
+  const authCtx = c.get('auth');
+  const viewerTeamId = authCtx?.teamId;
+
+  // デバイス仕様テーブルのエイリアス (AP / クライアント で別々に LEFT JOIN)
+  const apDeviceSpec = alias(deviceSpecs, 'ap_device_spec');
+  const clientDeviceSpec = alias(deviceSpecs, 'client_device_spec');
+
+  // チームの WiFi 構成を JOIN で取得
+  const teamConfigs = await db
+    .select({
+      wifiConfigId: wifiConfigs.id,
+      wifiConfigName: wifiConfigs.name,
+      teamId: wifiConfigs.teamId,
+      teamName: teams.name,
+      band: wifiConfigs.band,
+      channel: wifiConfigs.channel,
+      channelWidthMHz: wifiConfigs.channelWidthMHz,
+      purpose: wifiConfigs.purpose,
+      role: wifiConfigs.role,
+      status: wifiConfigs.status,
+      apDeviceModel: apDeviceSpec.model,
+      clientDeviceModel: clientDeviceSpec.model,
+    })
+    .from(wifiConfigs)
+    .innerJoin(teams, eq(wifiConfigs.teamId, teams.id))
+    .leftJoin(apDeviceSpec, eq(wifiConfigs.apDeviceId, apDeviceSpec.id))
+    .leftJoin(clientDeviceSpec, eq(wifiConfigs.clientDeviceId, clientDeviceSpec.id))
+    .where(and(eq(teams.tournamentId, tournamentId), ne(wifiConfigs.status, 'disabled')));
+
+  // wifiConfigId ごとの不具合報告件数を集計
+  const reportCountRows = await db
+    .select({ wifiConfigId: issueReports.wifiConfigId, cnt: count() })
+    .from(issueReports)
+    .where(and(eq(issueReports.tournamentId, tournamentId), isNotNull(issueReports.wifiConfigId)))
+    .groupBy(issueReports.wifiConfigId);
+  const reportCountMap = new Map<string, number>(
+    reportCountRows
+      .filter((r): r is { wifiConfigId: string; cnt: number } => r.wifiConfigId != null)
+      .map((r) => [r.wifiConfigId, Number(r.cnt)]),
+  );
+
+  // 野良 WiFi を取得
+  const wildWifis = await db
+    .select()
+    .from(observedWifis)
+    .where(eq(observedWifis.tournamentId, tournamentId));
+
+  const entries: ChannelMapEntry[] = [
+    ...teamConfigs.map((cfg): ChannelMapEntry => {
+      const sourceType: 'own_team' | 'participant_team' =
+        viewerTeamId != null && viewerTeamId === cfg.teamId ? 'own_team' : 'participant_team';
+      return {
+        sourceType,
+        band: cfg.band,
+        channel: cfg.channel,
+        channelWidthMHz: cfg.channelWidthMHz,
+        wifiConfigId: cfg.wifiConfigId,
+        wifiConfigName: cfg.wifiConfigName,
+        teamId: cfg.teamId,
+        teamName: cfg.teamName,
+        purpose: cfg.purpose,
+        role: cfg.role,
+        status: cfg.status,
+        apDeviceModel: cfg.apDeviceModel ?? null,
+        clientDeviceModel: cfg.clientDeviceModel ?? null,
+        reportCount: reportCountMap.get(cfg.wifiConfigId) ?? 0,
+      };
+    }),
+    ...wildWifis.map(
+      (w): Extract<ChannelMapEntry, { sourceType: 'observed_wifi' }> => ({
+        sourceType: 'observed_wifi',
+        band: w.band,
+        channel: w.channel,
+        channelWidthMHz: w.channelWidthMHz ?? undefined,
+        observedWifiId: w.id,
+        ssid: w.ssid,
+        source: w.source,
+        rssi: w.rssi ?? null,
+        locationLabel: w.locationLabel ?? null,
+        observedAt: w.observedAt.toISOString(),
+      }),
+    ),
+  ];
+
+  // 帯域 → チャンネル順でソート
+  const bandOrder: Record<string, number> = { '2.4GHz': 0, '5GHz': 1, '6GHz': 2 };
+  entries.sort((a, b) => {
+    const bo = (bandOrder[a.band] ?? 99) - (bandOrder[b.band] ?? 99);
+    return bo !== 0 ? bo : a.channel - b.channel;
+  });
+
+  return c.json(entries, 200);
 });
 
 export default app;

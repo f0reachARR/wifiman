@@ -4,14 +4,26 @@ import { eq } from 'drizzle-orm';
 import type { ContextVariableMap } from 'hono';
 import { db } from '../db/index.js';
 import { teams } from '../db/schema/index.js';
+import type { TeamRow } from '../db/schema/teams.js';
 import { conflict, notFound } from '../errors.js';
-import { requireOperator, requireTeamEditor, requireTeamViewer } from '../middleware/auth.js';
+import type { AuthContext } from '../middleware/auth.js';
+import { requireOperator, requireParticipant, requireTeamEditor } from '../middleware/auth.js';
 
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 
-// GET /api/tournaments/:tournamentId/teams - チーム一覧 (public)
+/**
+ * contactEmail / displayContactName を自チームまたは運営者以外には非表示にする。
+ */
+function maskTeamFields(row: TeamRow, authCtx: AuthContext | undefined): object {
+  if (authCtx?.userRole === 'operator') return row;
+  if (authCtx?.teamId === row.id) return row;
+  const { contactEmail: _ce, displayContactName: _dcn, notes: _n, ...publicFields } = row;
+  return publicFields;
+}
+
+// GET /api/tournaments/:tournamentId/teams - チーム一覧 (public, 機微情報はマスク)
 const listTeams = createRoute({
   method: 'get',
   path: '/tournaments/{tournamentId}/teams',
@@ -26,8 +38,12 @@ const listTeams = createRoute({
 });
 app.openapi(listTeams, async (c) => {
   const { tournamentId } = c.req.valid('param');
+  const authCtx = c.get('auth');
   const rows = await db.select().from(teams).where(eq(teams.tournamentId, tournamentId));
-  return c.json(rows, 200);
+  return c.json(
+    rows.map((r) => maskTeamFields(r, authCtx)),
+    200,
+  );
 });
 
 // POST /api/tournaments/:tournamentId/teams - チーム作成 (operator)
@@ -72,12 +88,12 @@ app.openapi(createTeam, async (c) => {
   }
 });
 
-// GET /api/teams/:id - チーム詳細 (team_viewer)
+// GET /api/teams/:id - チーム詳細 (participant, 機微情報はマスク)
 const getTeam = createRoute({
   method: 'get',
   path: '/teams/{teamId}',
   tags: ['teams'],
-  middleware: [requireTeamViewer('teamId')] as const,
+  middleware: [requireParticipant] as const,
   request: { params: z.object({ teamId: z.string() }) },
   responses: {
     200: { content: { 'application/json': { schema: z.any() } }, description: 'チーム詳細' },
@@ -88,9 +104,10 @@ const getTeam = createRoute({
 });
 app.openapi(getTeam, async (c) => {
   const { teamId } = c.req.valid('param');
+  const authCtx = c.get('auth');
   const row = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
   if (!row) throw notFound('チームが見つかりません');
-  return c.json(row, 200);
+  return c.json(maskTeamFields(row, authCtx), 200);
 });
 
 // PATCH /api/teams/:id - チーム更新 (team_editor)
@@ -124,6 +141,28 @@ app.openapi(updateTeam, async (c) => {
     .returning();
   if (!row) throw notFound('チームが見つかりません');
   return c.json(row, 200);
+});
+
+// DELETE /api/teams/:teamId - チーム削除 (operator)
+const deleteTeam = createRoute({
+  method: 'delete',
+  path: '/teams/{teamId}',
+  tags: ['teams'],
+  middleware: [requireOperator] as const,
+  request: { params: z.object({ teamId: z.string() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: z.any() } }, description: '削除成功' },
+    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+  },
+});
+app.openapi(deleteTeam, async (c) => {
+  const { teamId } = c.req.valid('param');
+  const existing = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
+  if (!existing) throw notFound('チームが見つかりません');
+  await db.delete(teams).where(eq(teams.id, teamId));
+  return c.json({ message: '削除しました' }, 200);
 });
 
 export default app;

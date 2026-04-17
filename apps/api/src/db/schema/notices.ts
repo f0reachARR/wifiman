@@ -12,6 +12,8 @@ export const notices = pgTable('notices', {
   severity: text('severity').$type<'info' | 'warning' | 'critical'>().notNull(),
   publishedAt: timestamp('published_at').notNull().defaultNow(),
   expiresAt: timestamp('expires_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
 export type NoticeRow = typeof notices.$inferSelect;
