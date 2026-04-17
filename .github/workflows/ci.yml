@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wifiman
+          POSTGRES_PASSWORD: wifiman
+          POSTGRES_DB: wifiman
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Biome check
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Migration check
+        env:
+          DATABASE_URL: postgres://wifiman:wifiman@localhost:5432/wifiman
+          BETTER_AUTH_SECRET: ci-test-secret-value-32-chars-long
+          BETTER_AUTH_URL: http://localhost:3000
+          APP_ORIGIN: http://localhost:5173
+        run: pnpm db:generate
+
+      - name: API build
+        env:
+          DATABASE_URL: postgres://wifiman:wifiman@localhost:5432/wifiman
+          BETTER_AUTH_SECRET: ci-test-secret-value-32-chars-long
+          BETTER_AUTH_URL: http://localhost:3000
+          APP_ORIGIN: http://localhost:5173
+        run: pnpm --filter @wifiman/api typecheck

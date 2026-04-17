@@ -1,0 +1,38 @@
+{
+  "name": "@wifiman/api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit && node esbuild.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "test:unit": "vitest run tests/unit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.4",
+    "@wifiman/shared": "workspace:*",
+    "better-auth": "^1.6.5",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.7.10",
+    "@hono/zod-validator": "^0.4.3",
+    "nodemailer": "^6.10.1",
+    "postgres": "^3.4.5",
+    "zod": "^3.25.17"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/nodemailer": "^6.4.17",
+    "@wifiman/config": "workspace:*",
+    "drizzle-kit": "^0.31.1",
+    "esbuild": "^0.25.4",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3"
+  }
+}
