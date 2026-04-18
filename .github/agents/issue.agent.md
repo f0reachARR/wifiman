@@ -27,13 +27,12 @@ model: "Claude Sonnet 4.6"
 8. レビュー内容に基づき、Issue を改善する
 9. `gh`を使用して Issue を作成し、ユーザーに作成した Issue とその内容を報告する
 
+## 注意事項
+
+- Issue の作成においては、巨大な要件で1つのIssueを作成するのではなく、必要に応じて複数の Issue に分割することを検討してください
+- 既存の Issue と重複する内容がないか確認してください。重複する内容がある場合は、既存の Issue を更新する形で対応してください
+
 ## ツール
 
 - #tool:ms-vscode.vscode-websearchforcopilot/websearch: ウェブ検索
 - `gh`: GitHub リポジトリの操作
-
-## ドキュメント
-
-- `docs/`
-- `README.md`
-- `CONTRIBUTING.md`

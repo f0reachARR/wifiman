@@ -19,15 +19,14 @@ model: "GPT-5.3-Codex"
 
 ## 手順 (#tool:todo)
 
-要件に応じて、以下のステップを要件を満たすまで繰り返してください。
-
 1. #tool:agent/runSubagent で issue エージェントを呼び出し、イシューを作成する
-2. #tool:agent/runSubagent で plan エージェントを呼び出し、実装計画を立てる
-3. #tool:agent/runSubagent で impl エージェントを呼び出し、実装を行う
-4. #tool:agent/runSubagent で review エージェントを呼び出し、コードレビューと修正を行う
-5. 残っている要件に応じてステップ 3 と 4 を繰り返す
-6. #tool:agent/runSubagent で pr エージェントを呼び出し、プルリクエストを作成する
-7. 実装内容とプルリクエストのリンクをユーザーに通知する
+2. 作成したイシューそれぞれに、以下を行い、実装を進める
+   - #tool:agent/runSubagent で plan エージェントを呼び出し、実装計画を立てる
+   - #tool:agent/runSubagent で impl エージェントを呼び出し、実装を行う
+   - #tool:agent/runSubagent で review エージェントを呼び出し、コードレビューと修正を行う
+   - レビューにてプルリクエストが作成OKとなるまで、上記の実装とレビューのサイクルを回す
+   - #tool:agent/runSubagent で pr エージェントを呼び出し、プルリクエストを作成する
+3. 実装内容とプルリクエストのリンクをユーザーに通知する
 
 ## 注意事項
 
