@@ -10,6 +10,18 @@ import { requireOperator } from '../middleware/auth.js';
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const noticeResponseSchema = z.object({
+  id: z.string(),
+  tournamentId: z.string(),
+  title: z.string(),
+  body: z.string(),
+  severity: z.enum(['info', 'warning', 'critical']),
+  publishedAt: z.date(),
+  expiresAt: z.date().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+const deleteResponseSchema = z.object({ message: z.string() });
 
 // GET /api/tournaments/:tournamentId/notices - お知らせ一覧 (public)
 const listNotices = createRoute({
@@ -19,7 +31,7 @@ const listNotices = createRoute({
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: { 'application/json': { schema: z.array(noticeResponseSchema) } },
       description: 'お知らせ一覧',
     },
   },
@@ -44,7 +56,10 @@ const createNotice = createRoute({
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: 'お知らせ作成' },
+    201: {
+      content: { 'application/json': { schema: noticeResponseSchema } },
+      description: 'お知らせ作成',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -81,7 +96,10 @@ const updateNotice = createRoute({
     body: { content: { 'application/json': { schema: UpdateNoticeSchema } }, required: true },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: 'お知らせ更新' },
+    200: {
+      content: { 'application/json': { schema: noticeResponseSchema } },
+      description: 'お知らせ更新',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -114,7 +132,10 @@ const deleteNotice = createRoute({
   middleware: [requireOperator] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '削除成功' },
+    200: {
+      content: { 'application/json': { schema: deleteResponseSchema } },
+      description: '削除成功',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },

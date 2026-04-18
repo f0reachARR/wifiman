@@ -77,6 +77,21 @@ function canViewIssueReport(
   return Boolean(authCtx?.teamId && authCtx.teamId === row.teamId);
 }
 
+function canAccessIssueReportTournament(
+  authCtx:
+    | {
+        userRole?: 'user' | 'operator';
+        teamId?: string;
+        teamTournamentId?: string;
+      }
+    | undefined,
+  row: { tournamentId: string },
+): boolean {
+  if (authCtx?.userRole === 'operator') return true;
+  if (!authCtx?.teamId) return false;
+  return authCtx.teamTournamentId === row.tournamentId;
+}
+
 async function assertTeamInTournament(teamId: string, tournamentId: string) {
   const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
   if (!team || team.tournamentId !== tournamentId) {
@@ -308,6 +323,10 @@ app.openapi(getIssueReport, async (c) => {
   const authCtx = c.get('auth');
   const row = await db.query.issueReports.findFirst({ where: eq(issueReports.id, id) });
   if (!row) throw notFound('報告が見つかりません');
+
+  if (!canAccessIssueReportTournament(authCtx, row)) {
+    throw forbidden('対象大会へのアクセス権限がありません');
+  }
 
   if (!canViewIssueReport(authCtx, row)) {
     throw forbidden('アクセス権限がありません');

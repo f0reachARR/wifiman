@@ -10,6 +10,17 @@ import { requireOperator } from '../middleware/auth.js';
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const bestPracticeResponseSchema = z.object({
+  id: z.string(),
+  tournamentId: z.string().nullable(),
+  title: z.string(),
+  body: z.string(),
+  scope: z.enum(['general', 'tournament', 'band', 'device']),
+  targetBand: z.enum(['2.4GHz', '5GHz', '6GHz']).nullable(),
+  targetModel: z.string().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
 
 // GET /api/tournaments/:tournamentId/best-practices - ベストプラクティス一覧 (public)
 const listBestPractices = createRoute({
@@ -19,7 +30,7 @@ const listBestPractices = createRoute({
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: { 'application/json': { schema: z.array(bestPracticeResponseSchema) } },
       description: 'ベストプラクティス一覧',
     },
   },
@@ -44,7 +55,7 @@ const createBestPractice = createRoute({
   },
   responses: {
     201: {
-      content: { 'application/json': { schema: z.any() } },
+      content: { 'application/json': { schema: bestPracticeResponseSchema } },
       description: 'ベストプラクティス作成',
     },
     400: {
@@ -74,7 +85,7 @@ const updateBestPractice = createRoute({
   },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.any() } },
+      content: { 'application/json': { schema: bestPracticeResponseSchema } },
       description: 'ベストプラクティス更新',
     },
     400: {

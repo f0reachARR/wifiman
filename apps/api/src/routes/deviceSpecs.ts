@@ -3,7 +3,7 @@ import { CreateDeviceSpecSchema, UpdateDeviceSpecSchema } from '@wifiman/shared'
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { ContextVariableMap, MiddlewareHandler } from 'hono';
 import { db } from '../db/index.js';
-import { deviceSpecs } from '../db/schema/index.js';
+import { deviceSpecs, teams } from '../db/schema/index.js';
 import { notFound } from '../errors.js';
 import { requireTeamEditor, requireTeamViewer } from '../middleware/auth.js';
 
@@ -45,12 +45,21 @@ const resolveDeviceSpecTeamMiddleware: AppMiddleware = async (c, next) => {
   await next();
 };
 
+const resolveTeamTournamentScopeMiddleware: AppMiddleware = async (c, next) => {
+  const teamId = c.req.param('teamId') as string;
+  const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
+  if (team) {
+    c.set('_targetTournamentId', team.tournamentId);
+  }
+  await next();
+};
+
 // GET /api/teams/:teamId/device-specs - 機材仕様一覧 (team_viewer)
 const listDeviceSpecs = createRoute({
   method: 'get',
   path: '/teams/{teamId}/device-specs',
   tags: ['device-specs'],
-  middleware: [requireTeamViewer('teamId')] as const,
+  middleware: [resolveTeamTournamentScopeMiddleware, requireTeamViewer('teamId')] as const,
   request: {
     params: z.object({ teamId: z.string() }),
     query: z.object({ include_archived: z.string().optional() }),

@@ -130,8 +130,18 @@ const ids = {
   deviceB: '00000000-0000-4000-8000-000000000042',
 };
 
-function participantAuth(teamId: string, teamAccessRole: 'viewer' | 'editor') {
-  return { teamId, teamAccessRole };
+function participantAuth(
+  teamId: string,
+  teamAccessRole: 'viewer' | 'editor',
+  teamTournamentId?: string,
+) {
+  const inferredTournamentId =
+    teamId === ids.teamA ? ids.tournamentA : teamId === ids.teamB ? ids.tournamentB : undefined;
+  return {
+    teamId,
+    teamAccessRole,
+    teamTournamentId: teamTournamentId ?? inferredTournamentId,
+  };
 }
 
 beforeEach(() => {
@@ -148,18 +158,32 @@ describe('security boundaries integration', () => {
   it('viewer は他チームの公開情報を閲覧できるが機密はマスクされる', async () => {
     const app = await createTestApp();
 
-    state.findFirstQueue.teams.push({
-      id: ids.teamB,
-      tournamentId: ids.tournamentA,
-      name: 'Team B',
-      organization: null,
-      pitId: null,
-      contactEmail: 'b@example.com',
-      displayContactName: 'Team B',
-      notes: null,
-      createdAt: new Date('2026-04-01T00:00:00.000Z'),
-      updatedAt: new Date('2026-04-01T00:00:00.000Z'),
-    });
+    state.findFirstQueue.teams.push(
+      {
+        id: ids.teamB,
+        tournamentId: ids.tournamentA,
+        name: 'Team B',
+        organization: null,
+        pitId: null,
+        contactEmail: 'b@example.com',
+        displayContactName: 'Team B',
+        notes: null,
+        createdAt: new Date('2026-04-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      },
+      {
+        id: ids.teamB,
+        tournamentId: ids.tournamentA,
+        name: 'Team B',
+        organization: null,
+        pitId: null,
+        contactEmail: 'b@example.com',
+        displayContactName: 'Team B',
+        notes: null,
+        createdAt: new Date('2026-04-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      },
+    );
     state.selectQueue.push([
       {
         id: ids.wifiB,
@@ -273,6 +297,26 @@ describe('security boundaries integration', () => {
         'x-test-auth': JSON.stringify(participantAuth(ids.teamA, 'editor')),
       },
       body: JSON.stringify({ teamId: ids.teamB }),
+    });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('issueReport 詳細: 別大会トークンは teamId が null の報告でも取得できない', async () => {
+    const app = await createTestApp();
+
+    state.findFirstQueue.issueReports.push({
+      id: ids.issuePublic,
+      tournamentId: ids.tournamentA,
+      teamId: null,
+      severity: 'medium',
+    });
+
+    const res = await app.request(`/api/issue-reports/${ids.issuePublic}`, {
+      method: 'GET',
+      headers: {
+        'x-test-auth': JSON.stringify(participantAuth(ids.teamB, 'viewer')),
+      },
     });
 
     expect(res.status).toBe(403);
@@ -515,6 +559,85 @@ describe('security boundaries integration', () => {
       );
       expect(summaryRes.status).toBe(200);
     }
+  });
+
+  it('別大会トークンは参加者限定の閲覧系APIをクロストーナメントで閲覧できない', async () => {
+    const app = await createTestApp();
+    const crossTournamentAuth = JSON.stringify(participantAuth(ids.teamB, 'viewer'));
+
+    const channelMapRes = await app.request(`/api/tournaments/${ids.tournamentA}/channel-map`, {
+      method: 'GET',
+      headers: { 'x-test-auth': crossTournamentAuth },
+    });
+    expect(channelMapRes.status).toBe(403);
+
+    const issueListRes = await app.request(`/api/tournaments/${ids.tournamentA}/issue-reports`, {
+      method: 'GET',
+      headers: { 'x-test-auth': crossTournamentAuth },
+    });
+    expect(issueListRes.status).toBe(403);
+
+    const issueSummaryRes = await app.request(
+      `/api/tournaments/${ids.tournamentA}/issue-reports/summary`,
+      {
+        method: 'GET',
+        headers: { 'x-test-auth': crossTournamentAuth },
+      },
+    );
+    expect(issueSummaryRes.status).toBe(403);
+
+    state.findFirstQueue.teams.push(
+      {
+        id: ids.teamA,
+        tournamentId: ids.tournamentA,
+        name: 'Team A',
+        organization: null,
+        pitId: null,
+        contactEmail: 'a@example.com',
+        displayContactName: 'Team A',
+        notes: null,
+        createdAt: new Date('2026-04-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      },
+      {
+        id: ids.teamA,
+        tournamentId: ids.tournamentA,
+        name: 'Team A',
+        organization: null,
+        pitId: null,
+        contactEmail: 'a@example.com',
+        displayContactName: 'Team A',
+        notes: null,
+        createdAt: new Date('2026-04-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      },
+      {
+        id: ids.teamA,
+        tournamentId: ids.tournamentA,
+      },
+      {
+        id: ids.teamA,
+        tournamentId: ids.tournamentA,
+      },
+    );
+
+    const teamRes = await app.request(`/api/teams/${ids.teamA}`, {
+      method: 'GET',
+      headers: { 'x-test-auth': crossTournamentAuth },
+    });
+    expect(teamRes.status).toBe(403);
+
+    const wifiListRes = await app.request(`/api/teams/${ids.teamA}/wifi-configs`, {
+      method: 'GET',
+      headers: { 'x-test-auth': crossTournamentAuth },
+    });
+    expect(wifiListRes.status).toBe(403);
+
+    const deviceListRes = await app.request(`/api/teams/${ids.teamA}/device-specs`, {
+      method: 'GET',
+      headers: { 'x-test-auth': crossTournamentAuth },
+    });
+    expect(deviceListRes.status).toBe(403);
   });
 
   it('observedWifis 公開APIでは notes を返さない', async () => {

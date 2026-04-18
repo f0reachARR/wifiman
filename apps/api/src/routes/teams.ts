@@ -1,7 +1,7 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import { CreateTeamSchema, UpdateTeamSchema } from '@wifiman/shared';
 import { eq } from 'drizzle-orm';
-import type { ContextVariableMap } from 'hono';
+import type { ContextVariableMap, MiddlewareHandler } from 'hono';
 import { db } from '../db/index.js';
 import { teams } from '../db/schema/index.js';
 import type { TeamRow } from '../db/schema/teams.js';
@@ -32,6 +32,16 @@ const publicTeamSchema = teamResponseSchema.omit({
 });
 const listTeamResponseSchema = z.union([teamResponseSchema, publicTeamSchema]);
 const deleteResponseSchema = z.object({ message: z.string() });
+type AppMiddleware = MiddlewareHandler<{ Variables: ContextVariableMap }>;
+
+const resolveTeamTournamentScopeMiddleware: AppMiddleware = async (c, next) => {
+  const teamId = c.req.param('teamId') as string;
+  const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
+  if (team) {
+    c.set('_targetTournamentId', team.tournamentId);
+  }
+  await next();
+};
 
 /**
  * contactEmail / displayContactName を自チームまたは運営者以外には非表示にする。
@@ -116,11 +126,11 @@ const getTeam = createRoute({
   method: 'get',
   path: '/teams/{teamId}',
   tags: ['teams'],
-  middleware: [requireTeamViewer('teamId')] as const,
+  middleware: [resolveTeamTournamentScopeMiddleware, requireTeamViewer('teamId')] as const,
   request: { params: z.object({ teamId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: teamResponseSchema } },
+      content: { 'application/json': { schema: z.union([teamResponseSchema, publicTeamSchema]) } },
       description: 'チーム詳細',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
@@ -130,9 +140,10 @@ const getTeam = createRoute({
 });
 app.openapi(getTeam, async (c) => {
   const { teamId } = c.req.valid('param');
+  const authCtx = c.get('auth');
   const row = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
   if (!row) throw notFound('チームが見つかりません');
-  return c.json(row, 200);
+  return c.json(maskTeamFields(row, authCtx), 200);
 });
 
 // PATCH /api/teams/:id - チーム更新 (team_editor)

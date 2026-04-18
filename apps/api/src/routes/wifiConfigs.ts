@@ -11,7 +11,7 @@ import {
 import { eq } from 'drizzle-orm';
 import type { ContextVariableMap, MiddlewareHandler } from 'hono';
 import { db } from '../db/index.js';
-import { deviceSpecs, wifiConfigs } from '../db/schema/index.js';
+import { deviceSpecs, teams, wifiConfigs } from '../db/schema/index.js';
 import { notFound, unprocessable } from '../errors.js';
 import { requireTeamEditor, requireTeamViewer } from '../middleware/auth.js';
 
@@ -73,6 +73,15 @@ const resolveWifiConfigTeamMiddleware: AppMiddleware = async (c, next) => {
   await next();
 };
 
+const resolveTeamTournamentScopeMiddleware: AppMiddleware = async (c, next) => {
+  const teamId = c.req.param('teamId') as string;
+  const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
+  if (team) {
+    c.set('_targetTournamentId', team.tournamentId);
+  }
+  await next();
+};
+
 function validateChannelAndWidth(band: Band, channel: number, widthMHz: number) {
   if (!isValidChannel(band, channel)) {
     throw unprocessable(`帯域 ${band} に対してチャンネル ${channel} は無効です`);
@@ -87,7 +96,7 @@ const listWifiConfigs = createRoute({
   method: 'get',
   path: '/teams/{teamId}/wifi-configs',
   tags: ['wifi-configs'],
-  middleware: [requireTeamViewer('teamId')] as const,
+  middleware: [resolveTeamTournamentScopeMiddleware, requireTeamViewer('teamId')] as const,
   request: { params: z.object({ teamId: z.string() }) },
   responses: {
     200: {
