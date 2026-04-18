@@ -23,8 +23,19 @@ const deviceSpecResponseSchema = z.object({
   updatedAt: z.date(),
   archivedAt: z.date().nullable(),
 });
+const publicDeviceSpecResponseSchema = deviceSpecResponseSchema.omit({
+  notes: true,
+  archivedAt: true,
+});
 const archiveResponseSchema = z.object({ message: z.string(), id: z.string() });
 type AppMiddleware = MiddlewareHandler<{ Variables: ContextVariableMap }>;
+
+function toPublicDeviceSpec(
+  row: z.infer<typeof deviceSpecResponseSchema>,
+): z.infer<typeof publicDeviceSpecResponseSchema> {
+  const { notes: _notes, archivedAt: _archivedAt, ...publicRow } = row;
+  return publicRow;
+}
 
 const resolveDeviceSpecTeamMiddleware: AppMiddleware = async (c, next) => {
   const id = c.req.param('id') as string;
@@ -46,7 +57,11 @@ const listDeviceSpecs = createRoute({
   },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(deviceSpecResponseSchema) } },
+      content: {
+        'application/json': {
+          schema: z.array(z.union([deviceSpecResponseSchema, publicDeviceSpecResponseSchema])),
+        },
+      },
       description: '機材仕様一覧',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
@@ -56,7 +71,9 @@ const listDeviceSpecs = createRoute({
 app.openapi(listDeviceSpecs, async (c) => {
   const { teamId } = c.req.valid('param');
   const { include_archived } = c.req.valid('query');
-  const shouldIncludeArchived = include_archived === 'true';
+  const authCtx = c.get('auth');
+  const isOwnTeamOrOperator = authCtx?.userRole === 'operator' || authCtx?.teamId === teamId;
+  const shouldIncludeArchived = include_archived === 'true' && isOwnTeamOrOperator;
   const rows = await db
     .select()
     .from(deviceSpecs)
@@ -65,7 +82,14 @@ app.openapi(listDeviceSpecs, async (c) => {
         ? eq(deviceSpecs.teamId, teamId)
         : and(eq(deviceSpecs.teamId, teamId), isNull(deviceSpecs.archivedAt)),
     );
-  return c.json(rows, 200);
+  const filteredRows = shouldIncludeArchived ? rows : rows.filter((row) => row.archivedAt === null);
+  if (isOwnTeamOrOperator) {
+    return c.json(filteredRows, 200);
+  }
+  return c.json(
+    filteredRows.map((row) => toPublicDeviceSpec(row)),
+    200,
+  );
 });
 
 // POST /api/teams/:teamId/device-specs - 機材仕様作成 (team_editor)

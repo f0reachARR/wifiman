@@ -68,6 +68,15 @@ const issueReportSummarySchema = z.object({
   ),
 });
 
+function canViewIssueReport(
+  authCtx: { userRole?: 'user' | 'operator'; teamId?: string } | undefined,
+  row: { teamId: string | null },
+): boolean {
+  if (authCtx?.userRole === 'operator') return true;
+  if (row.teamId === null) return true;
+  return Boolean(authCtx?.teamId && authCtx.teamId === row.teamId);
+}
+
 // GET /api/tournaments/:tournamentId/issue-reports - 報告一覧 (any_viewer, 自チームのみ)
 const listIssueReports = createRoute({
   method: 'get',
@@ -91,18 +100,10 @@ app.openapi(listIssueReports, async (c) => {
     .from(issueReports)
     .where(eq(issueReports.tournamentId, tournamentId));
 
-  if (authCtx?.userRole === 'operator') {
-    return c.json(rows, 200);
-  }
-  // チームトークン保持者は自チームの報告のみ
-  if (authCtx?.teamId) {
-    return c.json(
-      rows.filter((r) => r.teamId === authCtx.teamId),
-      200,
-    );
-  }
-  // ログイン済だが teamId 未設定 → 自チームが特定できないため空を返す
-  return c.json([], 200);
+  return c.json(
+    rows.filter((r) => canViewIssueReport(authCtx, r)),
+    200,
+  );
 });
 
 // GET /api/tournaments/:tournamentId/issue-reports/summary - 報告サマリ (any_viewer, 自チームのみ)
@@ -123,28 +124,20 @@ const summaryIssueReports = createRoute({
 app.openapi(summaryIssueReports, async (c) => {
   const { tournamentId } = c.req.valid('param');
   const authCtx = c.get('auth');
-  let rows = await db
+  const rows = await db
     .select()
     .from(issueReports)
     .where(eq(issueReports.tournamentId, tournamentId));
 
-  if (authCtx?.userRole !== 'operator') {
-    if (authCtx?.teamId) {
-      // チームトークン保持者は自チームの報告のみ
-      rows = rows.filter((r) => r.teamId === authCtx.teamId);
-    } else {
-      // ログイン済だが teamId 未設定 → 空サマリを返す
-      rows = [];
-    }
-  }
+  const visibleRows = rows.filter((r) => canViewIssueReport(authCtx, r));
 
-  const total = rows.length;
+  const total = visibleRows.length;
   const bySeverity = { low: 0, medium: 0, high: 0, critical: 0 } as Record<string, number>;
   const byBand = { '2.4GHz': 0, '5GHz': 0, '6GHz': 0 } as Record<string, number>;
   const channelCounts = new Map<string, { band: string; channel: number; count: number }>();
   const symptomCounts = new Map<string, number>();
 
-  for (const r of rows) {
+  for (const r of visibleRows) {
     bySeverity[r.severity] = (bySeverity[r.severity] ?? 0) + 1;
     byBand[r.band] = (byBand[r.band] ?? 0) + 1;
     const key = `${r.band}:${r.channel}`;
@@ -290,11 +283,8 @@ app.openapi(getIssueReport, async (c) => {
   const row = await db.query.issueReports.findFirst({ where: eq(issueReports.id, id) });
   if (!row) throw notFound('報告が見つかりません');
 
-  // operator はすべて閲覧可能。それ以外は自チームの報告のみ
-  if (authCtx?.userRole !== 'operator') {
-    if (!authCtx?.teamId || authCtx.teamId !== row.teamId) {
-      throw forbidden('アクセス権限がありません');
-    }
+  if (!canViewIssueReport(authCtx, row)) {
+    throw forbidden('アクセス権限がありません');
   }
 
   return c.json(row, 200);
@@ -342,6 +332,36 @@ app.openapi(updateIssueReport, async (c) => {
       authCtx.teamAccessRole !== 'editor'
     ) {
       throw forbidden('報告の編集権限がありません');
+    }
+  }
+
+  if (body.teamId !== undefined && body.teamId !== existing.teamId) {
+    throw forbidden('報告更新で teamId は変更できません');
+  }
+  if (body.wifiConfigId !== undefined && body.wifiConfigId !== existing.wifiConfigId) {
+    throw forbidden('報告更新で wifiConfigId は変更できません');
+  }
+
+  if (existing.teamId) {
+    const team = await db.query.teams.findFirst({ where: eq(teams.id, existing.teamId) });
+    if (!team || team.tournamentId !== existing.tournamentId) {
+      throw unprocessable('報告の team と tournament の整合性が不正です');
+    }
+  }
+
+  if (existing.wifiConfigId) {
+    const config = await db.query.wifiConfigs.findFirst({
+      where: eq(wifiConfigs.id, existing.wifiConfigId),
+    });
+    if (!config) {
+      throw unprocessable('報告の WiFi 構成参照が不正です');
+    }
+    if (existing.teamId && config.teamId !== existing.teamId) {
+      throw unprocessable('報告の team と WiFi 構成の整合性が不正です');
+    }
+    const configTeam = await db.query.teams.findFirst({ where: eq(teams.id, config.teamId) });
+    if (!configTeam || configTeam.tournamentId !== existing.tournamentId) {
+      throw unprocessable('報告の tournament と WiFi 構成の整合性が不正です');
     }
   }
 

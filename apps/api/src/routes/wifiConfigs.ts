@@ -11,7 +11,7 @@ import {
 import { eq } from 'drizzle-orm';
 import type { ContextVariableMap, MiddlewareHandler } from 'hono';
 import { db } from '../db/index.js';
-import { wifiConfigs } from '../db/schema/index.js';
+import { deviceSpecs, wifiConfigs } from '../db/schema/index.js';
 import { notFound, unprocessable } from '../errors.js';
 import { requireTeamEditor, requireTeamViewer } from '../middleware/auth.js';
 
@@ -36,8 +36,34 @@ const wifiConfigResponseSchema = z.object({
   createdAt: z.date(),
   updatedAt: z.date(),
 });
+const publicWifiConfigResponseSchema = wifiConfigResponseSchema.omit({
+  pingTargetIp: true,
+  notes: true,
+});
 const deleteResponseSchema = z.object({ message: z.string() });
 type AppMiddleware = MiddlewareHandler<{ Variables: ContextVariableMap }>;
+
+function toPublicWifiConfig(
+  row: z.infer<typeof wifiConfigResponseSchema>,
+): z.infer<typeof publicWifiConfigResponseSchema> {
+  const { pingTargetIp: _pingTargetIp, notes: _notes, ...publicRow } = row;
+  return publicRow;
+}
+
+async function assertDeviceBelongsToTeam(
+  teamId: string,
+  deviceId: string | undefined,
+  label: 'AP' | 'クライアント',
+) {
+  if (!deviceId) return;
+  const device = await db.query.deviceSpecs.findFirst({ where: eq(deviceSpecs.id, deviceId) });
+  if (!device) {
+    throw unprocessable(`指定された ${label} 機材が見つかりません`);
+  }
+  if (device.teamId !== teamId) {
+    throw unprocessable(`他チームの ${label} 機材は指定できません`);
+  }
+}
 
 const resolveWifiConfigTeamMiddleware: AppMiddleware = async (c, next) => {
   const id = c.req.param('id') as string;
@@ -65,7 +91,11 @@ const listWifiConfigs = createRoute({
   request: { params: z.object({ teamId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(wifiConfigResponseSchema) } },
+      content: {
+        'application/json': {
+          schema: z.array(z.union([wifiConfigResponseSchema, publicWifiConfigResponseSchema])),
+        },
+      },
       description: 'WiFi 構成一覧',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
@@ -74,8 +104,15 @@ const listWifiConfigs = createRoute({
 });
 app.openapi(listWifiConfigs, async (c) => {
   const { teamId } = c.req.valid('param');
+  const authCtx = c.get('auth');
   const rows = await db.select().from(wifiConfigs).where(eq(wifiConfigs.teamId, teamId));
-  return c.json(rows, 200);
+  if (authCtx?.userRole === 'operator' || authCtx?.teamId === teamId) {
+    return c.json(rows, 200);
+  }
+  return c.json(
+    rows.map((row) => toPublicWifiConfig(row)),
+    200,
+  );
 });
 
 // POST /api/teams/:teamId/wifi-configs - WiFi 構成作成 (team_editor)
@@ -111,6 +148,9 @@ app.openapi(createWifiConfig, async (c) => {
 
   // チャンネル・幅の検証
   validateChannelAndWidth(body.band, body.channel, body.channelWidthMHz);
+
+  await assertDeviceBelongsToTeam(teamId, body.apDeviceId, 'AP');
+  await assertDeviceBelongsToTeam(teamId, body.clientDeviceId, 'クライアント');
 
   // 3 件上限チェック (active + standby のみカウント)
   if (body.status !== 'disabled') {
@@ -170,6 +210,9 @@ app.openapi(patchWifiConfig, async (c) => {
   if (body.band !== undefined || body.channel !== undefined || body.channelWidthMHz !== undefined) {
     validateChannelAndWidth(newBand, newChannel, newWidth);
   }
+
+  await assertDeviceBelongsToTeam(existing.teamId, body.apDeviceId, 'AP');
+  await assertDeviceBelongsToTeam(existing.teamId, body.clientDeviceId, 'クライアント');
 
   // ステータス変更時の上限チェック
   if (body.status !== undefined && body.status !== 'disabled') {
