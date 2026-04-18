@@ -1,0 +1,21 @@
+ALTER TABLE "issue_reports" ADD CONSTRAINT "issue_reports_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "issue_reports" ADD CONSTRAINT "issue_reports_wifi_config_id_wifi_configs_id_fk" FOREIGN KEY ("wifi_config_id") REFERENCES "public"."wifi_configs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "wifi_configs" ADD CONSTRAINT "wifi_configs_ap_device_id_device_specs_id_fk" FOREIGN KEY ("ap_device_id") REFERENCES "public"."device_specs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "wifi_configs" ADD CONSTRAINT "wifi_configs_client_device_id_device_specs_id_fk" FOREIGN KEY ("client_device_id") REFERENCES "public"."device_specs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "device_specs" ADD CONSTRAINT "device_specs_kind_check" CHECK ("device_specs"."kind" IN ('ap', 'client', 'usb_dongle', 'router', 'bridge', 'other'));--> statement-breakpoint
+ALTER TABLE "device_specs" ADD CONSTRAINT "device_specs_supported_bands_not_empty_check" CHECK (array_length("device_specs"."supported_bands", 1) >= 1);--> statement-breakpoint
+ALTER TABLE "device_specs" ADD CONSTRAINT "device_specs_supported_bands_values_check" CHECK ("device_specs"."supported_bands" <@ ARRAY['2.4GHz', '5GHz', '6GHz']::text[]);--> statement-breakpoint
+ALTER TABLE "issue_reports" ADD CONSTRAINT "issue_reports_sync_status_check" CHECK ("issue_reports"."sync_status" IN ('local_only', 'pending', 'synced', 'failed'));--> statement-breakpoint
+ALTER TABLE "issue_reports" ADD CONSTRAINT "issue_reports_band_check" CHECK ("issue_reports"."band" IN ('2.4GHz', '5GHz', '6GHz'));--> statement-breakpoint
+ALTER TABLE "issue_reports" ADD CONSTRAINT "issue_reports_symptom_check" CHECK ("issue_reports"."symptom" IN ('cannot_connect', 'unstable', 'low_throughput', 'high_latency', 'disconnect', 'distance_sensitive', 'unknown'));--> statement-breakpoint
+ALTER TABLE "issue_reports" ADD CONSTRAINT "issue_reports_severity_check" CHECK ("issue_reports"."severity" IN ('low', 'medium', 'high', 'critical'));--> statement-breakpoint
+ALTER TABLE "issue_reports" ADD CONSTRAINT "issue_reports_distance_category_check" CHECK ("issue_reports"."distance_category" IS NULL OR "issue_reports"."distance_category" IN ('near', 'mid', 'far', 'obstacle'));--> statement-breakpoint
+ALTER TABLE "issue_reports" ADD CONSTRAINT "issue_reports_reproducibility_check" CHECK ("issue_reports"."reproducibility" IS NULL OR "issue_reports"."reproducibility" IN ('always', 'sometimes', 'once'));--> statement-breakpoint
+ALTER TABLE "issue_reports" ADD CONSTRAINT "issue_reports_packet_loss_percent_check" CHECK ("issue_reports"."packet_loss_percent" IS NULL OR ("issue_reports"."packet_loss_percent" >= 0 AND "issue_reports"."packet_loss_percent" <= 100));--> statement-breakpoint
+ALTER TABLE "team_accesses" ADD CONSTRAINT "team_accesses_role_check" CHECK ("team_accesses"."role" IN ('editor', 'viewer'));--> statement-breakpoint
+ALTER TABLE "wifi_configs" ADD CONSTRAINT "wifi_configs_purpose_check" CHECK ("wifi_configs"."purpose" IN ('control', 'video', 'debug', 'other'));--> statement-breakpoint
+ALTER TABLE "wifi_configs" ADD CONSTRAINT "wifi_configs_band_check" CHECK ("wifi_configs"."band" IN ('2.4GHz', '5GHz', '6GHz'));--> statement-breakpoint
+ALTER TABLE "wifi_configs" ADD CONSTRAINT "wifi_configs_channel_width_check" CHECK ("wifi_configs"."channel_width_mhz" IN (20, 40, 80, 160));--> statement-breakpoint
+ALTER TABLE "wifi_configs" ADD CONSTRAINT "wifi_configs_role_check" CHECK ("wifi_configs"."role" IN ('primary', 'backup'));--> statement-breakpoint
+ALTER TABLE "wifi_configs" ADD CONSTRAINT "wifi_configs_status_check" CHECK ("wifi_configs"."status" IN ('active', 'standby', 'disabled'));--> statement-breakpoint
+ALTER TABLE "wifi_configs" ADD CONSTRAINT "wifi_configs_expected_distance_category_check" CHECK ("wifi_configs"."expected_distance_category" IS NULL OR "wifi_configs"."expected_distance_category" IN ('near', 'mid', 'far'));
