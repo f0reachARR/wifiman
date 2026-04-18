@@ -122,6 +122,7 @@ const listIssueReports = createRoute({
       description: '報告一覧',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
   },
 });
 app.openapi(listIssueReports, async (c) => {
@@ -151,6 +152,7 @@ const summaryIssueReports = createRoute({
       description: '報告サマリ',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
   },
 });
 app.openapi(summaryIssueReports, async (c) => {

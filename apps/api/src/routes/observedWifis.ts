@@ -14,6 +14,27 @@ import { requireOperator } from '../middleware/auth.js';
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const observedWifiResponseSchema = z.object({
+  id: z.string(),
+  tournamentId: z.string(),
+  source: z.enum(['wild', 'analyzer_import', 'manual']),
+  ssid: z.string().nullable(),
+  bssid: z.string().nullable(),
+  band: z.enum(['2.4GHz', '5GHz', '6GHz']),
+  channel: z.number().int(),
+  channelWidthMHz: z.number().int().nullable(),
+  rssi: z.number().nullable(),
+  locationLabel: z.string().nullable(),
+  observedAt: z.date(),
+  notes: z.string().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+const publicObservedWifiResponseSchema = observedWifiResponseSchema.omit({ notes: true });
+const bulkCreateObservedWifiResponseSchema = z.object({
+  count: z.number().int().nonnegative(),
+  items: z.array(observedWifiResponseSchema),
+});
 
 // GET /api/tournaments/:tournamentId/observed-wifis - 野良 WiFi 一覧 (public)
 const listObservedWifis = createRoute({
@@ -23,7 +44,7 @@ const listObservedWifis = createRoute({
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: { 'application/json': { schema: z.array(publicObservedWifiResponseSchema) } },
       description: '野良 WiFi 一覧',
     },
   },
@@ -34,7 +55,10 @@ app.openapi(listObservedWifis, async (c) => {
     .select()
     .from(observedWifis)
     .where(eq(observedWifis.tournamentId, tournamentId));
-  return c.json(rows, 200);
+  return c.json(
+    rows.map(({ notes: _notes, ...publicRow }) => publicRow),
+    200,
+  );
 });
 
 // POST /api/tournaments/:tournamentId/observed-wifis - 野良 WiFi 手動登録 (operator)
@@ -53,7 +77,10 @@ const createObservedWifi = createRoute({
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: '野良 WiFi 登録' },
+    201: {
+      content: { 'application/json': { schema: observedWifiResponseSchema } },
+      description: '野良 WiFi 登録',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -96,7 +123,10 @@ const bulkCreateObservedWifis = createRoute({
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: '一括登録' },
+    201: {
+      content: { 'application/json': { schema: bulkCreateObservedWifiResponseSchema } },
+      description: '一括登録',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',

@@ -1,6 +1,10 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
-import type { ChannelMapEntry } from '@wifiman/shared';
-import { CreateTournamentSchema, UpdateTournamentSchema } from '@wifiman/shared';
+import {
+  type ChannelMapEntry,
+  ChannelMapEntrySchema,
+  CreateTournamentSchema,
+  UpdateTournamentSchema,
+} from '@wifiman/shared';
 import { and, count, eq, isNotNull, ne } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { ContextVariableMap } from 'hono';
@@ -20,6 +24,16 @@ const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 const idParam = z.object({ id: z.string() });
+const tournamentResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  venueName: z.string(),
+  startDate: z.string(),
+  endDate: z.string(),
+  description: z.string().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
 
 // GET /api/tournaments - 大会一覧 (public)
 const listTournaments = createRoute({
@@ -27,7 +41,10 @@ const listTournaments = createRoute({
   path: '/tournaments',
   tags: ['tournaments'],
   responses: {
-    200: { content: { 'application/json': { schema: z.array(z.any()) } }, description: '大会一覧' },
+    200: {
+      content: { 'application/json': { schema: z.array(tournamentResponseSchema) } },
+      description: '大会一覧',
+    },
   },
 });
 app.openapi(listTournaments, async (c) => {
@@ -45,7 +62,10 @@ const createTournament = createRoute({
     body: { content: { 'application/json': { schema: CreateTournamentSchema } }, required: true },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: '大会作成' },
+    201: {
+      content: { 'application/json': { schema: tournamentResponseSchema } },
+      description: '大会作成',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -77,7 +97,10 @@ const getTournament = createRoute({
   tags: ['tournaments'],
   request: { params: idParam },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '大会詳細' },
+    200: {
+      content: { 'application/json': { schema: tournamentResponseSchema } },
+      description: '大会詳細',
+    },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
   },
 });
@@ -99,7 +122,10 @@ const updateTournament = createRoute({
     body: { content: { 'application/json': { schema: UpdateTournamentSchema } }, required: true },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '大会更新' },
+    200: {
+      content: { 'application/json': { schema: tournamentResponseSchema } },
+      description: '大会更新',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -130,10 +156,11 @@ const getChannelMap = createRoute({
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: { 'application/json': { schema: z.array(ChannelMapEntrySchema) } },
       description: 'チャンネルマップ',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
   },
 });

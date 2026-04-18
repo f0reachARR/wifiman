@@ -15,6 +15,7 @@ type MockState = {
     issueReports: Array<MockRow | null>;
     wifiConfigs: Array<MockRow | null>;
     teams: Array<MockRow | null>;
+    tournaments: Array<MockRow | null>;
     deviceSpecs: Array<MockRow | null>;
   };
 };
@@ -26,6 +27,7 @@ const { mockDb, state } = vi.hoisted(() => {
       issueReports: [],
       wifiConfigs: [],
       teams: [],
+      tournaments: [],
       deviceSpecs: [],
     },
   };
@@ -40,6 +42,9 @@ const { mockDb, state } = vi.hoisted(() => {
       },
       teams: {
         findFirst: vi.fn(async () => mockState.findFirstQueue.teams.shift() ?? null),
+      },
+      tournaments: {
+        findFirst: vi.fn(async () => mockState.findFirstQueue.tournaments.shift() ?? null),
       },
       deviceSpecs: {
         findFirst: vi.fn(async () => mockState.findFirstQueue.deviceSpecs.shift() ?? null),
@@ -80,11 +85,15 @@ async function createTestApp() {
     { default: wifiConfigRoutes },
     { default: deviceSpecRoutes },
     { default: teamRoutes },
+    { default: tournamentRoutes },
+    { default: observedWifiRoutes },
   ] = await Promise.all([
     import('../../src/routes/issueReports.js'),
     import('../../src/routes/wifiConfigs.js'),
     import('../../src/routes/deviceSpecs.js'),
     import('../../src/routes/teams.js'),
+    import('../../src/routes/tournaments.js'),
+    import('../../src/routes/observedWifis.js'),
   ]);
 
   const app = new OpenAPIHono();
@@ -99,6 +108,8 @@ async function createTestApp() {
   app.route('/api', wifiConfigRoutes);
   app.route('/api', deviceSpecRoutes);
   app.route('/api', teamRoutes);
+  app.route('/api', tournamentRoutes);
+  app.route('/api', observedWifiRoutes);
   app.onError(errorHandler);
 
   return app;
@@ -114,6 +125,7 @@ const ids = {
   issuePublic: '00000000-0000-4000-8000-000000000023',
   wifiA: '00000000-0000-4000-8000-000000000031',
   wifiB: '00000000-0000-4000-8000-000000000032',
+  observedA: '00000000-0000-4000-8000-000000000033',
   deviceA: '00000000-0000-4000-8000-000000000041',
   deviceB: '00000000-0000-4000-8000-000000000042',
 };
@@ -127,12 +139,13 @@ beforeEach(() => {
   state.findFirstQueue.issueReports = [];
   state.findFirstQueue.wifiConfigs = [];
   state.findFirstQueue.teams = [];
+  state.findFirstQueue.tournaments = [];
   state.findFirstQueue.deviceSpecs = [];
   vi.clearAllMocks();
 });
 
 describe('security boundaries integration', () => {
-  it('viewer は他チームの team/detail・wifiConfigs・deviceSpecs 閲覧を拒否される', async () => {
+  it('viewer は他チームの公開情報を閲覧できるが機密はマスクされる', async () => {
     const app = await createTestApp();
 
     state.findFirstQueue.teams.push({
@@ -147,6 +160,41 @@ describe('security boundaries integration', () => {
       createdAt: new Date('2026-04-01T00:00:00.000Z'),
       updatedAt: new Date('2026-04-01T00:00:00.000Z'),
     });
+    state.selectQueue.push([
+      {
+        id: ids.wifiB,
+        teamId: ids.teamB,
+        name: 'Team B Control',
+        purpose: 'control',
+        band: '5GHz',
+        channel: 44,
+        channelWidthMHz: 80,
+        role: 'primary',
+        status: 'active',
+        apDeviceId: null,
+        clientDeviceId: null,
+        expectedDistanceCategory: 'mid',
+        pingTargetIp: '10.0.0.1',
+        notes: 'private note',
+        createdAt: new Date('2026-04-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      },
+    ]);
+    state.selectQueue.push([
+      {
+        id: ids.deviceB,
+        teamId: ids.teamB,
+        vendor: 'vendor-b',
+        model: 'model-b',
+        kind: 'ap',
+        supportedBands: ['5GHz'],
+        notes: 'secret memo',
+        knownIssues: 'known issue summary',
+        createdAt: new Date('2026-04-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+        archivedAt: null,
+      },
+    ]);
 
     const auth = JSON.stringify(participantAuth(ids.teamA, 'viewer'));
 
@@ -154,13 +202,23 @@ describe('security boundaries integration', () => {
       method: 'GET',
       headers: { 'x-test-auth': auth },
     });
-    expect(teamRes.status).toBe(403);
+    expect(teamRes.status).toBe(200);
+    const teamBody = (await teamRes.json()) as Record<string, unknown>;
+    expect(teamBody.id).toBe(ids.teamB);
+    expect(teamBody).not.toHaveProperty('contactEmail');
+    expect(teamBody).not.toHaveProperty('displayContactName');
+    expect(teamBody).not.toHaveProperty('notes');
 
     const wifiRes = await app.request(`/api/teams/${ids.teamB}/wifi-configs`, {
       method: 'GET',
       headers: { 'x-test-auth': auth },
     });
-    expect(wifiRes.status).toBe(403);
+    expect(wifiRes.status).toBe(200);
+    const wifiBody = (await wifiRes.json()) as Array<Record<string, unknown>>;
+    expect(wifiBody).toHaveLength(1);
+    expect(wifiBody[0]?.id).toBe(ids.wifiB);
+    expect(wifiBody[0]).not.toHaveProperty('pingTargetIp');
+    expect(wifiBody[0]).not.toHaveProperty('notes');
 
     const deviceRes = await app.request(
       `/api/teams/${ids.teamB}/device-specs?include_archived=true`,
@@ -169,7 +227,12 @@ describe('security boundaries integration', () => {
         headers: { 'x-test-auth': auth },
       },
     );
-    expect(deviceRes.status).toBe(403);
+    expect(deviceRes.status).toBe(200);
+    const deviceBody = (await deviceRes.json()) as Array<Record<string, unknown>>;
+    expect(deviceBody).toHaveLength(1);
+    expect(deviceBody[0]?.id).toBe(ids.deviceB);
+    expect(deviceBody[0]).not.toHaveProperty('notes');
+    expect(deviceBody[0]).not.toHaveProperty('archivedAt');
   });
 
   it('viewer は issueReport を作成できない (403)', async () => {
@@ -393,5 +456,97 @@ describe('security boundaries integration', () => {
     });
 
     expect(res.status).toBe(404);
+  });
+
+  it('通常ログイン user は channel-map / issueReports 一覧・summary を閲覧できない', async () => {
+    const app = await createTestApp();
+    const auth = JSON.stringify({ userId: 'user-a', userRole: 'user' });
+
+    const channelMapRes = await app.request(`/api/tournaments/${ids.tournamentA}/channel-map`, {
+      method: 'GET',
+      headers: { 'x-test-auth': auth },
+    });
+    expect(channelMapRes.status).toBe(403);
+
+    const listRes = await app.request(`/api/tournaments/${ids.tournamentA}/issue-reports`, {
+      method: 'GET',
+      headers: { 'x-test-auth': auth },
+    });
+    expect(listRes.status).toBe(403);
+
+    const summaryRes = await app.request(
+      `/api/tournaments/${ids.tournamentA}/issue-reports/summary`,
+      {
+        method: 'GET',
+        headers: { 'x-test-auth': auth },
+      },
+    );
+    expect(summaryRes.status).toBe(403);
+  });
+
+  it('participant/operator は channel-map / issueReports 一覧・summary を閲覧できる', async () => {
+    const app = await createTestApp();
+    const authHeaders = [
+      JSON.stringify(participantAuth(ids.teamA, 'viewer')),
+      JSON.stringify({ userId: 'op-1', userRole: 'operator' }),
+    ];
+
+    for (const auth of authHeaders) {
+      const channelMapRes = await app.request(`/api/tournaments/${ids.tournamentA}/channel-map`, {
+        method: 'GET',
+        headers: { 'x-test-auth': auth },
+      });
+      expect(channelMapRes.status).toBe(404);
+
+      state.selectQueue.push([]);
+      const listRes = await app.request(`/api/tournaments/${ids.tournamentA}/issue-reports`, {
+        method: 'GET',
+        headers: { 'x-test-auth': auth },
+      });
+      expect(listRes.status).toBe(200);
+
+      state.selectQueue.push([]);
+      const summaryRes = await app.request(
+        `/api/tournaments/${ids.tournamentA}/issue-reports/summary`,
+        {
+          method: 'GET',
+          headers: { 'x-test-auth': auth },
+        },
+      );
+      expect(summaryRes.status).toBe(200);
+    }
+  });
+
+  it('observedWifis 公開APIでは notes を返さない', async () => {
+    const app = await createTestApp();
+
+    state.selectQueue.push([
+      {
+        id: ids.observedA,
+        tournamentId: ids.tournamentA,
+        source: 'wild',
+        ssid: 'Free-WiFi',
+        bssid: '00:11:22:33:44:55',
+        band: '5GHz',
+        channel: 36,
+        channelWidthMHz: 80,
+        rssi: -64,
+        locationLabel: 'hall-a',
+        observedAt: new Date('2026-04-10T00:00:00.000Z'),
+        notes: 'internal observation memo',
+        createdAt: new Date('2026-04-10T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-10T00:00:00.000Z'),
+      },
+    ]);
+
+    const res = await app.request(`/api/tournaments/${ids.tournamentA}/observed-wifis`, {
+      method: 'GET',
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<Record<string, unknown>>;
+    expect(body).toHaveLength(1);
+    expect(body[0]?.id).toBe(ids.observedA);
+    expect(body[0]).not.toHaveProperty('notes');
   });
 });

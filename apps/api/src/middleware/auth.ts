@@ -76,20 +76,21 @@ export function requireOperator(c: Context, next: Next) {
 }
 
 /**
- * 何らかの認証済みユーザ（operator / チームトークン所持者 / ログイン済みユーザ）を要求するミドルウェア。
+ * 参加者閲覧権限（operator / チームトークン所持者）を要求するミドルウェア。
+ * 単なる user ログインは拒否する。
  */
 export function requireAnyViewer(c: Context, next: Next) {
   const authCtx = c.get('auth');
   if (authCtx?.userRole === 'operator') return next();
   if (authCtx?.teamId) return next();
-  if (authCtx?.userId) return next();
+  if (authCtx?.userId) throw forbidden('チーム参加者または運営者権限が必要です');
   throw unauthorized();
 }
 
 /**
  * チームの閲覧権限を要求するミドルウェア。
  * 運営者はすべてのチームを閲覧可能。
- * チームトークン所持者は自チームのみ閲覧可能。
+ * チームトークン所持者は自チームをフル閲覧でき、他チームは公開経路のみ閲覧可能。
  */
 export function requireTeamViewer(teamIdParam = 'teamId') {
   return (c: Context, next: Next) => {
@@ -97,6 +98,13 @@ export function requireTeamViewer(teamIdParam = 'teamId') {
     const targetTeamId = c.get('_targetTeamId') ?? c.req.param(teamIdParam);
 
     if (canViewTeam(authCtx, targetTeamId)) {
+      return next();
+    }
+
+    if (
+      authCtx?.teamId &&
+      (authCtx.teamAccessRole === 'viewer' || authCtx.teamAccessRole === 'editor')
+    ) {
       return next();
     }
 
