@@ -9,7 +9,7 @@ tools:
     "web",
     "ms-vscode.vscode-websearchforcopilot/websearch",
   ]
-model: "Claude Sonnet 4.6"
+model: "GPT-5.4"
 ---
 
 与えられたイシューの実装計画を立ててください。
@@ -21,7 +21,7 @@ model: "Claude Sonnet 4.6"
 3. レポジトリ (仕様、コード、ドキュメント) を確認する
 4. ウェブ検索で情報を収集する
 5. 技術的制約により仕様を変更する場合、仕様ファイル(`spec-*.md`)に反映する
-5. 実装計画をユーザーに提示する
+6. 実装計画をユーザーに提示する
 
 ## ツール
 

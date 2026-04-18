@@ -10,7 +10,7 @@ tools:
     "todo",
     "ms-vscode.vscode-websearchforcopilot/websearch",
   ]
-model: "Claude Opus 4.6"
+model: "Claude Sonnet 4.6"
 ---
 
 与えられた実行計画に従って、実装を行ってください。TDD に倣って、以下のステップで実施します。
