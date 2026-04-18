@@ -89,7 +89,7 @@ pnpm dev
 | GET | /api/teams/:id/wifi-configs | team_viewer | WiFi 構成一覧 |
 | POST | /api/teams/:id/wifi-configs | team_editor | WiFi 構成作成 |
 | PATCH | /api/wifi-configs/:id | team_editor | WiFi 構成更新 |
-| DELETE | /api/wifi-configs/:id | team_editor | WiFi 構成削除 |
+| DELETE | /api/wifi-configs/:id | team_editor | WiFi 構成無効化 |
 | GET | /api/teams/:id/device-specs | team_viewer | 機材仕様一覧 |
 | POST | /api/teams/:id/device-specs | team_editor | 機材仕様作成 |
 | PATCH | /api/device-specs/:id | team_editor | 機材仕様更新 |
@@ -108,5 +108,5 @@ pnpm dev
 | PATCH | /api/notices/:id | operator | お知らせ更新 |
 | POST | /api/teams/:id/team-accesses | operator | 編集リンク発行 |
 | POST | /api/team-accesses/:id/revoke | operator | 編集リンク失効 |
-| POST | /api/auth/team-link | public | チーム編集リンク認証 |
+| POST | /api/team-accesses/verify | public | チーム編集リンク認証 |
 | * | /api/auth/* | - | Better Auth エンドポイント |
