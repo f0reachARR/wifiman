@@ -1,16 +1,19 @@
-import { isTokenValid, verifyAccessToken } from '@wifiman/shared';
+import { isTokenValid } from '@wifiman/shared';
 import { eq } from 'drizzle-orm';
 import type { Context, Next } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { auth } from '../auth.js';
+import { canEditTeam, canViewTeam, hasParticipantRole } from '../authz.js';
 import { db } from '../db/index.js';
-import { teamAccesses } from '../db/schema/index.js';
+import { teamAccesses, teams } from '../db/schema/index.js';
 import { forbidden, unauthorized } from '../errors.js';
+import { verifyTeamAccessSessionCookie } from '../teamAccessSession.js';
 
 export type AuthContext = {
   userId?: string;
   userRole?: 'user' | 'operator';
   teamId?: string;
+  teamTournamentId?: string;
   teamAccessRole?: 'editor' | 'viewer';
 };
 
@@ -18,6 +21,28 @@ declare module 'hono' {
   interface ContextVariableMap {
     auth: AuthContext;
     _targetTeamId: string;
+    _targetTournamentId: string;
+  }
+}
+
+function resolveTargetTournamentId(c: Context): string | undefined {
+  const fromContext = c.get('_targetTournamentId');
+  if (fromContext) return fromContext;
+
+  const fromParam = c.req.param('tournamentId');
+  if (fromParam) return fromParam;
+
+  const fromQuery = c.req.query('tournamentId');
+  if (fromQuery) return fromQuery;
+
+  return undefined;
+}
+
+function assertTeamTournamentScope(authCtx: AuthContext | undefined, targetTournamentId: string) {
+  if (!authCtx?.teamId) return;
+
+  if (!authCtx.teamTournamentId || authCtx.teamTournamentId !== targetTournamentId) {
+    throw forbidden('対象大会へのアクセス権限がありません');
   }
 }
 
@@ -34,25 +59,33 @@ export async function setAuthContext(c: Context, next: Next) {
     authCtx.userRole = (session.user as { role?: 'user' | 'operator' }).role ?? 'user';
   }
 
-  // チーム編集トークン Cookie の確認
-  const teamToken = getCookie(c, 'team_access_token');
-  const teamAccessId = getCookie(c, 'team_access_id');
-  if (teamToken && teamAccessId) {
+  // チーム編集の短期セッション Cookie を確認する。
+  const teamAccessSession = verifyTeamAccessSessionCookie(getCookie(c, 'team_access_session'));
+  if (teamAccessSession) {
     const access = await db.query.teamAccesses.findFirst({
-      where: eq(teamAccesses.id, teamAccessId),
+      where: eq(teamAccesses.id, teamAccessSession.teamAccessId),
     });
     if (
       access &&
       isTokenValid(access.revokedAt?.toISOString()) &&
-      verifyAccessToken(teamToken, access.accessTokenHash)
+      access.teamId === teamAccessSession.teamId &&
+      access.role === teamAccessSession.role
     ) {
       authCtx.teamId = access.teamId;
       authCtx.teamAccessRole = access.role;
+
+      const team = await db.query.teams.findFirst({
+        where: eq(teams.id, access.teamId),
+      });
+      if (team && team.tournamentId === teamAccessSession.tournamentId) {
+        authCtx.teamTournamentId = team.tournamentId;
+      }
+
       // last_used_at を更新
       await db
         .update(teamAccesses)
         .set({ lastUsedAt: new Date(), updatedAt: new Date() })
-        .where(eq(teamAccesses.id, teamAccessId));
+        .where(eq(teamAccesses.id, teamAccessSession.teamAccessId));
     }
   }
 
@@ -75,33 +108,46 @@ export function requireOperator(c: Context, next: Next) {
 }
 
 /**
- * 何らかの認証済みユーザ（operator / チームトークン所持者 / ログイン済みユーザ）を要求するミドルウェア。
+ * 参加者閲覧権限（operator / チームトークン所持者）を要求するミドルウェア。
+ * 単なる user ログインは拒否する。
  */
 export function requireAnyViewer(c: Context, next: Next) {
   const authCtx = c.get('auth');
+  const targetTournamentId = resolveTargetTournamentId(c);
+
+  if (targetTournamentId) {
+    assertTeamTournamentScope(authCtx, targetTournamentId);
+  }
+
   if (authCtx?.userRole === 'operator') return next();
   if (authCtx?.teamId) return next();
-  if (authCtx?.userId) return next();
+  if (authCtx?.userId) throw forbidden('チーム参加者または運営者権限が必要です');
   throw unauthorized();
 }
 
 /**
  * チームの閲覧権限を要求するミドルウェア。
  * 運営者はすべてのチームを閲覧可能。
- * チームトークン所持者は自チームのみ閲覧可能。
+ * チームトークン所持者は自チームをフル閲覧でき、他チームは公開経路のみ閲覧可能。
  */
 export function requireTeamViewer(teamIdParam = 'teamId') {
   return (c: Context, next: Next) => {
     const authCtx = c.get('auth');
     const targetTeamId = c.get('_targetTeamId') ?? c.req.param(teamIdParam);
+    const targetTournamentId = resolveTargetTournamentId(c);
 
-    // 運営者はすべて OK
-    if (authCtx?.userRole === 'operator') {
+    if (targetTournamentId) {
+      assertTeamTournamentScope(authCtx, targetTournamentId);
+    }
+
+    if (canViewTeam(authCtx, targetTeamId)) {
       return next();
     }
 
-    // チームトークン所持者は自チームのみ
-    if (authCtx?.teamId && authCtx.teamId === targetTeamId) {
+    if (
+      authCtx?.teamId &&
+      (authCtx.teamAccessRole === 'viewer' || authCtx.teamAccessRole === 'editor')
+    ) {
       return next();
     }
 
@@ -120,13 +166,7 @@ export function requireTeamEditor(teamIdParam = 'teamId') {
     const authCtx = c.get('auth');
     const targetTeamId = c.get('_targetTeamId') ?? c.req.param(teamIdParam);
 
-    // 運営者はすべて OK
-    if (authCtx?.userRole === 'operator') {
-      return next();
-    }
-
-    // editor ロール かつ 対象チームの場合のみ OK
-    if (authCtx?.teamId && authCtx.teamId === targetTeamId && authCtx.teamAccessRole === 'editor') {
+    if (canEditTeam(authCtx, targetTeamId)) {
       return next();
     }
 
@@ -143,8 +183,7 @@ export function requireTeamEditor(teamIdParam = 'teamId') {
  */
 export function requireParticipant(c: Context, next: Next) {
   const authCtx = c.get('auth');
-  if (authCtx?.userRole === 'operator') return next();
-  if (authCtx?.teamId) return next();
+  if (hasParticipantRole(authCtx)) return next();
   if (!authCtx?.userId) throw unauthorized();
   throw forbidden('チーム参加者または運営者権限が必要です');
 }

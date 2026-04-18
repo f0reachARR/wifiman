@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SYNC_ACTIONS, SYNC_RECORD_STATUSES } from '../enums.js';
+import { DateTimeStringSchema, optionalFromNullable } from './common.js';
 
 export const SyncRecordSchema = z.object({
   id: z.string().uuid(),
@@ -7,9 +8,9 @@ export const SyncRecordSchema = z.object({
   entityId: z.string().uuid(),
   action: z.enum(SYNC_ACTIONS),
   status: z.enum(SYNC_RECORD_STATUSES),
-  errorMessage: z.string().max(2000).optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  errorMessage: optionalFromNullable(z.string().max(2000)),
+  createdAt: DateTimeStringSchema,
+  updatedAt: DateTimeStringSchema,
 });
 
 export type SyncRecord = z.infer<typeof SyncRecordSchema>;

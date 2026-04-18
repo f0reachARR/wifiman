@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DateTimeStringSchema, optionalFromNullable } from './common.js';
 
 export const TournamentSchema = z.object({
   id: z.string().uuid(),
@@ -6,9 +7,9 @@ export const TournamentSchema = z.object({
   venueName: z.string().min(1).max(200),
   startDate: z.string().date(),
   endDate: z.string().date(),
-  description: z.string().max(2000).optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  description: optionalFromNullable(z.string().max(2000)),
+  createdAt: DateTimeStringSchema,
+  updatedAt: DateTimeStringSchema,
 });
 
 export const CreateTournamentSchema = TournamentSchema.omit({

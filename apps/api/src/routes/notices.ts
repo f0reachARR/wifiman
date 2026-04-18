@@ -1,15 +1,23 @@
-import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
-import { CreateNoticeSchema, UpdateNoticeSchema } from '@wifiman/shared';
+import { createRoute, z } from '@hono/zod-openapi';
+import { CreateNoticeSchema, NoticeSchema, UpdateNoticeSchema } from '@wifiman/shared';
 import { eq } from 'drizzle-orm';
-import type { ContextVariableMap } from 'hono';
 import { db } from '../db/index.js';
-import { notices } from '../db/schema/index.js';
+import { notices, tournaments } from '../db/schema/index.js';
 import { notFound } from '../errors.js';
 import { requireOperator } from '../middleware/auth.js';
+import { createOpenApiApp, errorSchema } from '../openapi.js';
 
-const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
+const app = createOpenApiApp();
+const noticeResponseSchema = NoticeSchema;
+const noticeListResponseSchema = z.array(noticeResponseSchema);
+const deleteResponseSchema = z.object({ message: z.string() });
 
-const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+async function assertTournamentExists(tournamentId: string) {
+  const tournament = await db.query.tournaments.findFirst({
+    where: eq(tournaments.id, tournamentId),
+  });
+  if (!tournament) throw notFound('大会が見つかりません');
+}
 
 // GET /api/tournaments/:tournamentId/notices - お知らせ一覧 (public)
 const listNotices = createRoute({
@@ -19,7 +27,9 @@ const listNotices = createRoute({
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: {
+        'application/json': { schema: z.array(noticeResponseSchema) },
+      },
       description: 'お知らせ一覧',
     },
   },
@@ -27,7 +37,7 @@ const listNotices = createRoute({
 app.openapi(listNotices, async (c) => {
   const { tournamentId } = c.req.valid('param');
   const rows = await db.select().from(notices).where(eq(notices.tournamentId, tournamentId));
-  return c.json(rows, 200);
+  return c.json(noticeListResponseSchema.parse(rows), 200);
 });
 
 // POST /api/tournaments/:tournamentId/notices - お知らせ作成 (operator)
@@ -39,23 +49,37 @@ const createNotice = createRoute({
   request: {
     params: z.object({ tournamentId: z.string() }),
     body: {
-      content: { 'application/json': { schema: CreateNoticeSchema.omit({ tournamentId: true }) } },
+      content: {
+        'application/json': {
+          schema: CreateNoticeSchema.omit({ tournamentId: true }),
+        },
+      },
       required: true,
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: 'お知らせ作成' },
+    201: {
+      content: { 'application/json': { schema: noticeResponseSchema } },
+      description: 'お知らせ作成',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
   },
 });
 app.openapi(createNotice, async (c) => {
   const { tournamentId } = c.req.valid('param');
   const body = c.req.valid('json');
+  await assertTournamentExists(tournamentId);
   const { publishedAt: publishedAtStr, expiresAt: expiresAtStr, ...restBody } = body;
   const [row] = await db
     .insert(notices)
@@ -67,7 +91,7 @@ app.openapi(createNotice, async (c) => {
     })
     .returning();
   if (!row) throw new Error('insert failed');
-  return c.json(row, 201);
+  return c.json(noticeResponseSchema.parse(row), 201);
 });
 
 // PATCH /api/notices/:id - お知らせ更新 (operator)
@@ -78,17 +102,32 @@ const updateNotice = createRoute({
   middleware: [requireOperator] as const,
   request: {
     params: z.object({ id: z.string() }),
-    body: { content: { 'application/json': { schema: UpdateNoticeSchema } }, required: true },
+    body: {
+      content: { 'application/json': { schema: UpdateNoticeSchema } },
+      required: true,
+    },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: 'お知らせ更新' },
+    200: {
+      content: { 'application/json': { schema: noticeResponseSchema } },
+      description: 'お知らせ更新',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
-    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
   },
 });
 app.openapi(updateNotice, async (c) => {
@@ -103,7 +142,7 @@ app.openapi(updateNotice, async (c) => {
   };
   const [row] = await db.update(notices).set(updateData).where(eq(notices.id, id)).returning();
   if (!row) throw notFound('お知らせが見つかりません');
-  return c.json(row, 200);
+  return c.json(noticeResponseSchema.parse(row), 200);
 });
 
 // DELETE /api/notices/:id - お知らせ削除 (operator)
@@ -114,15 +153,29 @@ const deleteNotice = createRoute({
   middleware: [requireOperator] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '削除成功' },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
-    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    200: {
+      content: { 'application/json': { schema: deleteResponseSchema } },
+      description: '削除成功',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
   },
 });
 app.openapi(deleteNotice, async (c) => {
   const { id } = c.req.valid('param');
-  const existing = await db.query.notices.findFirst({ where: eq(notices.id, id) });
+  const existing = await db.query.notices.findFirst({
+    where: eq(notices.id, id),
+  });
   if (!existing) throw notFound('お知らせが見つかりません');
   await db.delete(notices).where(eq(notices.id, id));
   return c.json({ message: '削除しました' }, 200);

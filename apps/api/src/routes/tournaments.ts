@@ -1,9 +1,13 @@
-import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
-import type { ChannelMapEntry } from '@wifiman/shared';
-import { CreateTournamentSchema, UpdateTournamentSchema } from '@wifiman/shared';
-import { and, count, eq, isNotNull, ne } from 'drizzle-orm';
+import { createRoute, z } from '@hono/zod-openapi';
+import {
+  type ChannelMapEntry,
+  ChannelMapEntrySchema,
+  CreateTournamentSchema,
+  TournamentSchema,
+  UpdateTournamentSchema,
+} from '@wifiman/shared';
+import { and, eq, isNotNull, ne } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import type { ContextVariableMap } from 'hono';
 import { db } from '../db/index.js';
 import {
   deviceSpecs,
@@ -15,11 +19,12 @@ import {
 } from '../db/schema/index.js';
 import { notFound } from '../errors.js';
 import { requireAnyViewer, requireOperator } from '../middleware/auth.js';
+import { createOpenApiApp, errorSchema } from '../openapi.js';
 
-const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
-
-const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 const idParam = z.object({ id: z.string() });
+const app = createOpenApiApp();
+const tournamentResponseSchema = TournamentSchema;
+const tournamentListResponseSchema = z.array(tournamentResponseSchema);
 
 // GET /api/tournaments - 大会一覧 (public)
 const listTournaments = createRoute({
@@ -27,12 +32,17 @@ const listTournaments = createRoute({
   path: '/tournaments',
   tags: ['tournaments'],
   responses: {
-    200: { content: { 'application/json': { schema: z.array(z.any()) } }, description: '大会一覧' },
+    200: {
+      content: {
+        'application/json': { schema: z.array(tournamentResponseSchema) },
+      },
+      description: '大会一覧',
+    },
   },
 });
 app.openapi(listTournaments, async (c) => {
   const rows = await db.select().from(tournaments).orderBy(tournaments.startDate);
-  return c.json(rows, 200);
+  return c.json(tournamentListResponseSchema.parse(rows), 200);
 });
 
 // POST /api/tournaments - 大会作成 (operator)
@@ -42,16 +52,28 @@ const createTournament = createRoute({
   tags: ['tournaments'],
   middleware: [requireOperator] as const,
   request: {
-    body: { content: { 'application/json': { schema: CreateTournamentSchema } }, required: true },
+    body: {
+      content: { 'application/json': { schema: CreateTournamentSchema } },
+      required: true,
+    },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: '大会作成' },
+    201: {
+      content: { 'application/json': { schema: tournamentResponseSchema } },
+      description: '大会作成',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
   },
 });
 app.openapi(createTournament, async (c) => {
@@ -67,7 +89,7 @@ app.openapi(createTournament, async (c) => {
     })
     .returning();
   if (!row) throw new Error('insert failed');
-  return c.json(row, 201);
+  return c.json(tournamentResponseSchema.parse(row), 201);
 });
 
 // GET /api/tournaments/:id - 大会詳細 (public)
@@ -77,15 +99,23 @@ const getTournament = createRoute({
   tags: ['tournaments'],
   request: { params: idParam },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '大会詳細' },
-    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    200: {
+      content: { 'application/json': { schema: tournamentResponseSchema } },
+      description: '大会詳細',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
   },
 });
 app.openapi(getTournament, async (c) => {
   const { id } = c.req.valid('param');
-  const row = await db.query.tournaments.findFirst({ where: eq(tournaments.id, id) });
+  const row = await db.query.tournaments.findFirst({
+    where: eq(tournaments.id, id),
+  });
   if (!row) throw notFound('大会が見つかりません');
-  return c.json(row, 200);
+  return c.json(tournamentResponseSchema.parse(row), 200);
 });
 
 // PATCH /api/tournaments/:id - 大会更新 (operator)
@@ -96,17 +126,32 @@ const updateTournament = createRoute({
   middleware: [requireOperator] as const,
   request: {
     params: idParam,
-    body: { content: { 'application/json': { schema: UpdateTournamentSchema } }, required: true },
+    body: {
+      content: { 'application/json': { schema: UpdateTournamentSchema } },
+      required: true,
+    },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '大会更新' },
+    200: {
+      content: { 'application/json': { schema: tournamentResponseSchema } },
+      description: '大会更新',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
-    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
   },
 });
 app.openapi(updateTournament, async (c) => {
@@ -118,7 +163,7 @@ app.openapi(updateTournament, async (c) => {
     .where(eq(tournaments.id, id))
     .returning();
   if (!row) throw notFound('大会が見つかりません');
-  return c.json(row, 200);
+  return c.json(tournamentResponseSchema.parse(row), 200);
 });
 
 // GET /api/tournaments/:tournamentId/channel-map - チャンネルマップ (any_viewer)
@@ -130,11 +175,23 @@ const getChannelMap = createRoute({
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: {
+        'application/json': { schema: z.array(ChannelMapEntrySchema) },
+      },
       description: 'チャンネルマップ',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
   },
 });
 app.openapi(getChannelMap, async (c) => {
@@ -175,17 +232,26 @@ app.openapi(getChannelMap, async (c) => {
     .leftJoin(clientDeviceSpec, eq(wifiConfigs.clientDeviceId, clientDeviceSpec.id))
     .where(and(eq(teams.tournamentId, tournamentId), ne(wifiConfigs.status, 'disabled')));
 
-  // wifiConfigId ごとの不具合報告件数を集計
-  const reportCountRows = await db
-    .select({ wifiConfigId: issueReports.wifiConfigId, cnt: count() })
+  // wifiConfigId ごとの不具合報告件数を集計する。
+  // 他チームの private 報告数は aggregate でも漏らさない。
+  const reportRows = await db
+    .select({
+      wifiConfigId: issueReports.wifiConfigId,
+      teamId: issueReports.teamId,
+      visibility: issueReports.visibility,
+    })
     .from(issueReports)
-    .where(and(eq(issueReports.tournamentId, tournamentId), isNotNull(issueReports.wifiConfigId)))
-    .groupBy(issueReports.wifiConfigId);
-  const reportCountMap = new Map<string, number>(
-    reportCountRows
-      .filter((r): r is { wifiConfigId: string; cnt: number } => r.wifiConfigId != null)
-      .map((r) => [r.wifiConfigId, Number(r.cnt)]),
-  );
+    .where(and(eq(issueReports.tournamentId, tournamentId), isNotNull(issueReports.wifiConfigId)));
+  const reportCountMap = new Map<string, number>();
+  for (const row of reportRows) {
+    if (!row.wifiConfigId) continue;
+    const canCount =
+      authCtx?.userRole === 'operator' ||
+      (viewerTeamId != null && row.teamId === viewerTeamId) ||
+      row.visibility === 'team_public';
+    if (!canCount) continue;
+    reportCountMap.set(row.wifiConfigId, (reportCountMap.get(row.wifiConfigId) ?? 0) + 1);
+  }
 
   // 野良 WiFi を取得
   const wildWifis = await db
@@ -231,7 +297,11 @@ app.openapi(getChannelMap, async (c) => {
   ];
 
   // 帯域 → チャンネル順でソート
-  const bandOrder: Record<string, number> = { '2.4GHz': 0, '5GHz': 1, '6GHz': 2 };
+  const bandOrder: Record<string, number> = {
+    '2.4GHz': 0,
+    '5GHz': 1,
+    '6GHz': 2,
+  };
   entries.sort((a, b) => {
     const bo = (bandOrder[a.band] ?? 99) - (bandOrder[b.band] ?? 99);
     return bo !== 0 ? bo : a.channel - b.channel;

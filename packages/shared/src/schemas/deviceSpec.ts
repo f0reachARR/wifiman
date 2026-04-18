@@ -1,18 +1,19 @@
 import { z } from 'zod';
 import { BANDS, DEVICE_KINDS } from '../enums.js';
+import { DateTimeStringSchema, optionalFromNullable } from './common.js';
 
 export const DeviceSpecSchema = z.object({
   id: z.string().uuid(),
   teamId: z.string().uuid(),
-  vendor: z.string().max(200).optional(),
+  vendor: optionalFromNullable(z.string().max(200)),
   model: z.string().min(1).max(200),
   kind: z.enum(DEVICE_KINDS),
   supportedBands: z.array(z.enum(BANDS)).min(1),
-  notes: z.string().max(2000).optional(),
-  knownIssues: z.string().max(2000).optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-  archivedAt: z.string().datetime().nullable().optional(),
+  notes: optionalFromNullable(z.string().max(2000)),
+  knownIssues: optionalFromNullable(z.string().max(2000)),
+  createdAt: DateTimeStringSchema,
+  updatedAt: DateTimeStringSchema,
+  archivedAt: optionalFromNullable(DateTimeStringSchema),
 });
 
 export const CreateDeviceSpecSchema = DeviceSpecSchema.omit({

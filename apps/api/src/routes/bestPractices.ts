@@ -1,15 +1,26 @@
-import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
-import { CreateBestPracticeSchema, UpdateBestPracticeSchema } from '@wifiman/shared';
+import { createRoute, z } from '@hono/zod-openapi';
+import {
+  BestPracticeSchema,
+  CreateBestPracticeSchema,
+  UpdateBestPracticeSchema,
+} from '@wifiman/shared';
 import { eq, isNull, or } from 'drizzle-orm';
-import type { ContextVariableMap } from 'hono';
 import { db } from '../db/index.js';
-import { bestPractices } from '../db/schema/index.js';
-import { notFound } from '../errors.js';
+import { bestPractices, tournaments } from '../db/schema/index.js';
+import { notFound, unprocessable } from '../errors.js';
 import { requireOperator } from '../middleware/auth.js';
+import { createOpenApiApp, errorSchema } from '../openapi.js';
 
-const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
+const app = createOpenApiApp();
+const bestPracticeListResponseSchema = z.array(BestPracticeSchema);
 
-const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+async function assertTournamentExists(tournamentId: string | null | undefined) {
+  if (!tournamentId) return;
+  const tournament = await db.query.tournaments.findFirst({
+    where: eq(tournaments.id, tournamentId),
+  });
+  if (!tournament) throw notFound('大会が見つかりません');
+}
 
 // GET /api/tournaments/:tournamentId/best-practices - ベストプラクティス一覧 (public)
 const listBestPractices = createRoute({
@@ -19,7 +30,9 @@ const listBestPractices = createRoute({
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: {
+        'application/json': { schema: z.array(BestPracticeSchema) },
+      },
       description: 'ベストプラクティス一覧',
     },
   },
@@ -30,7 +43,7 @@ app.openapi(listBestPractices, async (c) => {
     .select()
     .from(bestPractices)
     .where(or(eq(bestPractices.tournamentId, tournamentId), isNull(bestPractices.tournamentId)));
-  return c.json(rows, 200);
+  return c.json(bestPracticeListResponseSchema.parse(rows), 200);
 });
 
 // POST /api/best-practices - ベストプラクティス作成 (operator)
@@ -40,26 +53,36 @@ const createBestPractice = createRoute({
   tags: ['best-practices'],
   middleware: [requireOperator] as const,
   request: {
-    body: { content: { 'application/json': { schema: CreateBestPracticeSchema } }, required: true },
+    body: {
+      content: { 'application/json': { schema: CreateBestPracticeSchema } },
+      required: true,
+    },
   },
   responses: {
     201: {
-      content: { 'application/json': { schema: z.any() } },
+      content: { 'application/json': { schema: BestPracticeSchema } },
       description: 'ベストプラクティス作成',
     },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
   },
 });
 app.openapi(createBestPractice, async (c) => {
   const body = c.req.valid('json');
+  await assertTournamentExists(body.tournamentId);
   const [row] = await db.insert(bestPractices).values(body).returning();
   if (!row) throw new Error('insert failed');
-  return c.json(row, 201);
+  return c.json(BestPracticeSchema.parse(row), 201);
 });
 
 // PATCH /api/best-practices/:id - ベストプラクティス更新 (operator)
@@ -70,32 +93,65 @@ const updateBestPractice = createRoute({
   middleware: [requireOperator] as const,
   request: {
     params: z.object({ id: z.string() }),
-    body: { content: { 'application/json': { schema: UpdateBestPracticeSchema } }, required: true },
+    body: {
+      content: { 'application/json': { schema: UpdateBestPracticeSchema } },
+      required: true,
+    },
   },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.any() } },
+      content: { 'application/json': { schema: BestPracticeSchema } },
       description: 'ベストプラクティス更新',
     },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
-    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
   },
 });
 app.openapi(updateBestPractice, async (c) => {
   const { id } = c.req.valid('param');
   const body = c.req.valid('json');
+  const existing = await db.query.bestPractices.findFirst({
+    where: eq(bestPractices.id, id),
+  });
+  if (!existing) throw notFound('ベストプラクティスが見つかりません');
+
+  const mergedBody = {
+    tournamentId: existing.tournamentId ?? undefined,
+    title: existing.title,
+    body: existing.body,
+    scope: existing.scope,
+    targetBand: existing.targetBand ?? undefined,
+    targetModel: existing.targetModel ?? undefined,
+    ...body,
+  };
+  const parsedBody = CreateBestPracticeSchema.safeParse(mergedBody);
+  if (!parsedBody.success) {
+    throw unprocessable('ベストプラクティスの入力内容が不正です', {
+      issues: parsedBody.error.issues,
+    });
+  }
+  await assertTournamentExists(parsedBody.data.tournamentId);
   const [row] = await db
     .update(bestPractices)
-    .set({ ...body, updatedAt: new Date() })
+    .set({ ...parsedBody.data, updatedAt: new Date() })
     .where(eq(bestPractices.id, id))
     .returning();
   if (!row) throw notFound('ベストプラクティスが見つかりません');
-  return c.json(row, 200);
+  return c.json(BestPracticeSchema.parse(row), 200);
 });
 
 export default app;

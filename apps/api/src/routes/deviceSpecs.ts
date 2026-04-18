@@ -1,48 +1,89 @@
-import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
-import { CreateDeviceSpecSchema, UpdateDeviceSpecSchema } from '@wifiman/shared';
+import { createRoute, z } from '@hono/zod-openapi';
+import { CreateDeviceSpecSchema, DeviceSpecSchema, UpdateDeviceSpecSchema } from '@wifiman/shared';
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { ContextVariableMap, MiddlewareHandler } from 'hono';
 import { db } from '../db/index.js';
-import { deviceSpecs } from '../db/schema/index.js';
+import { deviceSpecs, teams } from '../db/schema/index.js';
 import { notFound } from '../errors.js';
 import { requireTeamEditor, requireTeamViewer } from '../middleware/auth.js';
+import { createOpenApiApp, errorSchema } from '../openapi.js';
 
-const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
-
-const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const app = createOpenApiApp();
+const deviceSpecResponseSchema = DeviceSpecSchema;
+const publicDeviceSpecResponseSchema = deviceSpecResponseSchema.omit({
+  notes: true,
+  archivedAt: true,
+});
+const listDeviceSpecResponseSchema = z.array(
+  z.union([deviceSpecResponseSchema, publicDeviceSpecResponseSchema]),
+);
+const archiveResponseSchema = z.object({ message: z.string(), id: z.string() });
 type AppMiddleware = MiddlewareHandler<{ Variables: ContextVariableMap }>;
+
+function toPublicDeviceSpec(row: Record<string, unknown>) {
+  const { notes: _notes, archivedAt: _archivedAt, ...publicRow } = row;
+  return publicRow;
+}
 
 const resolveDeviceSpecTeamMiddleware: AppMiddleware = async (c, next) => {
   const id = c.req.param('id') as string;
-  const spec = await db.query.deviceSpecs.findFirst({ where: eq(deviceSpecs.id, id) });
+  const spec = await db.query.deviceSpecs.findFirst({
+    where: eq(deviceSpecs.id, id),
+  });
   if (!spec) throw notFound('機材仕様が見つかりません');
   c.set('_targetTeamId', spec.teamId);
   await next();
 };
+
+const resolveTeamTournamentScopeMiddleware: AppMiddleware = async (c, next) => {
+  const teamId = c.req.param('teamId') as string;
+  const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
+  if (team) {
+    c.set('_targetTournamentId', team.tournamentId);
+  }
+  await next();
+};
+
+async function assertTeamExists(teamId: string) {
+  const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
+  if (!team) throw notFound('チームが見つかりません');
+}
 
 // GET /api/teams/:teamId/device-specs - 機材仕様一覧 (team_viewer)
 const listDeviceSpecs = createRoute({
   method: 'get',
   path: '/teams/{teamId}/device-specs',
   tags: ['device-specs'],
-  middleware: [requireTeamViewer('teamId')] as const,
+  middleware: [resolveTeamTournamentScopeMiddleware, requireTeamViewer('teamId')] as const,
   request: {
     params: z.object({ teamId: z.string() }),
     query: z.object({ include_archived: z.string().optional() }),
   },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: {
+        'application/json': {
+          schema: z.array(z.union([deviceSpecResponseSchema, publicDeviceSpecResponseSchema])),
+        },
+      },
       description: '機材仕様一覧',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
   },
 });
 app.openapi(listDeviceSpecs, async (c) => {
   const { teamId } = c.req.valid('param');
   const { include_archived } = c.req.valid('query');
-  const shouldIncludeArchived = include_archived === 'true';
+  const authCtx = c.get('auth');
+  const isOwnTeamOrOperator = authCtx?.userRole === 'operator' || authCtx?.teamId === teamId;
+  const shouldIncludeArchived = include_archived === 'true' && isOwnTeamOrOperator;
   const rows = await db
     .select()
     .from(deviceSpecs)
@@ -51,7 +92,14 @@ app.openapi(listDeviceSpecs, async (c) => {
         ? eq(deviceSpecs.teamId, teamId)
         : and(eq(deviceSpecs.teamId, teamId), isNull(deviceSpecs.archivedAt)),
     );
-  return c.json(rows, 200);
+  const filteredRows = shouldIncludeArchived ? rows : rows.filter((row) => row.archivedAt === null);
+  if (isOwnTeamOrOperator) {
+    return c.json(z.array(deviceSpecResponseSchema).parse(filteredRows), 200);
+  }
+  return c.json(
+    listDeviceSpecResponseSchema.parse(filteredRows.map((row) => toPublicDeviceSpec(row))),
+    200,
+  );
 });
 
 // POST /api/teams/:teamId/device-specs - 機材仕様作成 (team_editor)
@@ -63,29 +111,43 @@ const createDeviceSpec = createRoute({
   request: {
     params: z.object({ teamId: z.string() }),
     body: {
-      content: { 'application/json': { schema: CreateDeviceSpecSchema.omit({ teamId: true }) } },
+      content: {
+        'application/json': {
+          schema: CreateDeviceSpecSchema.omit({ teamId: true }),
+        },
+      },
       required: true,
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: '機材仕様作成' },
+    201: {
+      content: { 'application/json': { schema: deviceSpecResponseSchema } },
+      description: '機材仕様作成',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
   },
 });
 app.openapi(createDeviceSpec, async (c) => {
   const { teamId } = c.req.valid('param');
   const body = c.req.valid('json');
+  await assertTeamExists(teamId);
   const [row] = await db
     .insert(deviceSpecs)
     .values({ ...body, teamId })
     .returning();
   if (!row) throw new Error('insert failed');
-  return c.json(row, 201);
+  return c.json(deviceSpecResponseSchema.parse(row), 201);
 });
 
 // PATCH /api/device-specs/:id - 機材仕様更新 (team_editor)
@@ -96,17 +158,32 @@ const patchDeviceSpec = createRoute({
   middleware: [resolveDeviceSpecTeamMiddleware, requireTeamEditor('teamId')] as const,
   request: {
     params: z.object({ id: z.string() }),
-    body: { content: { 'application/json': { schema: UpdateDeviceSpecSchema } }, required: true },
+    body: {
+      content: { 'application/json': { schema: UpdateDeviceSpecSchema } },
+      required: true,
+    },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '機材仕様更新' },
+    200: {
+      content: { 'application/json': { schema: deviceSpecResponseSchema } },
+      description: '機材仕様更新',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
     },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
-    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
   },
 });
 app.openapi(patchDeviceSpec, async (c) => {
@@ -118,7 +195,7 @@ app.openapi(patchDeviceSpec, async (c) => {
     .where(eq(deviceSpecs.id, id))
     .returning();
   if (!row) throw notFound('機材仕様が見つかりません');
-  return c.json(row, 200);
+  return c.json(deviceSpecResponseSchema.parse(row), 200);
 });
 
 // DELETE /api/device-specs/:id - 機材仕様アーカイブ (soft-delete) (team_editor)
@@ -129,10 +206,22 @@ const archiveDeviceSpec = createRoute({
   middleware: [resolveDeviceSpecTeamMiddleware, requireTeamEditor('teamId')] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: 'アーカイブ成功' },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
-    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    200: {
+      content: { 'application/json': { schema: archiveResponseSchema } },
+      description: 'アーカイブ成功',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
   },
 });
 app.openapi(archiveDeviceSpec, async (c) => {
@@ -154,10 +243,22 @@ const restoreDeviceSpec = createRoute({
   middleware: [resolveDeviceSpecTeamMiddleware, requireTeamEditor('teamId')] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '復元成功' },
-    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
-    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
-    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    200: {
+      content: { 'application/json': { schema: archiveResponseSchema } },
+      description: '復元成功',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
   },
 });
 app.openapi(restoreDeviceSpec, async (c) => {
