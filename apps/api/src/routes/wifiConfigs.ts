@@ -259,7 +259,8 @@ const deleteWifiConfig = createRoute({
 });
 app.openapi(deleteWifiConfig, async (c) => {
   const { id } = c.req.valid('param');
-  await db.delete(wifiConfigs).where(eq(wifiConfigs.id, id));
+  const [row] = await db.delete(wifiConfigs).where(eq(wifiConfigs.id, id)).returning();
+  if (!row) throw notFound('WiFi 構成が見つかりません');
   return c.json({ message: '削除しました' }, 200);
 });
 

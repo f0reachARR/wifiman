@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { check, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { teams } from './teams.js';
 
 export const teamAccesses = pgTable(
@@ -18,7 +18,12 @@ export const teamAccesses = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => [check('team_accesses_role_check', sql`${t.role} IN ('editor', 'viewer')`)],
+  (t) => [
+    check('team_accesses_role_check', sql`${t.role} IN ('editor', 'viewer')`),
+    uniqueIndex('team_accesses_single_active_per_team')
+      .on(t.teamId)
+      .where(sql`${t.revokedAt} IS NULL`),
+  ],
 );
 
 export type TeamAccessRow = typeof teamAccesses.$inferSelect;

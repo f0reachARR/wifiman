@@ -77,6 +77,38 @@ function canViewIssueReport(
   return Boolean(authCtx?.teamId && authCtx.teamId === row.teamId);
 }
 
+async function assertTeamInTournament(teamId: string, tournamentId: string) {
+  const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
+  if (!team || team.tournamentId !== tournamentId) {
+    throw unprocessable('対象チームが大会スコープ外です');
+  }
+  return team;
+}
+
+async function assertWifiConfigInTournament(
+  wifiConfigId: string,
+  tournamentId: string,
+  scopedTeamId: string | null | undefined,
+) {
+  const config = await db.query.wifiConfigs.findFirst({
+    where: eq(wifiConfigs.id, wifiConfigId),
+  });
+  if (!config) {
+    throw unprocessable('指定された WiFi 構成が見つかりません');
+  }
+
+  if (scopedTeamId && config.teamId !== scopedTeamId) {
+    throw forbidden('他チームの WiFi 構成は指定できません');
+  }
+
+  const configTeam = await db.query.teams.findFirst({ where: eq(teams.id, config.teamId) });
+  if (!configTeam || configTeam.tournamentId !== tournamentId) {
+    throw unprocessable('対象 WiFi 構成が大会スコープ外です');
+  }
+
+  return config;
+}
+
 // GET /api/tournaments/:tournamentId/issue-reports - 報告一覧 (any_viewer, 自チームのみ)
 const listIssueReports = createRoute({
   method: 'get',
@@ -185,6 +217,8 @@ const createIssueReport = createRoute({
       description: 'バリデーションエラー',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    422: { content: { 'application/json': { schema: errorSchema } }, description: '処理不能' },
   },
 });
 app.openapi(createIssueReport, async (c) => {
@@ -203,26 +237,16 @@ app.openapi(createIssueReport, async (c) => {
   let finalBody = { ...body, teamId: scope.scopedTeamId };
 
   if (scope.scopedTeamId) {
-    const team = await db.query.teams.findFirst({
-      where: eq(teams.id, scope.scopedTeamId),
-    });
-    if (!team || team.tournamentId !== tournamentId) {
-      throw unprocessable('対象チームが大会スコープ外です');
-    }
+    await assertTeamInTournament(scope.scopedTeamId, tournamentId);
   }
 
   // wifiConfigId 指定時の自動補完
   if (body.wifiConfigId) {
-    const config = await db.query.wifiConfigs.findFirst({
-      where: eq(wifiConfigs.id, body.wifiConfigId),
-    });
-    if (!config) {
-      throw unprocessable('指定された WiFi 構成が見つかりません');
-    }
-
-    if (scope.scopedTeamId && config.teamId !== scope.scopedTeamId) {
-      throw forbidden('他チームの WiFi 構成は指定できません');
-    }
+    const config = await assertWifiConfigInTournament(
+      body.wifiConfigId,
+      tournamentId,
+      scope.scopedTeamId,
+    );
 
     finalBody = {
       ...finalBody,
@@ -343,10 +367,7 @@ app.openapi(updateIssueReport, async (c) => {
   }
 
   if (existing.teamId) {
-    const team = await db.query.teams.findFirst({ where: eq(teams.id, existing.teamId) });
-    if (!team || team.tournamentId !== existing.tournamentId) {
-      throw unprocessable('報告の team と tournament の整合性が不正です');
-    }
+    await assertTeamInTournament(existing.teamId, existing.tournamentId);
   }
 
   if (existing.wifiConfigId) {

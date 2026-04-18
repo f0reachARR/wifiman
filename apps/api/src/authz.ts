@@ -5,10 +5,13 @@ export function hasParticipantRole(authCtx: AuthContext | undefined): boolean {
   return Boolean(authCtx?.teamId);
 }
 
-export function canViewTeam(authCtx: AuthContext | undefined, _targetTeamId: string): boolean {
+export function canViewTeam(authCtx: AuthContext | undefined, targetTeamId: string): boolean {
   if (authCtx?.userRole === 'operator') return true;
-  if (authCtx?.teamId) return true;
-  return false;
+  return Boolean(
+    authCtx?.teamId &&
+      authCtx.teamId === targetTeamId &&
+      (authCtx.teamAccessRole === 'viewer' || authCtx.teamAccessRole === 'editor'),
+  );
 }
 
 export function canEditTeam(authCtx: AuthContext | undefined, targetTeamId: string): boolean {
@@ -32,6 +35,9 @@ export function resolveIssueReportCreateScope(
   }
 
   if (authCtx?.teamId) {
+    if (authCtx.teamAccessRole !== 'editor') {
+      return { kind: 'forbidden' };
+    }
     return { kind: 'ok', scopedTeamId: authCtx.teamId };
   }
 

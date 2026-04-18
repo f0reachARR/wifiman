@@ -63,7 +63,9 @@ const { mockDb, state } = vi.hoisted(() => {
       })),
     })),
     delete: vi.fn(() => ({
-      where: vi.fn(async () => undefined),
+      where: vi.fn(() => ({
+        returning: vi.fn(async () => []),
+      })),
     })),
   };
 
@@ -77,10 +79,12 @@ async function createTestApp() {
     { default: issueReportRoutes },
     { default: wifiConfigRoutes },
     { default: deviceSpecRoutes },
+    { default: teamRoutes },
   ] = await Promise.all([
     import('../../src/routes/issueReports.js'),
     import('../../src/routes/wifiConfigs.js'),
     import('../../src/routes/deviceSpecs.js'),
+    import('../../src/routes/teams.js'),
   ]);
 
   const app = new OpenAPIHono();
@@ -94,6 +98,7 @@ async function createTestApp() {
   app.route('/api', issueReportRoutes);
   app.route('/api', wifiConfigRoutes);
   app.route('/api', deviceSpecRoutes);
+  app.route('/api', teamRoutes);
   app.onError(errorHandler);
 
   return app;
@@ -101,6 +106,7 @@ async function createTestApp() {
 
 const ids = {
   tournamentA: '00000000-0000-4000-8000-000000000001',
+  tournamentB: '00000000-0000-4000-8000-000000000002',
   teamA: '00000000-0000-4000-8000-000000000011',
   teamB: '00000000-0000-4000-8000-000000000012',
   issueA: '00000000-0000-4000-8000-000000000021',
@@ -126,70 +132,35 @@ beforeEach(() => {
 });
 
 describe('security boundaries integration', () => {
-  it('他チームの wifiConfigs / deviceSpecs 一覧は公開フィールドのみ返す', async () => {
+  it('viewer は他チームの team/detail・wifiConfigs・deviceSpecs 閲覧を拒否される', async () => {
     const app = await createTestApp();
 
-    state.selectQueue.push([
-      {
-        id: ids.wifiB,
-        teamId: ids.teamB,
-        name: 'Team-B Control',
-        purpose: 'control',
-        band: '5GHz',
-        channel: 36,
-        channelWidthMHz: 80,
-        role: 'primary',
-        status: 'active',
-        apDeviceId: ids.deviceB,
-        clientDeviceId: null,
-        expectedDistanceCategory: 'mid',
-        pingTargetIp: '192.168.10.1',
-        notes: 'secret notes',
-        createdAt: new Date('2026-04-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-04-01T00:00:00.000Z'),
-      },
-    ]);
-
-    state.selectQueue.push([
-      {
-        id: ids.deviceB,
-        teamId: ids.teamB,
-        vendor: 'Vendor-B',
-        model: 'Model-B',
-        kind: 'ap',
-        supportedBands: ['5GHz'],
-        notes: 'private note',
-        knownIssues: '公開してよい既知課題',
-        createdAt: new Date('2026-04-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-04-01T00:00:00.000Z'),
-        archivedAt: new Date('2026-04-02T00:00:00.000Z'),
-      },
-      {
-        id: ids.deviceA,
-        teamId: ids.teamB,
-        vendor: 'Vendor-B',
-        model: 'Model-B2',
-        kind: 'client',
-        supportedBands: ['5GHz'],
-        notes: 'private note 2',
-        knownIssues: null,
-        createdAt: new Date('2026-04-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-04-01T00:00:00.000Z'),
-        archivedAt: null,
-      },
-    ]);
+    state.findFirstQueue.teams.push({
+      id: ids.teamB,
+      tournamentId: ids.tournamentA,
+      name: 'Team B',
+      organization: null,
+      pitId: null,
+      contactEmail: 'b@example.com',
+      displayContactName: 'Team B',
+      notes: null,
+      createdAt: new Date('2026-04-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+    });
 
     const auth = JSON.stringify(participantAuth(ids.teamA, 'viewer'));
+
+    const teamRes = await app.request(`/api/teams/${ids.teamB}`, {
+      method: 'GET',
+      headers: { 'x-test-auth': auth },
+    });
+    expect(teamRes.status).toBe(403);
 
     const wifiRes = await app.request(`/api/teams/${ids.teamB}/wifi-configs`, {
       method: 'GET',
       headers: { 'x-test-auth': auth },
     });
-    expect(wifiRes.status).toBe(200);
-    const wifiBody = (await wifiRes.json()) as Array<Record<string, unknown>>;
-    expect(wifiBody).toHaveLength(1);
-    expect(wifiBody[0]?.pingTargetIp).toBeUndefined();
-    expect(wifiBody[0]?.notes).toBeUndefined();
+    expect(wifiRes.status).toBe(403);
 
     const deviceRes = await app.request(
       `/api/teams/${ids.teamB}/device-specs?include_archived=true`,
@@ -198,11 +169,27 @@ describe('security boundaries integration', () => {
         headers: { 'x-test-auth': auth },
       },
     );
-    expect(deviceRes.status).toBe(200);
-    const deviceBody = (await deviceRes.json()) as Array<Record<string, unknown>>;
-    expect(deviceBody).toHaveLength(1);
-    expect(deviceBody[0]?.notes).toBeUndefined();
-    expect(deviceBody[0]?.archivedAt).toBeUndefined();
+    expect(deviceRes.status).toBe(403);
+  });
+
+  it('viewer は issueReport を作成できない (403)', async () => {
+    const app = await createTestApp();
+
+    const res = await app.request(`/api/tournaments/${ids.tournamentA}/issue-reports`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-test-auth': JSON.stringify(participantAuth(ids.teamA, 'viewer')),
+      },
+      body: JSON.stringify({
+        band: '5GHz',
+        channel: 36,
+        symptom: 'high_latency',
+        severity: 'medium',
+      }),
+    });
+
+    expect(res.status).toBe(403);
   });
 
   it('issueReport 更新で teamId 偽装を拒否する', async () => {
@@ -288,5 +275,123 @@ describe('security boundaries integration', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as Array<{ id: string }>;
     expect(body.map((r) => r.id)).toEqual([ids.issueA, ids.issuePublic]);
+  });
+
+  it('issueReport 作成で大会スコープ外の teamId を拒否する', async () => {
+    const app = await createTestApp();
+
+    state.findFirstQueue.teams.push({
+      id: ids.teamB,
+      tournamentId: ids.tournamentB,
+    });
+
+    const res = await app.request(`/api/tournaments/${ids.tournamentA}/issue-reports`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-test-auth': JSON.stringify({ userRole: 'operator' }),
+      },
+      body: JSON.stringify({
+        teamId: ids.teamB,
+        band: '5GHz',
+        channel: 36,
+        symptom: 'high_latency',
+        severity: 'medium',
+      }),
+    });
+
+    expect(res.status).toBe(422);
+  });
+
+  it('issueReport 作成の契約: 無権限は 403、大会外参照は 422', async () => {
+    const app = await createTestApp();
+
+    const forbiddenRes = await app.request(`/api/tournaments/${ids.tournamentA}/issue-reports`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-test-auth': JSON.stringify(participantAuth(ids.teamA, 'viewer')),
+      },
+      body: JSON.stringify({
+        band: '5GHz',
+        channel: 36,
+        symptom: 'high_latency',
+        severity: 'medium',
+      }),
+    });
+    expect(forbiddenRes.status).toBe(403);
+
+    state.findFirstQueue.teams.push({
+      id: ids.teamB,
+      tournamentId: ids.tournamentB,
+    });
+    const unprocessableRes = await app.request(
+      `/api/tournaments/${ids.tournamentA}/issue-reports`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-test-auth': JSON.stringify({ userRole: 'operator' }),
+        },
+        body: JSON.stringify({
+          teamId: ids.teamB,
+          band: '5GHz',
+          channel: 36,
+          symptom: 'high_latency',
+          severity: 'medium',
+        }),
+      },
+    );
+    expect(unprocessableRes.status).toBe(422);
+  });
+
+  it('issueReport 作成で operator 経路でも大会スコープ外の wifiConfigId を拒否する', async () => {
+    const app = await createTestApp();
+
+    state.findFirstQueue.wifiConfigs.push({
+      id: ids.wifiB,
+      teamId: ids.teamB,
+      band: '5GHz',
+      channel: 44,
+      channelWidthMHz: 80,
+      apDeviceId: null,
+      clientDeviceId: null,
+    });
+    state.findFirstQueue.teams.push({
+      id: ids.teamB,
+      tournamentId: ids.tournamentB,
+    });
+
+    const res = await app.request(`/api/tournaments/${ids.tournamentA}/issue-reports`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-test-auth': JSON.stringify({ userRole: 'operator' }),
+      },
+      body: JSON.stringify({
+        wifiConfigId: ids.wifiB,
+        band: '5GHz',
+        channel: 36,
+        symptom: 'high_latency',
+        severity: 'medium',
+      }),
+    });
+
+    expect(res.status).toBe(422);
+  });
+
+  it('wifiConfig delete の契約: 存在しない id は 404', async () => {
+    const app = await createTestApp();
+
+    state.findFirstQueue.wifiConfigs.push(null);
+
+    const res = await app.request(`/api/wifi-configs/${ids.wifiB}`, {
+      method: 'DELETE',
+      headers: {
+        'x-test-auth': JSON.stringify(participantAuth(ids.teamA, 'editor')),
+      },
+    });
+
+    expect(res.status).toBe(404);
   });
 });

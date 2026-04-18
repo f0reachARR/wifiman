@@ -12,8 +12,9 @@ import type { ContextVariableMap } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { db } from '../db/index.js';
 import { teamAccesses } from '../db/schema/index.js';
+import type { TeamAccessRow } from '../db/schema/teamAccesses.js';
 import { env } from '../env.js';
-import { notFound, unauthorized } from '../errors.js';
+import { conflict, notFound, unauthorized } from '../errors.js';
 import { createMailer } from '../mailer/index.js';
 import { requireOperator } from '../middleware/auth.js';
 
@@ -42,6 +43,13 @@ const verifyResponseSchema = z.object({
   teamId: z.string().uuid(),
   role: z.enum(['editor', 'viewer']),
 });
+
+function isSingleActiveTokenViolation(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const code = Reflect.get(err, 'code');
+  const constraintName = Reflect.get(err, 'constraint_name') ?? Reflect.get(err, 'constraint');
+  return code === '23505' && constraintName === 'team_accesses_single_active_per_team';
+}
 
 async function revokeActiveTeamAccesses(teamId: string, excludeId?: string): Promise<void> {
   const whereClause = excludeId
@@ -72,6 +80,7 @@ const listTeamAccesses = createRoute({
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    409: { content: { 'application/json': { schema: errorSchema } }, description: '競合' },
   },
 });
 app.openapi(listTeamAccesses, async (c) => {
@@ -116,21 +125,28 @@ app.openapi(createTeamAccess, async (c) => {
   const { teamId } = c.req.valid('param');
   const body = c.req.valid('json');
 
-  // 再発行扱い: 既存の有効トークンを失効させ、常に最新リンクのみ有効にする。
-  await revokeActiveTeamAccesses(teamId);
-
+  let access: TeamAccessRow | undefined;
   const token = generateAccessToken();
   const hash = hashAccessToken(token);
+  try {
+    // 再発行扱い: 既存の有効トークンを失効させ、常に最新リンクのみ有効にする。
+    await revokeActiveTeamAccesses(teamId);
 
-  const [access] = await db
-    .insert(teamAccesses)
-    .values({
-      teamId,
-      email: body.email,
-      accessTokenHash: hash,
-      role: body.role,
-    })
-    .returning();
+    [access] = await db
+      .insert(teamAccesses)
+      .values({
+        teamId,
+        email: body.email,
+        accessTokenHash: hash,
+        role: body.role,
+      })
+      .returning();
+  } catch (err) {
+    if (isSingleActiveTokenViolation(err)) {
+      throw conflict('同一チームの有効なアクセストークンは 1 つのみです');
+    }
+    throw err;
+  }
   if (!access) throw new Error('insert failed');
 
   // メール送信 (失敗してもエラーにしない: ログのみ)
@@ -267,6 +283,7 @@ const resendTeamAccess = createRoute({
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+    409: { content: { 'application/json': { schema: errorSchema } }, description: '競合' },
   },
 });
 app.openapi(resendTeamAccess, async (c) => {
@@ -281,10 +298,17 @@ app.openapi(resendTeamAccess, async (c) => {
   // 新しいトークンを発行してハッシュを更新
   const token = generateAccessToken();
   const hash = hashAccessToken(token);
-  await db
-    .update(teamAccesses)
-    .set({ accessTokenHash: hash, revokedAt: null, updatedAt: new Date() })
-    .where(eq(teamAccesses.id, id));
+  try {
+    await db
+      .update(teamAccesses)
+      .set({ accessTokenHash: hash, revokedAt: null, updatedAt: new Date() })
+      .where(eq(teamAccesses.id, id));
+  } catch (err) {
+    if (isSingleActiveTokenViolation(err)) {
+      throw conflict('同一チームの有効なアクセストークンは 1 つのみです');
+    }
+    throw err;
+  }
 
   const link = `${env.APP_ORIGIN}/team-access?token=${token}&id=${existing.id}`;
   try {

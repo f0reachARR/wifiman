@@ -7,7 +7,7 @@ import { teams } from '../db/schema/index.js';
 import type { TeamRow } from '../db/schema/teams.js';
 import { conflict, notFound } from '../errors.js';
 import type { AuthContext } from '../middleware/auth.js';
-import { requireOperator, requireParticipant, requireTeamEditor } from '../middleware/auth.js';
+import { requireOperator, requireTeamEditor, requireTeamViewer } from '../middleware/auth.js';
 import { isTeamsNameUniqueViolation } from './teamErrors.js';
 
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
@@ -111,16 +111,16 @@ app.openapi(createTeam, async (c) => {
   }
 });
 
-// GET /api/teams/:id - チーム詳細 (participant, 機微情報はマスク)
+// GET /api/teams/:id - チーム詳細 (team_viewer)
 const getTeam = createRoute({
   method: 'get',
   path: '/teams/{teamId}',
   tags: ['teams'],
-  middleware: [requireParticipant] as const,
+  middleware: [requireTeamViewer('teamId')] as const,
   request: { params: z.object({ teamId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: listTeamResponseSchema } },
+      content: { 'application/json': { schema: teamResponseSchema } },
       description: 'チーム詳細',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
@@ -130,10 +130,9 @@ const getTeam = createRoute({
 });
 app.openapi(getTeam, async (c) => {
   const { teamId } = c.req.valid('param');
-  const authCtx = c.get('auth');
   const row = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
   if (!row) throw notFound('チームが見つかりません');
-  return c.json(maskTeamFields(row, authCtx), 200);
+  return c.json(row, 200);
 });
 
 // PATCH /api/teams/:id - チーム更新 (team_editor)
