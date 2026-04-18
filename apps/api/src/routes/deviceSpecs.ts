@@ -10,6 +10,20 @@ import { requireTeamEditor, requireTeamViewer } from '../middleware/auth.js';
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const deviceSpecResponseSchema = z.object({
+  id: z.string(),
+  teamId: z.string(),
+  vendor: z.string().nullable(),
+  model: z.string(),
+  kind: z.enum(['ap', 'client', 'usb_dongle', 'router', 'bridge', 'other']),
+  supportedBands: z.array(z.string()),
+  notes: z.string().nullable(),
+  knownIssues: z.string().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  archivedAt: z.date().nullable(),
+});
+const archiveResponseSchema = z.object({ message: z.string(), id: z.string() });
 type AppMiddleware = MiddlewareHandler<{ Variables: ContextVariableMap }>;
 
 const resolveDeviceSpecTeamMiddleware: AppMiddleware = async (c, next) => {
@@ -32,7 +46,7 @@ const listDeviceSpecs = createRoute({
   },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: { 'application/json': { schema: z.array(deviceSpecResponseSchema) } },
       description: '機材仕様一覧',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
@@ -68,7 +82,10 @@ const createDeviceSpec = createRoute({
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: '機材仕様作成' },
+    201: {
+      content: { 'application/json': { schema: deviceSpecResponseSchema } },
+      description: '機材仕様作成',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -99,7 +116,10 @@ const patchDeviceSpec = createRoute({
     body: { content: { 'application/json': { schema: UpdateDeviceSpecSchema } }, required: true },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '機材仕様更新' },
+    200: {
+      content: { 'application/json': { schema: deviceSpecResponseSchema } },
+      description: '機材仕様更新',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -129,7 +149,10 @@ const archiveDeviceSpec = createRoute({
   middleware: [resolveDeviceSpecTeamMiddleware, requireTeamEditor('teamId')] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: 'アーカイブ成功' },
+    200: {
+      content: { 'application/json': { schema: archiveResponseSchema } },
+      description: 'アーカイブ成功',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
@@ -154,7 +177,10 @@ const restoreDeviceSpec = createRoute({
   middleware: [resolveDeviceSpecTeamMiddleware, requireTeamEditor('teamId')] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '復元成功' },
+    200: {
+      content: { 'application/json': { schema: archiveResponseSchema } },
+      description: '復元成功',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },

@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { Context, Next } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { auth } from '../auth.js';
+import { canEditTeam, canViewTeam, hasParticipantRole } from '../authz.js';
 import { db } from '../db/index.js';
 import { teamAccesses } from '../db/schema/index.js';
 import { forbidden, unauthorized } from '../errors.js';
@@ -95,13 +96,7 @@ export function requireTeamViewer(teamIdParam = 'teamId') {
     const authCtx = c.get('auth');
     const targetTeamId = c.get('_targetTeamId') ?? c.req.param(teamIdParam);
 
-    // 運営者はすべて OK
-    if (authCtx?.userRole === 'operator') {
-      return next();
-    }
-
-    // チームトークン所持者は自チームのみ
-    if (authCtx?.teamId && authCtx.teamId === targetTeamId) {
+    if (canViewTeam(authCtx, targetTeamId)) {
       return next();
     }
 
@@ -120,13 +115,7 @@ export function requireTeamEditor(teamIdParam = 'teamId') {
     const authCtx = c.get('auth');
     const targetTeamId = c.get('_targetTeamId') ?? c.req.param(teamIdParam);
 
-    // 運営者はすべて OK
-    if (authCtx?.userRole === 'operator') {
-      return next();
-    }
-
-    // editor ロール かつ 対象チームの場合のみ OK
-    if (authCtx?.teamId && authCtx.teamId === targetTeamId && authCtx.teamAccessRole === 'editor') {
+    if (canEditTeam(authCtx, targetTeamId)) {
       return next();
     }
 
@@ -143,8 +132,7 @@ export function requireTeamEditor(teamIdParam = 'teamId') {
  */
 export function requireParticipant(c: Context, next: Next) {
   const authCtx = c.get('auth');
-  if (authCtx?.userRole === 'operator') return next();
-  if (authCtx?.teamId) return next();
+  if (hasParticipantRole(authCtx)) return next();
   if (!authCtx?.userId) throw unauthorized();
   throw forbidden('チーム参加者または運営者権限が必要です');
 }

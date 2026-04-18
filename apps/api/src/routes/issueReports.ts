@@ -2,14 +2,71 @@ import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import { CreateIssueReportSchema, UpdateIssueReportSchema } from '@wifiman/shared';
 import { eq } from 'drizzle-orm';
 import type { ContextVariableMap } from 'hono';
+import { resolveIssueReportCreateScope } from '../authz.js';
 import { db } from '../db/index.js';
-import { deviceSpecs, issueReports, wifiConfigs } from '../db/schema/index.js';
-import { forbidden, notFound, unauthorized } from '../errors.js';
-import { requireAnyViewer } from '../middleware/auth.js';
+import { deviceSpecs, issueReports, teams, wifiConfigs } from '../db/schema/index.js';
+import { forbidden, notFound, unauthorized, unprocessable } from '../errors.js';
+import { requireAnyViewer, requireParticipant } from '../middleware/auth.js';
 
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const issueReportResponseSchema = z
+  .object({
+    id: z.string(),
+    tournamentId: z.string(),
+    teamId: z.string().nullable(),
+    wifiConfigId: z.string().nullable(),
+    reporterName: z.string().nullable(),
+    syncStatus: z.enum(['local_only', 'pending', 'synced', 'failed']),
+    band: z.enum(['2.4GHz', '5GHz', '6GHz']),
+    channel: z.number().int(),
+    channelWidthMHz: z.number().int().nullable(),
+    symptom: z.enum([
+      'cannot_connect',
+      'unstable',
+      'low_throughput',
+      'high_latency',
+      'disconnect',
+      'distance_sensitive',
+      'unknown',
+    ]),
+    severity: z.enum(['low', 'medium', 'high', 'critical']),
+    avgPingMs: z.number().nullable(),
+    maxPingMs: z.number().nullable(),
+    packetLossPercent: z.number().nullable(),
+    distanceCategory: z.enum(['near', 'mid', 'far', 'obstacle']).nullable(),
+    estimatedDistanceMeters: z.number().nullable(),
+    locationLabel: z.string().nullable(),
+    reproducibility: z.enum(['always', 'sometimes', 'once']).nullable(),
+    description: z.string().nullable(),
+    mitigationTried: z.array(z.string()).nullable(),
+    improved: z.boolean().nullable(),
+    apDeviceModel: z.string().nullable(),
+    clientDeviceModel: z.string().nullable(),
+    createdAt: z.date(),
+    updatedAt: z.date(),
+  })
+  .strict();
+const deleteResponseSchema = z.object({ message: z.string() });
+const issueReportSummarySchema = z.object({
+  total: z.number().int().nonnegative(),
+  bySeverity: z.record(z.string(), z.number().int().nonnegative()),
+  byBand: z.record(z.string(), z.number().int().nonnegative()),
+  byChannel: z.array(
+    z.object({
+      band: z.string(),
+      channel: z.number().int().positive(),
+      count: z.number().int().nonnegative(),
+    }),
+  ),
+  topSymptoms: z.array(
+    z.object({
+      symptom: z.string(),
+      count: z.number().int().nonnegative(),
+    }),
+  ),
+});
 
 // GET /api/tournaments/:tournamentId/issue-reports - 報告一覧 (any_viewer, 自チームのみ)
 const listIssueReports = createRoute({
@@ -19,7 +76,10 @@ const listIssueReports = createRoute({
   middleware: [requireAnyViewer] as const,
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.array(z.any()) } }, description: '報告一覧' },
+    200: {
+      content: { 'application/json': { schema: z.array(issueReportResponseSchema) } },
+      description: '報告一覧',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
   },
 });
@@ -53,7 +113,10 @@ const summaryIssueReports = createRoute({
   middleware: [requireAnyViewer] as const,
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '報告サマリ' },
+    200: {
+      content: { 'application/json': { schema: issueReportSummarySchema } },
+      description: '報告サマリ',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
   },
 });
@@ -109,6 +172,7 @@ const createIssueReport = createRoute({
   method: 'post',
   path: '/tournaments/{tournamentId}/issue-reports',
   tags: ['issue-reports'],
+  middleware: [requireParticipant] as const,
   request: {
     params: z.object({ tournamentId: z.string() }),
     body: {
@@ -119,7 +183,10 @@ const createIssueReport = createRoute({
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: '報告作成' },
+    201: {
+      content: { 'application/json': { schema: issueReportResponseSchema } },
+      description: '報告作成',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -132,41 +199,59 @@ app.openapi(createIssueReport, async (c) => {
   const body = c.req.valid('json');
   const authCtx = c.get('auth');
 
-  // チームトークンが必要 (またはoperator)
-  if (!authCtx?.userId && !authCtx?.teamId) {
-    throw unauthorized('認証が必要です');
+  const scope = resolveIssueReportCreateScope(authCtx, body.teamId);
+  if (scope.kind === 'unauthorized') {
+    throw unauthorized();
+  }
+  if (scope.kind === 'forbidden') {
+    throw forbidden('チーム参加者または運営者権限が必要です');
   }
 
-  let finalBody = { ...body };
+  let finalBody = { ...body, teamId: scope.scopedTeamId };
+
+  if (scope.scopedTeamId) {
+    const team = await db.query.teams.findFirst({
+      where: eq(teams.id, scope.scopedTeamId),
+    });
+    if (!team || team.tournamentId !== tournamentId) {
+      throw unprocessable('対象チームが大会スコープ外です');
+    }
+  }
 
   // wifiConfigId 指定時の自動補完
   if (body.wifiConfigId) {
     const config = await db.query.wifiConfigs.findFirst({
       where: eq(wifiConfigs.id, body.wifiConfigId),
     });
-    if (config) {
-      finalBody = {
-        ...finalBody,
-        band: finalBody.band ?? config.band,
-        channel: finalBody.channel ?? config.channel,
-        channelWidthMHz: finalBody.channelWidthMHz ?? config.channelWidthMHz ?? undefined,
-      };
+    if (!config) {
+      throw unprocessable('指定された WiFi 構成が見つかりません');
+    }
 
-      // AP 機材モデルの自動補完
-      if (!finalBody.apDeviceModel && config.apDeviceId) {
-        const apDevice = await db.query.deviceSpecs.findFirst({
-          where: eq(deviceSpecs.id, config.apDeviceId),
-        });
-        if (apDevice) finalBody.apDeviceModel = apDevice.model;
-      }
+    if (scope.scopedTeamId && config.teamId !== scope.scopedTeamId) {
+      throw forbidden('他チームの WiFi 構成は指定できません');
+    }
 
-      // クライアント機材モデルの自動補完
-      if (!finalBody.clientDeviceModel && config.clientDeviceId) {
-        const clientDevice = await db.query.deviceSpecs.findFirst({
-          where: eq(deviceSpecs.id, config.clientDeviceId),
-        });
-        if (clientDevice) finalBody.clientDeviceModel = clientDevice.model;
-      }
+    finalBody = {
+      ...finalBody,
+      band: finalBody.band ?? config.band,
+      channel: finalBody.channel ?? config.channel,
+      channelWidthMHz: finalBody.channelWidthMHz ?? config.channelWidthMHz ?? undefined,
+    };
+
+    // AP 機材モデルの自動補完
+    if (!finalBody.apDeviceModel && config.apDeviceId) {
+      const apDevice = await db.query.deviceSpecs.findFirst({
+        where: eq(deviceSpecs.id, config.apDeviceId),
+      });
+      if (apDevice) finalBody.apDeviceModel = apDevice.model;
+    }
+
+    // クライアント機材モデルの自動補完
+    if (!finalBody.clientDeviceModel && config.clientDeviceId) {
+      const clientDevice = await db.query.deviceSpecs.findFirst({
+        where: eq(deviceSpecs.id, config.clientDeviceId),
+      });
+      if (clientDevice) finalBody.clientDeviceModel = clientDevice.model;
     }
   }
 
@@ -190,7 +275,10 @@ const getIssueReport = createRoute({
   middleware: [requireAnyViewer] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '報告詳細' },
+    200: {
+      content: { 'application/json': { schema: issueReportResponseSchema } },
+      description: '報告詳細',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
@@ -222,7 +310,10 @@ const updateIssueReport = createRoute({
     body: { content: { 'application/json': { schema: UpdateIssueReportSchema } }, required: true },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '報告更新' },
+    200: {
+      content: { 'application/json': { schema: issueReportResponseSchema } },
+      description: '報告更新',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -270,7 +361,10 @@ const deleteIssueReport = createRoute({
   tags: ['issue-reports'],
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '削除成功' },
+    200: {
+      content: { 'application/json': { schema: deleteResponseSchema } },
+      description: '削除成功',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },

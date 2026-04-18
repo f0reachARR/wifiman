@@ -8,10 +8,30 @@ import type { TeamRow } from '../db/schema/teams.js';
 import { conflict, notFound } from '../errors.js';
 import type { AuthContext } from '../middleware/auth.js';
 import { requireOperator, requireParticipant, requireTeamEditor } from '../middleware/auth.js';
+import { isTeamsNameUniqueViolation } from './teamErrors.js';
 
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const teamResponseSchema = z.object({
+  id: z.string(),
+  tournamentId: z.string(),
+  name: z.string(),
+  organization: z.string().nullable(),
+  pitId: z.string().nullable(),
+  contactEmail: z.string().nullable().optional(),
+  displayContactName: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+const publicTeamSchema = teamResponseSchema.omit({
+  contactEmail: true,
+  displayContactName: true,
+  notes: true,
+});
+const listTeamResponseSchema = z.union([teamResponseSchema, publicTeamSchema]);
+const deleteResponseSchema = z.object({ message: z.string() });
 
 /**
  * contactEmail / displayContactName を自チームまたは運営者以外には非表示にする。
@@ -31,7 +51,7 @@ const listTeams = createRoute({
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: { 'application/json': { schema: z.array(listTeamResponseSchema) } },
       description: 'チーム一覧',
     },
   },
@@ -60,7 +80,10 @@ const createTeam = createRoute({
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: 'チーム作成' },
+    201: {
+      content: { 'application/json': { schema: teamResponseSchema } },
+      description: 'チーム作成',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -81,7 +104,7 @@ app.openapi(createTeam, async (c) => {
     if (!row) throw new Error('insert failed');
     return c.json(row, 201);
   } catch (err) {
-    if (err instanceof Error && err.message.includes('teams_tournament_name_unique')) {
+    if (isTeamsNameUniqueViolation(err)) {
       throw conflict('同じ大会にすでに同名のチームが存在します');
     }
     throw err;
@@ -96,7 +119,10 @@ const getTeam = createRoute({
   middleware: [requireParticipant] as const,
   request: { params: z.object({ teamId: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: 'チーム詳細' },
+    200: {
+      content: { 'application/json': { schema: listTeamResponseSchema } },
+      description: 'チーム詳細',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
@@ -121,7 +147,10 @@ const updateTeam = createRoute({
     body: { content: { 'application/json': { schema: UpdateTeamSchema } }, required: true },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: 'チーム更新' },
+    200: {
+      content: { 'application/json': { schema: teamResponseSchema } },
+      description: 'チーム更新',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -151,7 +180,10 @@ const deleteTeam = createRoute({
   middleware: [requireOperator] as const,
   request: { params: z.object({ teamId: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '削除成功' },
+    200: {
+      content: { 'application/json': { schema: deleteResponseSchema } },
+      description: '削除成功',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },

@@ -18,6 +18,25 @@ import { requireTeamEditor, requireTeamViewer } from '../middleware/auth.js';
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const wifiConfigResponseSchema = z.object({
+  id: z.string(),
+  teamId: z.string(),
+  name: z.string(),
+  purpose: z.enum(['control', 'video', 'debug', 'other']),
+  band: z.enum(['2.4GHz', '5GHz', '6GHz']),
+  channel: z.number().int(),
+  channelWidthMHz: z.number().int(),
+  role: z.enum(['primary', 'backup']),
+  status: z.enum(['active', 'standby', 'disabled']),
+  apDeviceId: z.string().nullable(),
+  clientDeviceId: z.string().nullable(),
+  expectedDistanceCategory: z.enum(['near', 'mid', 'far']).nullable(),
+  pingTargetIp: z.string().nullable(),
+  notes: z.string().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+const deleteResponseSchema = z.object({ message: z.string() });
 type AppMiddleware = MiddlewareHandler<{ Variables: ContextVariableMap }>;
 
 const resolveWifiConfigTeamMiddleware: AppMiddleware = async (c, next) => {
@@ -46,7 +65,7 @@ const listWifiConfigs = createRoute({
   request: { params: z.object({ teamId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: { 'application/json': { schema: z.array(wifiConfigResponseSchema) } },
       description: 'WiFi 構成一覧',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
@@ -73,7 +92,10 @@ const createWifiConfig = createRoute({
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: 'WiFi 構成作成' },
+    201: {
+      content: { 'application/json': { schema: wifiConfigResponseSchema } },
+      description: 'WiFi 構成作成',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -120,7 +142,10 @@ const patchWifiConfig = createRoute({
     body: { content: { 'application/json': { schema: UpdateWifiConfigSchema } }, required: true },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: 'WiFi 構成更新' },
+    200: {
+      content: { 'application/json': { schema: wifiConfigResponseSchema } },
+      description: 'WiFi 構成更新',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -180,7 +205,10 @@ const deleteWifiConfig = createRoute({
   middleware: [resolveWifiConfigTeamMiddleware, requireTeamEditor('teamId')] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '削除成功' },
+    200: {
+      content: { 'application/json': { schema: deleteResponseSchema } },
+      description: '削除成功',
+    },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },

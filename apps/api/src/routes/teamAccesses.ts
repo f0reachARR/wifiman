@@ -7,7 +7,7 @@ import {
   VerifyTeamLinkSchema,
   verifyAccessToken,
 } from '@wifiman/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import type { ContextVariableMap } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { db } from '../db/index.js';
@@ -20,6 +20,43 @@ import { requireOperator } from '../middleware/auth.js';
 const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const publicTeamAccessSchema = z.object({
+  id: z.string(),
+  teamId: z.string(),
+  email: z.string(),
+  issuedAt: z.date(),
+  lastUsedAt: z.date().nullable(),
+  revokedAt: z.date().nullable(),
+  role: z.enum(['editor', 'viewer']),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+const createTeamAccessResponseSchema = z.object({
+  id: z.string(),
+  teamId: z.string(),
+  email: z.string(),
+  role: z.enum(['editor', 'viewer']),
+});
+const messageSchema = z.object({ message: z.string() });
+const verifyResponseSchema = z.object({
+  teamId: z.string().uuid(),
+  role: z.enum(['editor', 'viewer']),
+});
+
+async function revokeActiveTeamAccesses(teamId: string, excludeId?: string): Promise<void> {
+  const whereClause = excludeId
+    ? and(
+        eq(teamAccesses.teamId, teamId),
+        isNull(teamAccesses.revokedAt),
+        ne(teamAccesses.id, excludeId),
+      )
+    : and(eq(teamAccesses.teamId, teamId), isNull(teamAccesses.revokedAt));
+
+  await db
+    .update(teamAccesses)
+    .set({ revokedAt: new Date(), updatedAt: new Date() })
+    .where(whereClause);
+}
 
 // GET /api/teams/:teamId/team-accesses - チームアクセス一覧 (operator)
 const listTeamAccesses = createRoute({
@@ -30,7 +67,7 @@ const listTeamAccesses = createRoute({
   request: { params: z.object({ teamId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(z.any()) } },
+      content: { 'application/json': { schema: z.array(publicTeamAccessSchema) } },
       description: 'チームアクセス一覧',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
@@ -63,7 +100,10 @@ const createTeamAccess = createRoute({
     },
   },
   responses: {
-    201: { content: { 'application/json': { schema: z.any() } }, description: '編集リンク発行' },
+    201: {
+      content: { 'application/json': { schema: createTeamAccessResponseSchema } },
+      description: '編集リンク発行',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -75,6 +115,9 @@ const createTeamAccess = createRoute({
 app.openapi(createTeamAccess, async (c) => {
   const { teamId } = c.req.valid('param');
   const body = c.req.valid('json');
+
+  // 再発行扱い: 既存の有効トークンを失効させ、常に最新リンクのみ有効にする。
+  await revokeActiveTeamAccesses(teamId);
 
   const token = generateAccessToken();
   const hash = hashAccessToken(token);
@@ -115,7 +158,7 @@ const revokeTeamAccess = createRoute({
   middleware: [requireOperator] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '失効成功' },
+    200: { content: { 'application/json': { schema: messageSchema } }, description: '失効成功' },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
@@ -141,7 +184,10 @@ const verifyTeamLink = createRoute({
     body: { content: { 'application/json': { schema: VerifyTeamLinkSchema } }, required: true },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '認証成功' },
+    200: {
+      content: { 'application/json': { schema: verifyResponseSchema } },
+      description: '認証成功',
+    },
     400: {
       content: { 'application/json': { schema: errorSchema } },
       description: 'バリデーションエラー',
@@ -155,7 +201,6 @@ const verifyTeamLink = createRoute({
 app.openapi(verifyTeamLink, async (c) => {
   const { token } = c.req.valid('json');
 
-  // トークンの前半16文字からアクセスIDを探す (全件スキャン回避のためハッシュで検索)
   const hash = hashAccessToken(token);
   const access = await db.query.teamAccesses.findFirst({
     where: eq(teamAccesses.accessTokenHash, hash),
@@ -194,7 +239,7 @@ const deleteTeamAccess = createRoute({
   middleware: [requireOperator] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '削除成功' },
+    200: { content: { 'application/json': { schema: messageSchema } }, description: '削除成功' },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
@@ -218,7 +263,7 @@ const resendTeamAccess = createRoute({
   middleware: [requireOperator] as const,
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { content: { 'application/json': { schema: z.any() } }, description: '再送信成功' },
+    200: { content: { 'application/json': { schema: messageSchema } }, description: '再送信成功' },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
     403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
@@ -230,6 +275,8 @@ app.openapi(resendTeamAccess, async (c) => {
     where: eq(teamAccesses.id, id),
   });
   if (!existing) throw notFound('チームアクセストークンが見つかりません');
+
+  await revokeActiveTeamAccesses(existing.teamId);
 
   // 新しいトークンを発行してハッシュを更新
   const token = generateAccessToken();
