@@ -155,6 +155,37 @@ beforeEach(() => {
 });
 
 describe('security boundaries integration', () => {
+  function issueReportRow(overrides: Record<string, unknown>) {
+    return {
+      id: ids.issueA,
+      tournamentId: ids.tournamentA,
+      teamId: ids.teamA,
+      wifiConfigId: null,
+      reporterName: null,
+      visibility: 'team_private',
+      band: '5GHz',
+      channel: 36,
+      channelWidthMHz: 80,
+      symptom: 'high_latency',
+      severity: 'medium',
+      avgPingMs: null,
+      maxPingMs: null,
+      packetLossPercent: null,
+      distanceCategory: null,
+      estimatedDistanceMeters: null,
+      locationLabel: null,
+      reproducibility: null,
+      description: null,
+      mitigationTried: null,
+      improved: null,
+      apDeviceModel: null,
+      clientDeviceModel: null,
+      createdAt: new Date('2026-04-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      ...overrides,
+    };
+  }
+
   it('viewer は他チームの公開情報を閲覧できるが機密はマスクされる', async () => {
     const app = await createTestApp();
 
@@ -361,19 +392,19 @@ describe('security boundaries integration', () => {
     const app = await createTestApp();
 
     state.selectQueue.push([
-      {
+      issueReportRow({
         id: ids.issueA,
         tournamentId: ids.tournamentA,
         teamId: ids.teamA,
         visibility: 'team_private',
-      },
-      {
+      }),
+      issueReportRow({
         id: ids.issueB,
         tournamentId: ids.tournamentA,
         teamId: ids.teamB,
         visibility: 'team_private',
-      },
-      {
+      }),
+      issueReportRow({
         id: ids.issuePublic,
         tournamentId: ids.tournamentA,
         teamId: ids.teamB,
@@ -381,7 +412,7 @@ describe('security boundaries integration', () => {
         reporterName: 'hidden reporter',
         description: 'hidden description',
         locationLabel: 'hidden location',
-      },
+      }),
     ]);
 
     const res = await app.request(`/api/tournaments/${ids.tournamentA}/issue-reports`, {

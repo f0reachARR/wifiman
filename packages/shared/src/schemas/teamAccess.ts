@@ -1,15 +1,18 @@
 import { z } from 'zod';
 import { TEAM_ACCESS_ROLES } from '../enums.js';
+import { DateTimeStringSchema, optionalFromNullable } from './common.js';
 
 export const TeamAccessSchema = z.object({
   id: z.string().uuid(),
   teamId: z.string().uuid(),
   email: z.string().email().max(254),
   accessTokenHash: z.string(),
-  issuedAt: z.string().datetime(),
-  lastUsedAt: z.string().datetime().optional(),
-  revokedAt: z.string().datetime().optional(),
+  issuedAt: DateTimeStringSchema,
+  lastUsedAt: optionalFromNullable(DateTimeStringSchema),
+  revokedAt: optionalFromNullable(DateTimeStringSchema),
   role: z.enum(TEAM_ACCESS_ROLES),
+  createdAt: DateTimeStringSchema,
+  updatedAt: DateTimeStringSchema,
 });
 
 export const CreateTeamAccessSchema = z.object({

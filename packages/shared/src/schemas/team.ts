@@ -1,16 +1,17 @@
 import { z } from 'zod';
+import { DateTimeStringSchema, optionalFromNullable } from './common.js';
 
 export const TeamSchema = z.object({
   id: z.string().uuid(),
   tournamentId: z.string().uuid(),
   name: z.string().min(1).max(200),
-  organization: z.string().max(200).optional(),
-  pitId: z.string().max(50).optional(),
-  contactEmail: z.string().email().max(254).optional(),
-  displayContactName: z.string().max(200).optional(),
-  notes: z.string().max(2000).optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  organization: optionalFromNullable(z.string().max(200)),
+  pitId: optionalFromNullable(z.string().max(50)),
+  contactEmail: optionalFromNullable(z.string().email().max(254)),
+  displayContactName: optionalFromNullable(z.string().max(200)),
+  notes: optionalFromNullable(z.string().max(2000)),
+  createdAt: DateTimeStringSchema,
+  updatedAt: DateTimeStringSchema,
 });
 
 export const CreateTeamSchema = TeamSchema.omit({

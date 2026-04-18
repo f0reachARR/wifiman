@@ -1,13 +1,13 @@
-import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import {
   type ChannelMapEntry,
   ChannelMapEntrySchema,
   CreateTournamentSchema,
+  TournamentSchema,
   UpdateTournamentSchema,
 } from '@wifiman/shared';
 import { and, eq, isNotNull, ne } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import type { ContextVariableMap } from 'hono';
 import { db } from '../db/index.js';
 import {
   deviceSpecs,
@@ -19,23 +19,12 @@ import {
 } from '../db/schema/index.js';
 import { notFound } from '../errors.js';
 import { requireAnyViewer, requireOperator } from '../middleware/auth.js';
+import { createOpenApiApp, errorSchema } from '../openapi.js';
 
-const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
-
-const errorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
 const idParam = z.object({ id: z.string() });
-const tournamentResponseSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  venueName: z.string(),
-  startDate: z.string(),
-  endDate: z.string(),
-  description: z.string().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
+const app = createOpenApiApp();
+const tournamentResponseSchema = TournamentSchema;
+const tournamentListResponseSchema = z.array(tournamentResponseSchema);
 
 // GET /api/tournaments - 大会一覧 (public)
 const listTournaments = createRoute({
@@ -53,7 +42,7 @@ const listTournaments = createRoute({
 });
 app.openapi(listTournaments, async (c) => {
   const rows = await db.select().from(tournaments).orderBy(tournaments.startDate);
-  return c.json(rows, 200);
+  return c.json(tournamentListResponseSchema.parse(rows), 200);
 });
 
 // POST /api/tournaments - 大会作成 (operator)
@@ -100,7 +89,7 @@ app.openapi(createTournament, async (c) => {
     })
     .returning();
   if (!row) throw new Error('insert failed');
-  return c.json(row, 201);
+  return c.json(tournamentResponseSchema.parse(row), 201);
 });
 
 // GET /api/tournaments/:id - 大会詳細 (public)
@@ -126,7 +115,7 @@ app.openapi(getTournament, async (c) => {
     where: eq(tournaments.id, id),
   });
   if (!row) throw notFound('大会が見つかりません');
-  return c.json(row, 200);
+  return c.json(tournamentResponseSchema.parse(row), 200);
 });
 
 // PATCH /api/tournaments/:id - 大会更新 (operator)
@@ -174,7 +163,7 @@ app.openapi(updateTournament, async (c) => {
     .where(eq(tournaments.id, id))
     .returning();
   if (!row) throw notFound('大会が見つかりません');
-  return c.json(row, 200);
+  return c.json(tournamentResponseSchema.parse(row), 200);
 });
 
 // GET /api/tournaments/:tournamentId/channel-map - チャンネルマップ (any_viewer)

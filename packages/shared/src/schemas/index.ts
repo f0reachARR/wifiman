@@ -1,5 +1,6 @@
 export * from './bestPractice.js';
 export * from './channelMap.js';
+export * from './common.js';
 export * from './deviceSpec.js';
 export * from './issueReport.js';
 export * from './notice.js';

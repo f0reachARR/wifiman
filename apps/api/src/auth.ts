@@ -19,6 +19,16 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  rateLimit: {
+    window: 60,
+    max: 100,
+    customRules: {
+      '/sign-in/email': {
+        window: 60,
+        max: 5,
+      },
+    },
+  },
 });
 
 export type Auth = typeof auth;

@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export type ApiError = {
   error: {
     code: string;
@@ -13,7 +15,16 @@ export const ErrorCodes = {
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
   UNPROCESSABLE: 'UNPROCESSABLE',
+  RATE_LIMITED: 'RATE_LIMITED',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
+
+export const ApiErrorSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.unknown().optional(),
+  }),
+});

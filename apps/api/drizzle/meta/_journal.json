@@ -36,6 +36,13 @@
       "when": 1776499400000,
       "tag": "0004_round_champions",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776499500000,
+      "tag": "0005_eager_hemingway",
+      "breakpoints": true
     }
   ]
 }

@@ -1,24 +1,22 @@
 import { z } from 'zod';
 import { BANDS, OBSERVED_WIFI_SOURCES } from '../enums.js';
+import { DateTimeStringSchema, optionalFromNullable } from './common.js';
 
 export const ObservedWifiSchema = z.object({
   id: z.string().uuid(),
   tournamentId: z.string().uuid(),
   source: z.enum(OBSERVED_WIFI_SOURCES),
-  ssid: z.string().max(32).optional(),
-  bssid: z
-    .string()
-    .regex(/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/)
-    .optional(),
+  ssid: optionalFromNullable(z.string().max(32)),
+  bssid: optionalFromNullable(z.string().regex(/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/)),
   band: z.enum(BANDS),
   channel: z.number().int().positive(),
-  channelWidthMHz: z.number().int().positive().optional(),
-  rssi: z.number().int().min(-120).max(0).optional(),
-  locationLabel: z.string().max(200).optional(),
-  observedAt: z.string().datetime(),
-  notes: z.string().max(2000).optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  channelWidthMHz: optionalFromNullable(z.number().int().positive()),
+  rssi: optionalFromNullable(z.number().min(-120).max(0)),
+  locationLabel: optionalFromNullable(z.string().max(200)),
+  observedAt: DateTimeStringSchema,
+  notes: optionalFromNullable(z.string().max(2000)),
+  createdAt: DateTimeStringSchema,
+  updatedAt: DateTimeStringSchema,
 });
 
 export const CreateObservedWifiSchema = ObservedWifiSchema.omit({

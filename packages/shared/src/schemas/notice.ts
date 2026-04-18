@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { NOTICE_SEVERITIES } from '../enums.js';
+import { DateTimeStringSchema, optionalFromNullable } from './common.js';
 
 export const NoticeSchema = z.object({
   id: z.string().uuid(),
@@ -7,10 +8,10 @@ export const NoticeSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().min(1).max(5000),
   severity: z.enum(NOTICE_SEVERITIES),
-  publishedAt: z.string().datetime(),
-  expiresAt: z.string().datetime().optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  publishedAt: DateTimeStringSchema,
+  expiresAt: optionalFromNullable(DateTimeStringSchema),
+  createdAt: DateTimeStringSchema,
+  updatedAt: DateTimeStringSchema,
 });
 
 export const CreateNoticeSchema = NoticeSchema.omit({

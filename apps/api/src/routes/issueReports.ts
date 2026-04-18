@@ -1,66 +1,27 @@
-import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import {
   CreateIssueReportBaseSchema,
   CreateIssueReportSchema,
+  IssueReportSchema,
   isValidChannel,
   isValidChannelWidth,
+  PublicIssueReportSummarySchema,
   UpdateIssueReportSchema,
 } from '@wifiman/shared';
 import { eq } from 'drizzle-orm';
-import type { ContextVariableMap } from 'hono';
 import { resolveIssueReportCreateScope } from '../authz.js';
 import { db } from '../db/index.js';
 import { deviceSpecs, issueReports, teams, wifiConfigs } from '../db/schema/index.js';
 import { forbidden, notFound, unauthorized, unprocessable } from '../errors.js';
 import { requireAnyViewer, requireParticipant } from '../middleware/auth.js';
+import { createOpenApiApp, errorSchema } from '../openapi.js';
 
-const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
-
-const errorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-const issueReportResponseSchema = z
-  .object({
-    id: z.string(),
-    tournamentId: z.string(),
-    teamId: z.string().nullable(),
-    wifiConfigId: z.string().nullable(),
-    reporterName: z.string().nullable(),
-    visibility: z.enum(['team_private', 'team_public']),
-    band: z.enum(['2.4GHz', '5GHz', '6GHz']),
-    channel: z.number().int(),
-    channelWidthMHz: z.number().int().nullable(),
-    symptom: z.enum([
-      'cannot_connect',
-      'unstable',
-      'low_throughput',
-      'high_latency',
-      'disconnect',
-      'distance_sensitive',
-      'unknown',
-    ]),
-    severity: z.enum(['low', 'medium', 'high', 'critical']),
-    avgPingMs: z.number().nullable(),
-    maxPingMs: z.number().nullable(),
-    packetLossPercent: z.number().nullable(),
-    distanceCategory: z.enum(['near', 'mid', 'far', 'obstacle']).nullable(),
-    estimatedDistanceMeters: z.number().nullable(),
-    locationLabel: z.string().nullable(),
-    reproducibility: z.enum(['always', 'sometimes', 'once']).nullable(),
-    description: z.string().nullable(),
-    mitigationTried: z.array(z.string()).nullable(),
-    improved: z.boolean().nullable(),
-    apDeviceModel: z.string().nullable(),
-    clientDeviceModel: z.string().nullable(),
-    createdAt: z.date(),
-    updatedAt: z.date(),
-  })
-  .strict();
-const publicIssueReportSummarySchema = issueReportResponseSchema.omit({
-  reporterName: true,
-  locationLabel: true,
-  description: true,
-});
+const app = createOpenApiApp();
+const issueReportResponseSchema = IssueReportSchema;
+const publicIssueReportSummarySchema = PublicIssueReportSummarySchema;
+const issueReportListResponseSchema = z.array(
+  z.union([issueReportResponseSchema, publicIssueReportSummarySchema]),
+);
 const deleteResponseSchema = z.object({ message: z.string() });
 const issueReportSummarySchema = z.object({
   total: z.number().int().nonnegative(),
@@ -126,7 +87,7 @@ function canAccessIssueReportTournament(
   return authCtx.teamTournamentId === row.tournamentId;
 }
 
-function toPublicIssueReportSummary(row: z.infer<typeof issueReportResponseSchema>) {
+function toPublicIssueReportSummary(row: Record<string, unknown>) {
   const {
     reporterName: _reporterName,
     locationLabel: _locationLabel,
@@ -221,8 +182,10 @@ app.openapi(listIssueReports, async (c) => {
 
   const visibleRows = rows.filter((r) => canViewIssueReportSummary(authCtx, r));
   return c.json(
-    visibleRows.map((row) =>
-      canViewIssueReportDetail(authCtx, row) ? row : toPublicIssueReportSummary(row),
+    issueReportListResponseSchema.parse(
+      visibleRows.map((row) =>
+        canViewIssueReportDetail(authCtx, row) ? row : toPublicIssueReportSummary(row),
+      ),
     ),
     200,
   );
@@ -405,7 +368,7 @@ app.openapi(createIssueReport, async (c) => {
     })
     .returning();
   if (!row) throw new Error('insert failed');
-  return c.json(row, 201);
+  return c.json(issueReportResponseSchema.parse(row), 201);
 });
 
 // GET /api/issue-reports/:id - 報告詳細 (any_viewer, 自チームのみ)
@@ -455,7 +418,9 @@ app.openapi(getIssueReport, async (c) => {
   }
 
   return c.json(
-    canViewIssueReportDetail(authCtx, row) ? row : toPublicIssueReportSummary(row),
+    z
+      .union([issueReportResponseSchema, publicIssueReportSummarySchema])
+      .parse(canViewIssueReportDetail(authCtx, row) ? row : toPublicIssueReportSummary(row)),
     200,
   );
 });
@@ -561,7 +526,7 @@ app.openapi(updateIssueReport, async (c) => {
     .where(eq(issueReports.id, id))
     .returning();
   if (!row) throw notFound('報告が見つかりません');
-  return c.json(row, 200);
+  return c.json(issueReportResponseSchema.parse(row), 200);
 });
 
 // DELETE /api/issue-reports/:id - 報告削除 (team_editor or operator)

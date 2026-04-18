@@ -1,14 +1,14 @@
-import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import {
   CreateTeamAccessSchema,
   generateAccessToken,
   hashAccessToken,
   isTokenValid,
+  TeamAccessSchema,
   VerifyTeamLinkSchema,
   verifyAccessToken,
 } from '@wifiman/shared';
 import { and, eq, isNull } from 'drizzle-orm';
-import type { ContextVariableMap } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { db } from '../db/index.js';
 import { teamAccesses, teams } from '../db/schema/index.js';
@@ -17,24 +17,13 @@ import { env } from '../env.js';
 import { conflict, notFound, unauthorized } from '../errors.js';
 import { createMailer } from '../mailer/index.js';
 import { requireOperator } from '../middleware/auth.js';
+import { createOpenApiApp, errorSchema } from '../openapi.js';
+import { fixedWindowRateLimit } from '../rateLimit.js';
 import { createTeamAccessSessionCookie } from '../teamAccessSession.js';
 
-const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
-
-const errorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-const publicTeamAccessSchema = z.object({
-  id: z.string(),
-  teamId: z.string(),
-  email: z.string(),
-  issuedAt: z.date(),
-  lastUsedAt: z.date().nullable(),
-  revokedAt: z.date().nullable(),
-  role: z.enum(['editor', 'viewer']),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
+const app = createOpenApiApp();
+const publicTeamAccessSchema = TeamAccessSchema.omit({ accessTokenHash: true });
+const publicTeamAccessListSchema = z.array(publicTeamAccessSchema);
 const createTeamAccessResponseSchema = z.object({
   id: z.string(),
   teamId: z.string(),
@@ -136,7 +125,7 @@ app.openapi(listTeamAccesses, async (c) => {
   const rows = await db.select().from(teamAccesses).where(eq(teamAccesses.teamId, teamId));
   // accessTokenHash は外部に露出しない
   return c.json(
-    rows.map(({ accessTokenHash: _h, ...rest }) => rest),
+    publicTeamAccessListSchema.parse(rows.map(({ accessTokenHash: _h, ...rest }) => rest)),
     200,
   );
 });
@@ -272,6 +261,13 @@ const verifyTeamLink = createRoute({
   method: 'post',
   path: '/team-accesses/verify',
   tags: ['auth'],
+  middleware: [
+    fixedWindowRateLimit({
+      keyPrefix: 'team-access-verify',
+      windowMs: 60_000,
+      max: 10,
+    }),
+  ] as const,
   request: {
     body: {
       content: { 'application/json': { schema: VerifyTeamLinkSchema } },
@@ -290,6 +286,10 @@ const verifyTeamLink = createRoute({
     401: {
       content: { 'application/json': { schema: errorSchema } },
       description: '無効なトークン',
+    },
+    429: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'レート制限',
     },
   },
 });

@@ -1,155 +1,157 @@
-import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { createRoute, z } from '@hono/zod-openapi';
 import {
+  BestPracticeSchema,
   CreateBestPracticeSchema,
   UpdateBestPracticeSchema,
-} from "@wifiman/shared";
-import { eq, isNull, or } from "drizzle-orm";
-import type { ContextVariableMap } from "hono";
-import { db } from "../db/index.js";
-import { bestPractices, tournaments } from "../db/schema/index.js";
-import { notFound } from "../errors.js";
-import { requireOperator } from "../middleware/auth.js";
+} from '@wifiman/shared';
+import { eq, isNull, or } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { bestPractices, tournaments } from '../db/schema/index.js';
+import { notFound, unprocessable } from '../errors.js';
+import { requireOperator } from '../middleware/auth.js';
+import { createOpenApiApp, errorSchema } from '../openapi.js';
 
-const app = new OpenAPIHono<{ Variables: ContextVariableMap }>();
-
-const errorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-const bestPracticeResponseSchema = z.object({
-  id: z.string(),
-  tournamentId: z.string().nullable(),
-  title: z.string(),
-  body: z.string(),
-  scope: z.enum(["general", "tournament", "band", "device"]),
-  targetBand: z.enum(["2.4GHz", "5GHz", "6GHz"]).nullable(),
-  targetModel: z.string().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
+const app = createOpenApiApp();
+const bestPracticeListResponseSchema = z.array(BestPracticeSchema);
 
 async function assertTournamentExists(tournamentId: string | null | undefined) {
   if (!tournamentId) return;
   const tournament = await db.query.tournaments.findFirst({
     where: eq(tournaments.id, tournamentId),
   });
-  if (!tournament) throw notFound("大会が見つかりません");
+  if (!tournament) throw notFound('大会が見つかりません');
 }
 
 // GET /api/tournaments/:tournamentId/best-practices - ベストプラクティス一覧 (public)
 const listBestPractices = createRoute({
-  method: "get",
-  path: "/tournaments/{tournamentId}/best-practices",
-  tags: ["best-practices"],
+  method: 'get',
+  path: '/tournaments/{tournamentId}/best-practices',
+  tags: ['best-practices'],
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
       content: {
-        "application/json": { schema: z.array(bestPracticeResponseSchema) },
+        'application/json': { schema: z.array(BestPracticeSchema) },
       },
-      description: "ベストプラクティス一覧",
+      description: 'ベストプラクティス一覧',
     },
   },
 });
 app.openapi(listBestPractices, async (c) => {
-  const { tournamentId } = c.req.valid("param");
+  const { tournamentId } = c.req.valid('param');
   const rows = await db
     .select()
     .from(bestPractices)
-    .where(
-      or(
-        eq(bestPractices.tournamentId, tournamentId),
-        isNull(bestPractices.tournamentId),
-      ),
-    );
-  return c.json(rows, 200);
+    .where(or(eq(bestPractices.tournamentId, tournamentId), isNull(bestPractices.tournamentId)));
+  return c.json(bestPracticeListResponseSchema.parse(rows), 200);
 });
 
 // POST /api/best-practices - ベストプラクティス作成 (operator)
 const createBestPractice = createRoute({
-  method: "post",
-  path: "/best-practices",
-  tags: ["best-practices"],
+  method: 'post',
+  path: '/best-practices',
+  tags: ['best-practices'],
   middleware: [requireOperator] as const,
   request: {
     body: {
-      content: { "application/json": { schema: CreateBestPracticeSchema } },
+      content: { 'application/json': { schema: CreateBestPracticeSchema } },
       required: true,
     },
   },
   responses: {
     201: {
-      content: { "application/json": { schema: bestPracticeResponseSchema } },
-      description: "ベストプラクティス作成",
+      content: { 'application/json': { schema: BestPracticeSchema } },
+      description: 'ベストプラクティス作成',
     },
     400: {
-      content: { "application/json": { schema: errorSchema } },
-      description: "バリデーションエラー",
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'バリデーションエラー',
     },
     401: {
-      content: { "application/json": { schema: errorSchema } },
-      description: "未認証",
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
     },
     403: {
-      content: { "application/json": { schema: errorSchema } },
-      description: "権限なし",
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
     },
   },
 });
 app.openapi(createBestPractice, async (c) => {
-  const body = c.req.valid("json");
+  const body = c.req.valid('json');
   await assertTournamentExists(body.tournamentId);
   const [row] = await db.insert(bestPractices).values(body).returning();
-  if (!row) throw new Error("insert failed");
-  return c.json(row, 201);
+  if (!row) throw new Error('insert failed');
+  return c.json(BestPracticeSchema.parse(row), 201);
 });
 
 // PATCH /api/best-practices/:id - ベストプラクティス更新 (operator)
 const updateBestPractice = createRoute({
-  method: "patch",
-  path: "/best-practices/{id}",
-  tags: ["best-practices"],
+  method: 'patch',
+  path: '/best-practices/{id}',
+  tags: ['best-practices'],
   middleware: [requireOperator] as const,
   request: {
     params: z.object({ id: z.string() }),
     body: {
-      content: { "application/json": { schema: UpdateBestPracticeSchema } },
+      content: { 'application/json': { schema: UpdateBestPracticeSchema } },
       required: true,
     },
   },
   responses: {
     200: {
-      content: { "application/json": { schema: bestPracticeResponseSchema } },
-      description: "ベストプラクティス更新",
+      content: { 'application/json': { schema: BestPracticeSchema } },
+      description: 'ベストプラクティス更新',
     },
     400: {
-      content: { "application/json": { schema: errorSchema } },
-      description: "バリデーションエラー",
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'バリデーションエラー',
     },
     401: {
-      content: { "application/json": { schema: errorSchema } },
-      description: "未認証",
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
     },
     403: {
-      content: { "application/json": { schema: errorSchema } },
-      description: "権限なし",
+      content: { 'application/json': { schema: errorSchema } },
+      description: '権限なし',
     },
     404: {
-      content: { "application/json": { schema: errorSchema } },
-      description: "Not Found",
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
     },
   },
 });
 app.openapi(updateBestPractice, async (c) => {
-  const { id } = c.req.valid("param");
-  const body = c.req.valid("json");
-  await assertTournamentExists(body.tournamentId);
+  const { id } = c.req.valid('param');
+  const body = c.req.valid('json');
+  const existing = await db.query.bestPractices.findFirst({
+    where: eq(bestPractices.id, id),
+  });
+  if (!existing) throw notFound('ベストプラクティスが見つかりません');
+
+  const mergedBody = {
+    tournamentId: existing.tournamentId ?? undefined,
+    title: existing.title,
+    body: existing.body,
+    scope: existing.scope,
+    targetBand: existing.targetBand ?? undefined,
+    targetModel: existing.targetModel ?? undefined,
+    ...body,
+  };
+  const parsedBody = CreateBestPracticeSchema.safeParse(mergedBody);
+  if (!parsedBody.success) {
+    throw unprocessable('ベストプラクティスの入力内容が不正です', {
+      issues: parsedBody.error.issues,
+    });
+  }
+  await assertTournamentExists(parsedBody.data.tournamentId);
   const [row] = await db
     .update(bestPractices)
-    .set({ ...body, updatedAt: new Date() })
+    .set({ ...parsedBody.data, updatedAt: new Date() })
     .where(eq(bestPractices.id, id))
     .returning();
-  if (!row) throw notFound("ベストプラクティスが見つかりません");
-  return c.json(row, 200);
+  if (!row) throw notFound('ベストプラクティスが見つかりません');
+  return c.json(BestPracticeSchema.parse(row), 200);
 });
 
 export default app;

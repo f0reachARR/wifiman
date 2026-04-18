@@ -1,12 +1,11 @@
 import { swaggerUI } from '@hono/swagger-ui';
-import { OpenAPIHono } from '@hono/zod-openapi';
-import type { ContextVariableMap } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { auth } from './auth.js';
 import { env } from './env.js';
 import { errorHandler } from './errors.js';
 import { setAuthContext } from './middleware/auth.js';
+import { createOpenApiApp } from './openapi.js';
 import bestPracticeRoutes from './routes/bestPractices.js';
 import deviceSpecRoutes from './routes/deviceSpecs.js';
 import issueReportRoutes from './routes/issueReports.js';
@@ -17,10 +16,8 @@ import teamRoutes from './routes/teams.js';
 import tournamentRoutes from './routes/tournaments.js';
 import wifiConfigRoutes from './routes/wifiConfigs.js';
 
-type AppEnv = { Variables: ContextVariableMap };
-
 export function createApp() {
-  const app = new OpenAPIHono<AppEnv>();
+  const app = createOpenApiApp();
 
   // CORS
   const corsOrigins = [
@@ -51,7 +48,7 @@ export function createApp() {
   app.use('/api/*', setAuthContext);
 
   // Routes
-  const api = new OpenAPIHono<AppEnv>();
+  const api = createOpenApiApp();
 
   api.route('/', tournamentRoutes);
   api.route('/', teamRoutes);

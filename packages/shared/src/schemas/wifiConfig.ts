@@ -6,6 +6,7 @@ import {
   WIFI_CONFIG_ROLES,
   WIFI_CONFIG_STATUSES,
 } from '../enums.js';
+import { DateTimeStringSchema, optionalFromNullable } from './common.js';
 
 export const WifiConfigSchema = z.object({
   id: z.string().uuid(),
@@ -17,13 +18,13 @@ export const WifiConfigSchema = z.object({
   channelWidthMHz: z.union([z.literal(20), z.literal(40), z.literal(80), z.literal(160)]),
   role: z.enum(WIFI_CONFIG_ROLES),
   status: z.enum(WIFI_CONFIG_STATUSES),
-  apDeviceId: z.string().uuid().optional(),
-  clientDeviceId: z.string().uuid().optional(),
-  expectedDistanceCategory: z.enum(['near', 'mid', 'far']).optional(),
-  pingTargetIp: z.string().ip().max(45).optional(),
-  notes: z.string().max(2000).optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  apDeviceId: optionalFromNullable(z.string().uuid()),
+  clientDeviceId: optionalFromNullable(z.string().uuid()),
+  expectedDistanceCategory: optionalFromNullable(z.enum(['near', 'mid', 'far'])),
+  pingTargetIp: optionalFromNullable(z.string().ip().max(45)),
+  notes: optionalFromNullable(z.string().max(2000)),
+  createdAt: DateTimeStringSchema,
+  updatedAt: DateTimeStringSchema,
 });
 
 export const CreateWifiConfigSchema = WifiConfigSchema.omit({
