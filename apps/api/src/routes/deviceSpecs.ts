@@ -1,6 +1,6 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import { CreateDeviceSpecSchema, UpdateDeviceSpecSchema } from '@wifiman/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { ContextVariableMap, MiddlewareHandler } from 'hono';
 import { db } from '../db/index.js';
 import { deviceSpecs } from '../db/schema/index.js';
@@ -26,7 +26,10 @@ const listDeviceSpecs = createRoute({
   path: '/teams/{teamId}/device-specs',
   tags: ['device-specs'],
   middleware: [requireTeamViewer('teamId')] as const,
-  request: { params: z.object({ teamId: z.string() }) },
+  request: {
+    params: z.object({ teamId: z.string() }),
+    query: z.object({ include_archived: z.string().optional() }),
+  },
   responses: {
     200: {
       content: { 'application/json': { schema: z.array(z.any()) } },
@@ -38,15 +41,17 @@ const listDeviceSpecs = createRoute({
 });
 app.openapi(listDeviceSpecs, async (c) => {
   const { teamId } = c.req.valid('param');
-  const rows = await db.select().from(deviceSpecs).where(eq(deviceSpecs.teamId, teamId));
-  // supportedBands は JSON 文字列として保存されているため parse する
-  return c.json(
-    rows.map((r) => ({
-      ...r,
-      supportedBands: JSON.parse(r.supportedBands) as string[],
-    })),
-    200,
-  );
+  const { include_archived } = c.req.valid('query');
+  const shouldIncludeArchived = include_archived === 'true';
+  const rows = await db
+    .select()
+    .from(deviceSpecs)
+    .where(
+      shouldIncludeArchived
+        ? eq(deviceSpecs.teamId, teamId)
+        : and(eq(deviceSpecs.teamId, teamId), isNull(deviceSpecs.archivedAt)),
+    );
+  return c.json(rows, 200);
 });
 
 // POST /api/teams/:teamId/device-specs - 機材仕様作成 (team_editor)
@@ -77,14 +82,10 @@ app.openapi(createDeviceSpec, async (c) => {
   const body = c.req.valid('json');
   const [row] = await db
     .insert(deviceSpecs)
-    .values({
-      ...body,
-      teamId,
-      supportedBands: JSON.stringify(body.supportedBands),
-    })
+    .values({ ...body, teamId })
     .returning();
   if (!row) throw new Error('insert failed');
-  return c.json({ ...row, supportedBands: body.supportedBands }, 201);
+  return c.json(row, 201);
 });
 
 // PATCH /api/device-specs/:id - 機材仕様更新 (team_editor)
@@ -111,27 +112,63 @@ const patchDeviceSpec = createRoute({
 app.openapi(patchDeviceSpec, async (c) => {
   const { id } = c.req.valid('param');
   const body = c.req.valid('json');
-  const { supportedBands: supportedBandsArr, ...restBody } = body;
-  const updateData = {
-    ...restBody,
-    ...(supportedBandsArr !== undefined
-      ? { supportedBands: JSON.stringify(supportedBandsArr) }
-      : {}),
-    updatedAt: new Date(),
-  };
   const [row] = await db
     .update(deviceSpecs)
-    .set(updateData)
+    .set({ ...body, updatedAt: new Date() })
     .where(eq(deviceSpecs.id, id))
     .returning();
   if (!row) throw notFound('機材仕様が見つかりません');
-  return c.json(
-    {
-      ...row,
-      supportedBands: body.supportedBands ?? JSON.parse(row.supportedBands),
-    },
-    200,
-  );
+  return c.json(row, 200);
+});
+
+// DELETE /api/device-specs/:id - 機材仕様アーカイブ (soft-delete) (team_editor)
+const archiveDeviceSpec = createRoute({
+  method: 'delete',
+  path: '/device-specs/{id}',
+  tags: ['device-specs'],
+  middleware: [resolveDeviceSpecTeamMiddleware, requireTeamEditor('teamId')] as const,
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: z.any() } }, description: 'アーカイブ成功' },
+    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+  },
+});
+app.openapi(archiveDeviceSpec, async (c) => {
+  const { id } = c.req.valid('param');
+  const [row] = await db
+    .update(deviceSpecs)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(deviceSpecs.id, id), isNull(deviceSpecs.archivedAt)))
+    .returning();
+  if (!row) throw notFound('機材仕様が見つかりません（すでにアーカイブ済みの可能性があります）');
+  return c.json({ message: 'アーカイブしました', id: row.id }, 200);
+});
+
+// POST /api/device-specs/:id/restore - アーカイブ解除 (team_editor)
+const restoreDeviceSpec = createRoute({
+  method: 'post',
+  path: '/device-specs/{id}/restore',
+  tags: ['device-specs'],
+  middleware: [resolveDeviceSpecTeamMiddleware, requireTeamEditor('teamId')] as const,
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: z.any() } }, description: '復元成功' },
+    401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
+    403: { content: { 'application/json': { schema: errorSchema } }, description: '権限なし' },
+    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not Found' },
+  },
+});
+app.openapi(restoreDeviceSpec, async (c) => {
+  const { id } = c.req.valid('param');
+  const [row] = await db
+    .update(deviceSpecs)
+    .set({ archivedAt: null, updatedAt: new Date() })
+    .where(and(eq(deviceSpecs.id, id), isNotNull(deviceSpecs.archivedAt)))
+    .returning();
+  if (!row) throw notFound('機材仕様が見つかりません（すでに復元済みの可能性があります）');
+  return c.json({ message: '復元しました', id: row.id }, 200);
 });
 
 export default app;

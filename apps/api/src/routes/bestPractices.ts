@@ -1,6 +1,6 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import { CreateBestPracticeSchema, UpdateBestPracticeSchema } from '@wifiman/shared';
-import { eq } from 'drizzle-orm';
+import { eq, isNull, or } from 'drizzle-orm';
 import type { ContextVariableMap } from 'hono';
 import { db } from '../db/index.js';
 import { bestPractices } from '../db/schema/index.js';
@@ -29,7 +29,7 @@ app.openapi(listBestPractices, async (c) => {
   const rows = await db
     .select()
     .from(bestPractices)
-    .where(eq(bestPractices.tournamentId, tournamentId));
+    .where(or(eq(bestPractices.tournamentId, tournamentId), isNull(bestPractices.tournamentId)));
   return c.json(rows, 200);
 });
 

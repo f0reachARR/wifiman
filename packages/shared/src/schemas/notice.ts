@@ -9,9 +9,15 @@ export const NoticeSchema = z.object({
   severity: z.enum(NOTICE_SEVERITIES),
   publishedAt: z.string().datetime(),
   expiresAt: z.string().datetime().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 });
 
-export const CreateNoticeSchema = NoticeSchema.omit({ id: true });
+export const CreateNoticeSchema = NoticeSchema.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 export const UpdateNoticeSchema = CreateNoticeSchema.omit({ tournamentId: true }).partial();
 
