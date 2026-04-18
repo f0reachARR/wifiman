@@ -5,7 +5,7 @@ import {
   CreateTournamentSchema,
   UpdateTournamentSchema,
 } from '@wifiman/shared';
-import { and, count, eq, isNotNull, ne } from 'drizzle-orm';
+import { and, eq, isNotNull, ne } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { ContextVariableMap } from 'hono';
 import { db } from '../db/index.js';
@@ -202,17 +202,26 @@ app.openapi(getChannelMap, async (c) => {
     .leftJoin(clientDeviceSpec, eq(wifiConfigs.clientDeviceId, clientDeviceSpec.id))
     .where(and(eq(teams.tournamentId, tournamentId), ne(wifiConfigs.status, 'disabled')));
 
-  // wifiConfigId ごとの不具合報告件数を集計
-  const reportCountRows = await db
-    .select({ wifiConfigId: issueReports.wifiConfigId, cnt: count() })
+  // wifiConfigId ごとの不具合報告件数を集計する。
+  // 他チームの private 報告数は aggregate でも漏らさない。
+  const reportRows = await db
+    .select({
+      wifiConfigId: issueReports.wifiConfigId,
+      teamId: issueReports.teamId,
+      visibility: issueReports.visibility,
+    })
     .from(issueReports)
-    .where(and(eq(issueReports.tournamentId, tournamentId), isNotNull(issueReports.wifiConfigId)))
-    .groupBy(issueReports.wifiConfigId);
-  const reportCountMap = new Map<string, number>(
-    reportCountRows
-      .filter((r): r is { wifiConfigId: string; cnt: number } => r.wifiConfigId != null)
-      .map((r) => [r.wifiConfigId, Number(r.cnt)]),
-  );
+    .where(and(eq(issueReports.tournamentId, tournamentId), isNotNull(issueReports.wifiConfigId)));
+  const reportCountMap = new Map<string, number>();
+  for (const row of reportRows) {
+    if (!row.wifiConfigId) continue;
+    const canCount =
+      authCtx?.userRole === 'operator' ||
+      (viewerTeamId != null && row.teamId === viewerTeamId) ||
+      row.visibility === 'team_public';
+    if (!canCount) continue;
+    reportCountMap.set(row.wifiConfigId, (reportCountMap.get(row.wifiConfigId) ?? 0) + 1);
+  }
 
   // 野良 WiFi を取得
   const wildWifis = await db

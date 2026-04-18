@@ -1,5 +1,11 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
-import { CreateIssueReportSchema, UpdateIssueReportSchema } from '@wifiman/shared';
+import {
+  CreateIssueReportBaseSchema,
+  CreateIssueReportSchema,
+  isValidChannel,
+  isValidChannelWidth,
+  UpdateIssueReportSchema,
+} from '@wifiman/shared';
 import { eq } from 'drizzle-orm';
 import type { ContextVariableMap } from 'hono';
 import { resolveIssueReportCreateScope } from '../authz.js';
@@ -18,7 +24,7 @@ const issueReportResponseSchema = z
     teamId: z.string().nullable(),
     wifiConfigId: z.string().nullable(),
     reporterName: z.string().nullable(),
-    syncStatus: z.enum(['local_only', 'pending', 'synced', 'failed']),
+    visibility: z.enum(['team_private', 'team_public']),
     band: z.enum(['2.4GHz', '5GHz', '6GHz']),
     channel: z.number().int(),
     channelWidthMHz: z.number().int().nullable(),
@@ -48,6 +54,11 @@ const issueReportResponseSchema = z
     updatedAt: z.date(),
   })
   .strict();
+const publicIssueReportSummarySchema = issueReportResponseSchema.omit({
+  reporterName: true,
+  locationLabel: true,
+  description: true,
+});
 const deleteResponseSchema = z.object({ message: z.string() });
 const issueReportSummarySchema = z.object({
   total: z.number().int().nonnegative(),
@@ -68,13 +79,26 @@ const issueReportSummarySchema = z.object({
   ),
 });
 
-function canViewIssueReport(
+function canViewIssueReportDetail(
   authCtx: { userRole?: 'user' | 'operator'; teamId?: string } | undefined,
   row: { teamId: string | null },
 ): boolean {
   if (authCtx?.userRole === 'operator') return true;
-  if (row.teamId === null) return true;
   return Boolean(authCtx?.teamId && authCtx.teamId === row.teamId);
+}
+
+function canViewIssueReportSummary(
+  authCtx:
+    | { userRole?: 'user' | 'operator'; teamId?: string; teamTournamentId?: string }
+    | undefined,
+  row: { teamId: string | null; tournamentId: string; visibility: 'team_private' | 'team_public' },
+): boolean {
+  if (canViewIssueReportDetail(authCtx, row)) return true;
+  return Boolean(
+    authCtx?.teamId &&
+      authCtx.teamTournamentId === row.tournamentId &&
+      row.visibility === 'team_public',
+  );
 }
 
 function canAccessIssueReportTournament(
@@ -90,6 +114,31 @@ function canAccessIssueReportTournament(
   if (authCtx?.userRole === 'operator') return true;
   if (!authCtx?.teamId) return false;
   return authCtx.teamTournamentId === row.tournamentId;
+}
+
+function toPublicIssueReportSummary(row: z.infer<typeof issueReportResponseSchema>) {
+  const {
+    reporterName: _reporterName,
+    locationLabel: _locationLabel,
+    description: _description,
+    ...summary
+  } = row;
+  return summary;
+}
+
+function validateIssueReportChannel(
+  band: '2.4GHz' | '5GHz' | '6GHz',
+  channel: number,
+  channelWidthMHz: number | null | undefined,
+) {
+  if (!isValidChannel(band, channel)) {
+    throw unprocessable(`帯域 ${band} に対してチャンネル ${channel} は無効です`);
+  }
+  if (channelWidthMHz !== null && channelWidthMHz !== undefined) {
+    if (!isValidChannelWidth(band, channelWidthMHz as 20 | 40 | 80 | 160)) {
+      throw unprocessable(`帯域 ${band} に対してチャンネル幅 ${channelWidthMHz}MHz は無効です`);
+    }
+  }
 }
 
 async function assertTeamInTournament(teamId: string, tournamentId: string) {
@@ -133,7 +182,11 @@ const listIssueReports = createRoute({
   request: { params: z.object({ tournamentId: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.array(issueReportResponseSchema) } },
+      content: {
+        'application/json': {
+          schema: z.array(z.union([issueReportResponseSchema, publicIssueReportSummarySchema])),
+        },
+      },
       description: '報告一覧',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
@@ -148,8 +201,11 @@ app.openapi(listIssueReports, async (c) => {
     .from(issueReports)
     .where(eq(issueReports.tournamentId, tournamentId));
 
+  const visibleRows = rows.filter((r) => canViewIssueReportSummary(authCtx, r));
   return c.json(
-    rows.filter((r) => canViewIssueReport(authCtx, r)),
+    visibleRows.map((row) =>
+      canViewIssueReportDetail(authCtx, row) ? row : toPublicIssueReportSummary(row),
+    ),
     200,
   );
 });
@@ -178,7 +234,7 @@ app.openapi(summaryIssueReports, async (c) => {
     .from(issueReports)
     .where(eq(issueReports.tournamentId, tournamentId));
 
-  const visibleRows = rows.filter((r) => canViewIssueReport(authCtx, r));
+  const visibleRows = rows.filter((r) => canViewIssueReportSummary(authCtx, r));
 
   const total = visibleRows.length;
   const bySeverity = { low: 0, medium: 0, high: 0, critical: 0 } as Record<string, number>;
@@ -219,7 +275,7 @@ const createIssueReport = createRoute({
     params: z.object({ tournamentId: z.string() }),
     body: {
       content: {
-        'application/json': { schema: CreateIssueReportSchema.omit({ tournamentId: true }) },
+        'application/json': { schema: CreateIssueReportBaseSchema.omit({ tournamentId: true }) },
       },
       required: true,
     },
@@ -240,7 +296,12 @@ const createIssueReport = createRoute({
 });
 app.openapi(createIssueReport, async (c) => {
   const { tournamentId } = c.req.valid('param');
-  const body = c.req.valid('json');
+  const rawBody = c.req.valid('json');
+  const parsedBody = CreateIssueReportSchema.safeParse({ ...rawBody, tournamentId });
+  if (!parsedBody.success) {
+    throw unprocessable('不具合報告の入力内容が不正です', { issues: parsedBody.error.issues });
+  }
+  const body = parsedBody.data;
   const authCtx = c.get('auth');
 
   const scope = resolveIssueReportCreateScope(authCtx, body.teamId);
@@ -289,12 +350,18 @@ app.openapi(createIssueReport, async (c) => {
     }
   }
 
+  if (finalBody.band === undefined || finalBody.channel === undefined) {
+    throw unprocessable('帯域とチャンネルを補完できませんでした');
+  }
+  validateIssueReportChannel(finalBody.band, finalBody.channel, finalBody.channelWidthMHz);
+
   const [row] = await db
     .insert(issueReports)
     .values({
       ...finalBody,
+      band: finalBody.band,
+      channel: finalBody.channel,
       tournamentId,
-      syncStatus: 'synced',
     })
     .returning();
   if (!row) throw new Error('insert failed');
@@ -310,7 +377,11 @@ const getIssueReport = createRoute({
   request: { params: z.object({ id: z.string() }) },
   responses: {
     200: {
-      content: { 'application/json': { schema: issueReportResponseSchema } },
+      content: {
+        'application/json': {
+          schema: z.union([issueReportResponseSchema, publicIssueReportSummarySchema]),
+        },
+      },
       description: '報告詳細',
     },
     401: { content: { 'application/json': { schema: errorSchema } }, description: '未認証' },
@@ -328,11 +399,14 @@ app.openapi(getIssueReport, async (c) => {
     throw forbidden('対象大会へのアクセス権限がありません');
   }
 
-  if (!canViewIssueReport(authCtx, row)) {
+  if (!canViewIssueReportSummary(authCtx, row)) {
     throw forbidden('アクセス権限がありません');
   }
 
-  return c.json(row, 200);
+  return c.json(
+    canViewIssueReportDetail(authCtx, row) ? row : toPublicIssueReportSummary(row),
+    200,
+  );
 });
 
 // PATCH /api/issue-reports/:id - 報告追記 (team_editor)
@@ -405,6 +479,13 @@ app.openapi(updateIssueReport, async (c) => {
     if (!configTeam || configTeam.tournamentId !== existing.tournamentId) {
       throw unprocessable('報告の tournament と WiFi 構成の整合性が不正です');
     }
+  }
+
+  const nextBand = body.band ?? existing.band;
+  const nextChannel = body.channel ?? existing.channel;
+  const nextWidth = body.channelWidthMHz ?? existing.channelWidthMHz;
+  if (body.band !== undefined || body.channel !== undefined || body.channelWidthMHz !== undefined) {
+    validateIssueReportChannel(nextBand, nextChannel, nextWidth);
   }
 
   const [row] = await db

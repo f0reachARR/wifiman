@@ -38,6 +38,10 @@ export type Symptom = (typeof SYMPTOMS)[number];
 export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
 export type Severity = (typeof SEVERITIES)[number];
 
+// 不具合報告の公開範囲
+export const ISSUE_REPORT_VISIBILITIES = ['team_private', 'team_public'] as const;
+export type IssueReportVisibility = (typeof ISSUE_REPORT_VISIBILITIES)[number];
+
 // 距離カテゴリ
 export const DISTANCE_CATEGORIES = ['near', 'mid', 'far', 'obstacle'] as const;
 export type DistanceCategory = (typeof DISTANCE_CATEGORIES)[number];
@@ -68,10 +72,6 @@ export type BestPracticeScope = (typeof BEST_PRACTICE_SCOPES)[number];
 // お知らせ深刻度
 export const NOTICE_SEVERITIES = ['info', 'warning', 'critical'] as const;
 export type NoticeSeverity = (typeof NOTICE_SEVERITIES)[number];
-
-// 同期ステータス
-export const SYNC_STATUSES = ['local_only', 'pending', 'synced', 'failed'] as const;
-export type SyncStatus = (typeof SYNC_STATUSES)[number];
 
 // 同期アクション
 export const SYNC_ACTIONS = ['create', 'update', 'delete'] as const;

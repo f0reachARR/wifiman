@@ -361,16 +361,22 @@ describe('security boundaries integration', () => {
         id: ids.issueA,
         tournamentId: ids.tournamentA,
         teamId: ids.teamA,
+        visibility: 'team_private',
       },
       {
         id: ids.issueB,
         tournamentId: ids.tournamentA,
         teamId: ids.teamB,
+        visibility: 'team_private',
       },
       {
         id: ids.issuePublic,
         tournamentId: ids.tournamentA,
-        teamId: null,
+        teamId: ids.teamB,
+        visibility: 'team_public',
+        reporterName: 'hidden reporter',
+        description: 'hidden description',
+        locationLabel: 'hidden location',
       },
     ]);
 
@@ -380,8 +386,11 @@ describe('security boundaries integration', () => {
     });
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Array<{ id: string }>;
+    const body = (await res.json()) as Array<Record<string, unknown>>;
     expect(body.map((r) => r.id)).toEqual([ids.issueA, ids.issuePublic]);
+    expect(body[1]).not.toHaveProperty('reporterName');
+    expect(body[1]).not.toHaveProperty('description');
+    expect(body[1]).not.toHaveProperty('locationLabel');
   });
 
   it('issueReport 作成で大会スコープ外の teamId を拒否する', async () => {

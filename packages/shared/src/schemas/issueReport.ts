@@ -2,11 +2,11 @@ import { z } from 'zod';
 import {
   BANDS,
   DISTANCE_CATEGORIES,
+  ISSUE_REPORT_VISIBILITIES,
   MITIGATIONS,
   REPRODUCIBILITIES,
   SEVERITIES,
   SYMPTOMS,
-  SYNC_STATUSES,
 } from '../enums.js';
 
 export const IssueReportSchema = z.object({
@@ -15,7 +15,7 @@ export const IssueReportSchema = z.object({
   teamId: z.string().uuid().optional(),
   wifiConfigId: z.string().uuid().optional(),
   reporterName: z.string().max(200).optional(),
-  syncStatus: z.enum(SYNC_STATUSES),
+  visibility: z.enum(ISSUE_REPORT_VISIBILITIES),
   band: z.enum(BANDS),
   channel: z.number().int().positive(),
   channelWidthMHz: z.number().int().positive().optional(),
@@ -37,14 +37,39 @@ export const IssueReportSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
-// 簡易モード: 必須項目のみ
-export const CreateIssueReportSchema = z.object({
+export const PublicIssueReportSummarySchema = IssueReportSchema.pick({
+  id: true,
+  tournamentId: true,
+  teamId: true,
+  wifiConfigId: true,
+  visibility: true,
+  band: true,
+  channel: true,
+  channelWidthMHz: true,
+  symptom: true,
+  severity: true,
+  avgPingMs: true,
+  maxPingMs: true,
+  packetLossPercent: true,
+  distanceCategory: true,
+  estimatedDistanceMeters: true,
+  reproducibility: true,
+  mitigationTried: true,
+  improved: true,
+  apDeviceModel: true,
+  clientDeviceModel: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const CreateIssueReportBaseSchema = z.object({
   tournamentId: z.string().uuid(),
   teamId: z.string().uuid().optional(),
   wifiConfigId: z.string().uuid().optional(),
   reporterName: z.string().max(200).optional(),
-  band: z.enum(BANDS),
-  channel: z.number().int().positive(),
+  visibility: z.enum(ISSUE_REPORT_VISIBILITIES).default('team_private'),
+  band: z.enum(BANDS).optional(),
+  channel: z.number().int().positive().optional(),
   channelWidthMHz: z.number().int().positive().optional(),
   symptom: z.enum(SYMPTOMS),
   severity: z.enum(SEVERITIES),
@@ -62,10 +87,30 @@ export const CreateIssueReportSchema = z.object({
   clientDeviceModel: z.string().max(200).optional(),
 });
 
-export const UpdateIssueReportSchema = CreateIssueReportSchema.omit({
+// 簡易モード: 必須項目のみ
+export const CreateIssueReportSchema = CreateIssueReportBaseSchema.superRefine((value, ctx) => {
+  if (value.wifiConfigId) return;
+  if (!value.band) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['band'],
+      message: 'wifiConfigId を指定しない場合は band が必要です',
+    });
+  }
+  if (value.channel === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['channel'],
+      message: 'wifiConfigId を指定しない場合は channel が必要です',
+    });
+  }
+});
+
+export const UpdateIssueReportSchema = CreateIssueReportBaseSchema.omit({
   tournamentId: true,
 }).partial();
 
 export type IssueReport = z.infer<typeof IssueReportSchema>;
+export type PublicIssueReportSummary = z.infer<typeof PublicIssueReportSummarySchema>;
 export type CreateIssueReport = z.infer<typeof CreateIssueReportSchema>;
 export type UpdateIssueReport = z.infer<typeof UpdateIssueReportSchema>;

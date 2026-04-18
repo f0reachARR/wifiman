@@ -14,10 +14,10 @@ export const issueReports = pgTable(
     teamId: text('team_id').references(() => teams.id, { onDelete: 'set null' }),
     wifiConfigId: text('wifi_config_id').references(() => wifiConfigs.id, { onDelete: 'set null' }),
     reporterName: text('reporter_name'),
-    syncStatus: text('sync_status')
-      .$type<'local_only' | 'pending' | 'synced' | 'failed'>()
+    visibility: text('visibility')
+      .$type<'team_private' | 'team_public'>()
       .notNull()
-      .default('synced'),
+      .default('team_private'),
     band: text('band').$type<'2.4GHz' | '5GHz' | '6GHz'>().notNull(),
     channel: integer('channel').notNull(),
     channelWidthMHz: integer('channel_width_mhz'),
@@ -50,8 +50,8 @@ export const issueReports = pgTable(
   },
   (t) => [
     check(
-      'issue_reports_sync_status_check',
-      sql`${t.syncStatus} IN ('local_only', 'pending', 'synced', 'failed')`,
+      'issue_reports_visibility_check',
+      sql`${t.visibility} IN ('team_private', 'team_public')`,
     ),
     check('issue_reports_band_check', sql`${t.band} IN ('2.4GHz', '5GHz', '6GHz')`),
     check(

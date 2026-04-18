@@ -1,4 +1,4 @@
-import { isTokenValid, verifyAccessToken } from '@wifiman/shared';
+import { isTokenValid } from '@wifiman/shared';
 import { eq } from 'drizzle-orm';
 import type { Context, Next } from 'hono';
 import { getCookie } from 'hono/cookie';
@@ -7,6 +7,7 @@ import { canEditTeam, canViewTeam, hasParticipantRole } from '../authz.js';
 import { db } from '../db/index.js';
 import { teamAccesses, teams } from '../db/schema/index.js';
 import { forbidden, unauthorized } from '../errors.js';
+import { verifyTeamAccessSessionCookie } from '../teamAccessSession.js';
 
 export type AuthContext = {
   userId?: string;
@@ -58,23 +59,23 @@ export async function setAuthContext(c: Context, next: Next) {
     authCtx.userRole = (session.user as { role?: 'user' | 'operator' }).role ?? 'user';
   }
 
-  // チーム編集トークン Cookie の確認
-  const teamToken = getCookie(c, 'team_access_token');
-  const teamAccessId = getCookie(c, 'team_access_id');
-  if (teamToken && teamAccessId) {
+  // チーム編集の短期セッション Cookie を確認する。
+  const teamAccessSession = verifyTeamAccessSessionCookie(getCookie(c, 'team_access_session'));
+  if (teamAccessSession) {
     const access = await db.query.teamAccesses.findFirst({
-      where: eq(teamAccesses.id, teamAccessId),
+      where: eq(teamAccesses.id, teamAccessSession.teamAccessId),
     });
     if (
       access &&
       isTokenValid(access.revokedAt?.toISOString()) &&
-      verifyAccessToken(teamToken, access.accessTokenHash)
+      access.teamId === teamAccessSession.teamId &&
+      access.role === teamAccessSession.role
     ) {
       authCtx.teamId = access.teamId;
       authCtx.teamAccessRole = access.role;
 
       const team = await db.query.teams.findFirst({ where: eq(teams.id, access.teamId) });
-      if (team) {
+      if (team && team.tournamentId === teamAccessSession.tournamentId) {
         authCtx.teamTournamentId = team.tournamentId;
       }
 
@@ -82,7 +83,7 @@ export async function setAuthContext(c: Context, next: Next) {
       await db
         .update(teamAccesses)
         .set({ lastUsedAt: new Date(), updatedAt: new Date() })
-        .where(eq(teamAccesses.id, teamAccessId));
+        .where(eq(teamAccesses.id, teamAccessSession.teamAccessId));
     }
   }
 
