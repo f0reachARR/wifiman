@@ -9,7 +9,7 @@ tools:
     "web",
     "ms-vscode.vscode-websearchforcopilot/websearch",
   ]
-model: "Claude Sonnet 4.6"
+model: "GPT-5.4"
 ---
 
 実装内容をレビューしてください。批判的に評価を行い、発言についての中立的なレビューを提供してください。新たな情報を検索、分析することを推奨します。あくまでレビューの提供までがあなたの役割です。
