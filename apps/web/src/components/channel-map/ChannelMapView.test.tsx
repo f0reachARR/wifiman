@@ -104,6 +104,40 @@ describe('ChannelMapView', () => {
     expect(onSelect).toHaveBeenCalledWith(fiveGigahertzEntries[0]);
   });
 
+  it('supports keyboard selection with Enter and Space', () => {
+    const onSelect = vi.fn();
+
+    render(
+      <MantineProvider>
+        <ChannelMapView
+          entries={fiveGigahertzEntries}
+          domain={{
+            minFreqMHz: 5140,
+            maxFreqMHz: 5905,
+            ticks: [
+              { channel: 36, centerFreqMHz: 5180 },
+              { channel: 40, centerFreqMHz: 5200 },
+              { channel: 44, centerFreqMHz: 5220 },
+              { channel: 48, centerFreqMHz: 5240 },
+            ],
+          }}
+          selectedId={null}
+          onSelect={onSelect}
+        />
+      </MantineProvider>,
+    );
+
+    const bar = screen.getByLabelText('Control 5G bar');
+
+    expect(bar).toHaveAttribute('tabindex', '0');
+
+    fireEvent.keyDown(bar, { key: 'Enter' });
+    fireEvent.keyDown(bar, { key: ' ' });
+
+    expect(onSelect).toHaveBeenNthCalledWith(1, fiveGigahertzEntries[0]);
+    expect(onSelect).toHaveBeenNthCalledWith(2, fiveGigahertzEntries[0]);
+  });
+
   it('aligns 5GHz tick labels with the bar center frequency', () => {
     const { container } = render(
       <MantineProvider>

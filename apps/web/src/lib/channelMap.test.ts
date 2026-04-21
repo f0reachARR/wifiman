@@ -5,8 +5,10 @@ import {
   CHANNEL_MAP_REPORT_WARNING_THRESHOLD,
   createChannelMapDisplayEntries,
   createChannelMapModel,
+  createChannelMapSearchParams,
   DEFAULT_CHANNEL_MAP_FILTERS,
   filterChannelMapEntries,
+  parseChannelMapSearchParams,
 } from './channelMap.js';
 
 const entries: ChannelMapEntry[] = [
@@ -118,5 +120,55 @@ describe('channelMap utilities', () => {
     expect(model.hiddenCount).toBe(1);
     expect(model.practices[0]?.title).toBe('5GHz guidance');
     expect(model.visibleEntries).toHaveLength(2);
+  });
+
+  it('serializes and restores band and filter state from URL search params', () => {
+    const searchParams = createChannelMapSearchParams({
+      band: '5GHz',
+      filters: {
+        ...DEFAULT_CHANNEL_MAP_FILTERS,
+        sourceTypes: ['own_team', 'observed_wifi'],
+        controlOnly: true,
+        reportOnly: true,
+        widths: [80, 20],
+        modelQuery: ' AP-9000 ',
+      },
+    });
+
+    expect(searchParams.get('band')).toBe('5GHz');
+    expect(searchParams.getAll('source')).toEqual(['own_team', 'observed_wifi']);
+    expect(searchParams.get('controlOnly')).toBe('1');
+    expect(searchParams.get('reportOnly')).toBe('1');
+    expect(searchParams.getAll('width')).toEqual(['20', '80']);
+    expect(searchParams.get('model')).toBe('AP-9000');
+
+    expect(parseChannelMapSearchParams(searchParams)).toEqual({
+      band: '5GHz',
+      filters: {
+        ...DEFAULT_CHANNEL_MAP_FILTERS,
+        sourceTypes: ['own_team', 'observed_wifi'],
+        controlOnly: true,
+        reportOnly: true,
+        widths: [20, 80],
+        modelQuery: 'AP-9000',
+      },
+    });
+  });
+
+  it('falls back to defaults when URL search params are invalid', () => {
+    expect(
+      parseChannelMapSearchParams(
+        new URLSearchParams(
+          'band=900MHz&source=invalid&width=10&controlOnly=0&reportOnly=maybe&model=',
+        ),
+      ),
+    ).toEqual({
+      band: '2.4GHz',
+      filters: {
+        ...DEFAULT_CHANNEL_MAP_FILTERS,
+        sourceTypes: [...DEFAULT_CHANNEL_MAP_FILTERS.sourceTypes],
+        widths: [],
+      },
+    });
   });
 });

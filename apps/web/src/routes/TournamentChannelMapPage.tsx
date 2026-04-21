@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
 import { BANDS, type Band } from '@wifiman/shared';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChannelMapDetailPanel } from '../components/channel-map/ChannelMapDetailPanel.js';
 import { ChannelMapFilters } from '../components/channel-map/ChannelMapFilters.js';
 import { ChannelMapLegend } from '../components/channel-map/ChannelMapLegend.js';
@@ -22,9 +22,10 @@ import {
   type ChannelMapDisplayEntry,
   type ChannelMapFilters as ChannelMapFiltersState,
   createChannelMapModel,
-  createInitialBand,
+  createChannelMapSearchParams,
   DEFAULT_CHANNEL_MAP_FILTERS,
   getRelevantPractices,
+  parseChannelMapSearchParams,
 } from '../lib/channelMap.js';
 import {
   useTournament,
@@ -36,13 +37,67 @@ type TournamentChannelMapPageProps = {
   tournamentId: string;
 };
 
+function getChannelMapSearchStateFromWindow() {
+  if (typeof window === 'undefined') {
+    return {
+      band: '2.4GHz' as Band,
+      filters: {
+        ...DEFAULT_CHANNEL_MAP_FILTERS,
+        sourceTypes: [...DEFAULT_CHANNEL_MAP_FILTERS.sourceTypes],
+        widths: [...DEFAULT_CHANNEL_MAP_FILTERS.widths],
+      },
+    };
+  }
+
+  return parseChannelMapSearchParams(new URLSearchParams(window.location.search));
+}
+
 export function TournamentChannelMapPage({ tournamentId }: TournamentChannelMapPageProps) {
   const tournamentQuery = useTournament(tournamentId);
   const channelMapQuery = useTournamentChannelMap(tournamentId);
   const bestPracticesQuery = useTournamentBestPractices(tournamentId);
-  const [band, setBand] = useState<Band>(() => createInitialBand(undefined));
-  const [filters, setFilters] = useState<ChannelMapFiltersState>(DEFAULT_CHANNEL_MAP_FILTERS);
+  const initialSearchStateRef = useRef(getChannelMapSearchStateFromWindow());
+  const [band, setBand] = useState<Band>(initialSearchStateRef.current.band);
+  const [filters, setFilters] = useState<ChannelMapFiltersState>(
+    initialSearchStateRef.current.filters,
+  );
   const [selectedEntry, setSelectedEntry] = useState<ChannelMapDisplayEntry | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handlePopState = () => {
+      const nextState = getChannelMapSearchStateFromWindow();
+      setBand(nextState.band);
+      setFilters(nextState.filters);
+      setSelectedEntry(null);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const nextSearch = createChannelMapSearchParams({ band, filters }).toString();
+    const currentSearch = window.location.search.startsWith('?')
+      ? window.location.search.slice(1)
+      : window.location.search;
+
+    if (nextSearch === currentSearch) {
+      return;
+    }
+
+    const nextUrl = `${window.location.pathname}${nextSearch.length > 0 ? `?${nextSearch}` : ''}${window.location.hash}`;
+    window.history.pushState({}, '', nextUrl);
+  }, [band, filters]);
 
   const model = useMemo(() => {
     if (!channelMapQuery.data) {

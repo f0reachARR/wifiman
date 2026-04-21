@@ -93,6 +93,11 @@ export type ChannelMapModel = {
   };
 };
 
+export type ChannelMapSearchState = {
+  band: Band;
+  filters: ChannelMapFilters;
+};
+
 export const DEFAULT_CHANNEL_MAP_FILTERS: ChannelMapFilters = {
   sourceTypes: [...CHANNEL_MAP_SOURCE_TYPES],
   controlOnly: false,
@@ -100,6 +105,8 @@ export const DEFAULT_CHANNEL_MAP_FILTERS: ChannelMapFilters = {
   widths: [],
   modelQuery: '',
 };
+
+const DEFAULT_CHANNEL_MAP_BAND: Band = '2.4GHz';
 
 const PURPOSE_LABELS: Record<string, string> = {
   control: '制御',
@@ -403,6 +410,91 @@ export function getChannelMapWidthOptions() {
   }));
 }
 
+function cloneDefaultChannelMapFilters(): ChannelMapFilters {
+  return {
+    ...DEFAULT_CHANNEL_MAP_FILTERS,
+    sourceTypes: [...DEFAULT_CHANNEL_MAP_FILTERS.sourceTypes],
+    widths: [...DEFAULT_CHANNEL_MAP_FILTERS.widths],
+  };
+}
+
+function isChannelMapSourceType(value: string): value is ChannelMapEntry['sourceType'] {
+  return CHANNEL_MAP_SOURCE_TYPES.some((sourceType) => sourceType === value);
+}
+
+function isChannelWidth(value: number): value is (typeof CHANNEL_WIDTHS)[number] {
+  return CHANNEL_WIDTHS.some((width) => width === value);
+}
+
+export function parseChannelMapSearchParams(searchParams: URLSearchParams): ChannelMapSearchState {
+  const filters = cloneDefaultChannelMapFilters();
+  const sourceTypes = Array.from(
+    new Set(searchParams.getAll('source').filter(isChannelMapSourceType)),
+  );
+  const widths = Array.from(
+    new Set(
+      searchParams
+        .getAll('width')
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && isChannelWidth(value)),
+    ),
+  );
+  const modelQuery = searchParams.get('model')?.trim() ?? '';
+
+  if (sourceTypes.length > 0) {
+    filters.sourceTypes = sourceTypes;
+  }
+
+  if (widths.length > 0) {
+    filters.widths = widths;
+  }
+
+  filters.controlOnly = searchParams.get('controlOnly') === '1';
+  filters.reportOnly = searchParams.get('reportOnly') === '1';
+  filters.modelQuery = modelQuery;
+
+  return {
+    band: createInitialBand(searchParams.get('band') ?? undefined),
+    filters,
+  };
+}
+
+export function createChannelMapSearchParams(input: ChannelMapSearchState): URLSearchParams {
+  const searchParams = new URLSearchParams();
+
+  if (input.band !== DEFAULT_CHANNEL_MAP_BAND) {
+    searchParams.set('band', input.band);
+  }
+
+  const sourceTypes = CHANNEL_MAP_SOURCE_TYPES.filter((sourceType) =>
+    input.filters.sourceTypes.includes(sourceType),
+  );
+  if (sourceTypes.length !== CHANNEL_MAP_SOURCE_TYPES.length) {
+    sourceTypes.forEach((sourceType) => {
+      searchParams.append('source', sourceType);
+    });
+  }
+
+  if (input.filters.controlOnly) {
+    searchParams.set('controlOnly', '1');
+  }
+
+  if (input.filters.reportOnly) {
+    searchParams.set('reportOnly', '1');
+  }
+
+  CHANNEL_WIDTHS.filter((width) => input.filters.widths.includes(width)).forEach((width) => {
+    searchParams.append('width', String(width));
+  });
+
+  const modelQuery = input.filters.modelQuery.trim();
+  if (modelQuery.length > 0) {
+    searchParams.set('model', modelQuery);
+  }
+
+  return searchParams;
+}
+
 export function createInitialBand(value: string | undefined): Band {
-  return (BANDS.find((band) => band === value) ?? '2.4GHz') as Band;
+  return (BANDS.find((band) => band === value) ?? DEFAULT_CHANNEL_MAP_BAND) as Band;
 }

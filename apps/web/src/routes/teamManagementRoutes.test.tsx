@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/betterAuthClient.js', () => ({
@@ -563,6 +563,52 @@ describe('team management routes', () => {
     expect(screen.getByLabelText('帯域幅 (MHz)')).toHaveValue('80');
     expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/issue-reports/new`);
     expect(window.location.search).toBe(`?wifiConfigId=${ownWifiId}`);
+  });
+
+  it('チャンネルマップの band/filter state を URL search params と同期して復元する', async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
+    expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
+    expect(screen.getByLabelText('Control 5G bar')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Backup 5G bar')).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('radio', { name: '6GHz' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: '問題報告ありのみ' }));
+    });
+
+    await waitFor(() => {
+      const searchParams = new URLSearchParams(window.location.search);
+      expect(searchParams.get('band')).toBe('6GHz');
+      expect(searchParams.get('controlOnly')).toBe('1');
+      expect(searchParams.get('reportOnly')).toBe('1');
+      expect(searchParams.get('model')).toBe('AP-9000');
+    });
+
+    await act(async () => {
+      window.history.replaceState(
+        {},
+        '',
+        `/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`,
+      );
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '問題報告ありのみ' })).not.toBeChecked();
+      expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
+      expect(screen.getByLabelText('Control 5G bar')).toBeInTheDocument();
+    });
   });
 
   it('報告作成 route はクエリの wifiConfigId から既存構成を初期選択する', async () => {

@@ -1,4 +1,5 @@
 import { Badge, Box, Stack, Text } from '@mantine/core';
+import type { KeyboardEvent } from 'react';
 import { CHANNEL_MAP_SOURCE_META, type ChannelMapLaneEntry } from '../../lib/channelMap.js';
 
 type ChannelMapViewProps = {
@@ -25,6 +26,19 @@ function toXPosition(freqMHz: number, domain: ChannelMapViewProps['domain']) {
   const width = SVG_WIDTH - LEFT_PADDING - RIGHT_PADDING;
   const ratio = (freqMHz - domain.minFreqMHz) / (domain.maxFreqMHz - domain.minFreqMHz);
   return LEFT_PADDING + width * ratio;
+}
+
+function handleBarKeyDown(
+  event: KeyboardEvent<SVGRectElement>,
+  entry: ChannelMapLaneEntry,
+  onSelect: ChannelMapViewProps['onSelect'],
+) {
+  if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') {
+    return;
+  }
+
+  event.preventDefault();
+  onSelect(entry);
 }
 
 export function ChannelMapView({ entries, domain, selectedId, onSelect }: ChannelMapViewProps) {
@@ -76,13 +90,16 @@ export function ChannelMapView({ entries, domain, selectedId, onSelect }: Channe
                 rx={12}
                 role='button'
                 aria-label={`${entry.label} bar`}
+                aria-pressed={isSelected}
                 data-entry-id={entry.id}
+                tabIndex={0}
                 fill={meta.accent}
                 fillOpacity={isSelected ? 0.92 : 0.72}
                 stroke={meta.color}
                 strokeWidth={isSelected ? 3 : 1.5}
                 style={{ cursor: 'pointer' }}
                 onClick={() => onSelect(entry)}
+                onKeyDown={(event) => handleBarKeyDown(event, entry, onSelect)}
               />
               <text
                 x={x + 10}
