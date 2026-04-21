@@ -13,6 +13,7 @@ import { getProtectedRedirectPath } from './lib/auth.js';
 import { authSessionQueryOptions } from './lib/useAuthSession.js';
 import { AppDashboardPage } from './routes/AppDashboardPage.js';
 import { HomePage } from './routes/HomePage.js';
+import { IssueReportCreatePage } from './routes/IssueReportCreatePage.js';
 import { LoginPage } from './routes/LoginPage.js';
 import { OfflinePage } from './routes/OfflinePage.js';
 import { SyncPage } from './routes/SyncPage.js';
@@ -155,6 +156,18 @@ const tournamentChannelMapRoute = createRoute({
   },
 });
 
+const tournamentIssueReportCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/issue-reports/new',
+  beforeLoad: async ({ context, location }) => {
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+  },
+  component: function TournamentIssueReportCreateRouteComponent() {
+    const { tournamentId } = tournamentIssueReportCreateRoute.useParams();
+    return <IssueReportCreatePage tournamentId={tournamentId} />;
+  },
+});
+
 const teamDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tournaments/$tournamentId/teams/$teamId',
@@ -177,6 +190,7 @@ const routeTree = rootRoute.addChildren([
   tournamentOverviewRoute,
   tournamentTeamsRoute,
   tournamentChannelMapRoute,
+  tournamentIssueReportCreateRoute,
   teamDetailRoute,
 ]);
 

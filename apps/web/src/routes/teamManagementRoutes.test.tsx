@@ -545,6 +545,40 @@ describe('team management routes', () => {
     expect(screen.queryByText(/contactEmail|displayContactName|notes/i)).not.toBeInTheDocument();
   });
 
+  it('自チームのチャンネルマップ詳細から報告作成画面へ直接遷移できる', async () => {
+    renderRoute(`/tournaments/${tournamentId}/channel-map`, createOwnTeamDetailResponses());
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('radio', { name: '5GHz' }));
+    fireEvent.click(screen.getByLabelText('Control 5G bar'));
+    fireEvent.click(screen.getByRole('link', { name: 'この構成で報告を作成する' }));
+
+    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    expect(screen.getByLabelText('構成名')).toHaveValue('Control 5G');
+    expect(screen.getByLabelText('帯域')).toHaveValue('5GHz');
+    expect(screen.getByLabelText('チャンネル')).toHaveValue('36');
+    expect(screen.getByLabelText('帯域幅 (MHz)')).toHaveValue('80');
+    expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/issue-reports/new`);
+    expect(window.location.search).toBe(`?wifiConfigId=${ownWifiId}`);
+  });
+
+  it('報告作成 route はクエリの wifiConfigId から既存構成を初期選択する', async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    expect(screen.getByLabelText('構成名')).toHaveValue('Control 5G');
+    expect(screen.getByLabelText('帯域')).toHaveValue('5GHz');
+    expect(screen.getByLabelText('チャンネル')).toHaveValue('36');
+    expect(screen.getByLabelText('帯域幅 (MHz)')).toHaveValue('80');
+    expect(screen.getByLabelText('公開範囲')).toHaveValue('team_private');
+  });
+
   it('未認証で保護されたチーム詳細に入ると元 URL を next に保持して login へ遷移する', async () => {
     renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createBaseResponses(null));
 

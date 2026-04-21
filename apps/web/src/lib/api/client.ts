@@ -62,6 +62,10 @@ type ChannelMapListContract =
   paths['/tournaments/{tournamentId}/channel-map']['get']['responses'][200]['content']['application/json'];
 type IssueReportListContract =
   paths['/tournaments/{tournamentId}/issue-reports']['get']['responses'][200]['content']['application/json'];
+type CreateIssueReportInput =
+  paths['/tournaments/{tournamentId}/issue-reports']['post']['requestBody']['content']['application/json'];
+type IssueReportContract =
+  paths['/tournaments/{tournamentId}/issue-reports']['post']['responses'][201]['content']['application/json'];
 type TeamListContract =
   paths['/tournaments/{tournamentId}/teams']['get']['responses'][200]['content']['application/json'];
 type TeamContract =
@@ -96,6 +100,7 @@ export type TeamView = TeamContract;
 export type WifiConfigView = WifiConfigListContract[number];
 export type DeviceSpecView = DeviceSpecListContract[number];
 export type IssueReportView = IssueReportListContract[number];
+export type IssueReportCreateInput = CreateIssueReportInput;
 export type TeamUpdateInput = UpdateTeamInput;
 export type WifiConfigCreateInput = CreateWifiConfigInput;
 export type WifiConfigUpdateInput = PatchWifiConfigInput;
@@ -253,6 +258,20 @@ export class ApiClient {
       `/tournaments/${tournamentId}/issue-reports`,
     );
     return z.array(IssueReportViewSchema).parse(payload) as IssueReportView[];
+  }
+
+  async createIssueReport(
+    tournamentId: string,
+    input: IssueReportCreateInput,
+  ): Promise<z.infer<typeof IssueReportSchema>> {
+    const payload = await this.requestJson<IssueReportContract>(
+      `/tournaments/${tournamentId}/issue-reports`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    );
+    return IssueReportSchema.parse(payload);
   }
 
   async listTournamentTeams(tournamentId: string): Promise<TeamView[]> {

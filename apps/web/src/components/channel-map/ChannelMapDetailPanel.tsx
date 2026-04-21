@@ -5,6 +5,8 @@ import {
   CHANNEL_MAP_SOURCE_META,
   type ChannelMapDisplayEntry,
 } from '../../lib/channelMap.js';
+import { canEditTeamResources } from '../../lib/authz.js';
+import { useAuthSession } from '../../lib/useAuthSession.js';
 
 type ChannelMapDetailPanelProps = {
   entry: ChannelMapDisplayEntry | null;
@@ -20,6 +22,8 @@ function formatObservedAt(value: string | null) {
 }
 
 export function ChannelMapDetailPanel({ entry, tournamentId }: ChannelMapDetailPanelProps) {
+  const { data: session } = useAuthSession();
+
   if (!entry) {
     return (
       <Card className='feature-card' padding='lg' radius='xl'>
@@ -34,6 +38,11 @@ export function ChannelMapDetailPanel({ entry, tournamentId }: ChannelMapDetailP
   const meta = CHANNEL_MAP_SOURCE_META[entry.sourceType];
   const teamDetailHref =
     entry.teamId !== null ? `/tournaments/${tournamentId}/teams/${entry.teamId}` : null;
+  const canCreateIssueReport =
+    entry.sourceType === 'own_team' &&
+    entry.teamId !== null &&
+    entry.wifiConfigId !== null &&
+    canEditTeamResources(session, entry.teamId);
 
   return (
     <Card className='feature-card' padding='lg' radius='xl'>
@@ -79,6 +88,16 @@ export function ChannelMapDetailPanel({ entry, tournamentId }: ChannelMapDetailP
           <Button component='a' href='#channel-map-best-practices' variant='light'>
             参考ベストプラクティスへ移動
           </Button>
+          {canCreateIssueReport ? (
+            <Button
+              component={Link}
+              to={`/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${entry.wifiConfigId}`}
+              color='teal'
+              variant='light'
+            >
+              この構成で報告を作成する
+            </Button>
+          ) : null}
           {teamDetailHref ? (
             <Button component={Link} to={teamDetailHref} color='orange' variant='light'>
               このチームの詳細を見る

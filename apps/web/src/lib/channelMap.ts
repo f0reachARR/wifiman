@@ -48,6 +48,7 @@ export type ChannelMapDisplayEntry = {
   band: Band;
   sourceType: ChannelMapEntry['sourceType'];
   teamId: string | null;
+  wifiConfigId: string | null;
   label: string;
   subtitle: string;
   detailKey: string;
@@ -167,6 +168,7 @@ export function createChannelMapDisplayEntries(
         band: entry.band,
         sourceType: entry.sourceType,
         teamId: null,
+        wifiConfigId: null,
         label: getEntryLabel(entry),
         subtitle: getEntrySubtitle(entry),
         detailKey: getEntryDetailKey(entry),
@@ -195,6 +197,7 @@ export function createChannelMapDisplayEntries(
       band: entry.band,
       sourceType: entry.sourceType,
       teamId: entry.teamId,
+      wifiConfigId: entry.wifiConfigId,
       label: getEntryLabel(entry),
       subtitle: getEntrySubtitle(entry),
       detailKey: getEntryDetailKey(entry),
