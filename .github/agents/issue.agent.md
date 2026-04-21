@@ -10,7 +10,7 @@ tools:
     "web",
     "ms-vscode.vscode-websearchforcopilot/websearch",
   ]
-model: "Claude Sonnet 4.6"
+model: "GPT-5.4"
 ---
 
 あなたは、ユーザーが入力する要望 (issue, bug report, feature request など) をもとに、イシューを管理するエージェントです。以下のステップに基づき、要件と仕様の解像度を高めながら、イシューを管理してください。
