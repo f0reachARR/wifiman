@@ -1,7 +1,9 @@
 import {
   BestPracticeSchema,
   DeviceSpecSchema,
+  IssueReportSchema,
   NoticeSchema,
+  PublicIssueReportSummarySchema,
   TeamSchema,
   TournamentPublicOverviewSchema,
   TournamentSchema,
@@ -33,6 +35,7 @@ const PublicDeviceSpecSchema = DeviceSpecSchema.omit({
   archivedAt: true,
 });
 const DeviceSpecViewSchema = z.union([DeviceSpecSchema, PublicDeviceSpecSchema]);
+const IssueReportViewSchema = z.union([IssueReportSchema, PublicIssueReportSummarySchema]);
 
 type AuthSessionContract =
   paths['/auth/session']['get']['responses'][200]['content']['application/json'];
@@ -54,6 +57,8 @@ type NoticeListContract =
   paths['/tournaments/{tournamentId}/notices']['get']['responses'][200]['content']['application/json'];
 type BestPracticeListContract =
   paths['/tournaments/{tournamentId}/best-practices']['get']['responses'][200]['content']['application/json'];
+type IssueReportListContract =
+  paths['/tournaments/{tournamentId}/issue-reports']['get']['responses'][200]['content']['application/json'];
 type TeamListContract =
   paths['/tournaments/{tournamentId}/teams']['get']['responses'][200]['content']['application/json'];
 type TeamContract =
@@ -83,9 +88,10 @@ export type TournamentView = z.infer<typeof TournamentSchema>;
 export type TournamentPublicOverviewView = z.infer<typeof TournamentPublicOverviewSchema>;
 export type NoticeView = z.infer<typeof NoticeSchema>;
 export type BestPracticeView = z.infer<typeof BestPracticeSchema>;
-export type TeamView = z.infer<typeof TeamViewSchema>;
-export type WifiConfigView = z.infer<typeof WifiConfigViewSchema>;
-export type DeviceSpecView = z.infer<typeof DeviceSpecViewSchema>;
+export type TeamView = TeamContract;
+export type WifiConfigView = WifiConfigListContract[number];
+export type DeviceSpecView = DeviceSpecListContract[number];
+export type IssueReportView = IssueReportListContract[number];
 export type TeamUpdateInput = UpdateTeamInput;
 export type WifiConfigCreateInput = CreateWifiConfigInput;
 export type WifiConfigUpdateInput = PatchWifiConfigInput;
@@ -231,14 +237,21 @@ export class ApiClient {
     return z.array(BestPracticeSchema).parse(payload);
   }
 
+  async listTournamentIssueReports(tournamentId: string): Promise<IssueReportView[]> {
+    const payload = await this.requestJson<IssueReportListContract>(
+      `/tournaments/${tournamentId}/issue-reports`,
+    );
+    return z.array(IssueReportViewSchema).parse(payload) as IssueReportView[];
+  }
+
   async listTournamentTeams(tournamentId: string): Promise<TeamView[]> {
     const payload = await this.requestJson<TeamListContract>(`/tournaments/${tournamentId}/teams`);
-    return z.array(TeamViewSchema).parse(payload);
+    return z.array(TeamViewSchema).parse(payload) as TeamView[];
   }
 
   async getTeam(teamId: string): Promise<TeamView> {
     const payload = await this.requestJson<TeamContract>(`/teams/${teamId}`);
-    return TeamViewSchema.parse(payload);
+    return TeamViewSchema.parse(payload) as TeamView;
   }
 
   async updateTeam(teamId: string, input: TeamUpdateInput): Promise<z.infer<typeof TeamSchema>> {
@@ -251,7 +264,7 @@ export class ApiClient {
 
   async listWifiConfigs(teamId: string): Promise<WifiConfigView[]> {
     const payload = await this.requestJson<WifiConfigListContract>(`/teams/${teamId}/wifi-configs`);
-    return z.array(WifiConfigViewSchema).parse(payload);
+    return z.array(WifiConfigViewSchema).parse(payload) as WifiConfigView[];
   }
 
   async createWifiConfig(
@@ -290,7 +303,7 @@ export class ApiClient {
     const payload = await this.requestJson<DeviceSpecListContract>(
       withSearchParams(`/teams/${teamId}/device-specs`, searchParams),
     );
-    return z.array(DeviceSpecViewSchema).parse(payload);
+    return z.array(DeviceSpecViewSchema).parse(payload) as DeviceSpecView[];
   }
 
   async createDeviceSpec(
@@ -338,6 +351,7 @@ export const apiQueryKeys = {
   tournamentPublicOverview: (id: string) => ['api', 'tournaments', id, 'public-overview'] as const,
   tournamentNotices: (id: string) => ['api', 'tournaments', id, 'notices'] as const,
   tournamentBestPractices: (id: string) => ['api', 'tournaments', id, 'best-practices'] as const,
+  tournamentIssueReports: (id: string) => ['api', 'tournaments', id, 'issue-reports'] as const,
   tournamentTeams: (id: string) => ['api', 'tournaments', id, 'teams'] as const,
   team: (id: string) => ['api', 'teams', id] as const,
   teamWifiConfigs: (id: string) => ['api', 'teams', id, 'wifi-configs'] as const,

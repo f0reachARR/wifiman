@@ -18,7 +18,6 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Link } from '@tanstack/react-router';
-import type { DeviceSpec, Team, WifiConfig } from '@wifiman/shared';
 import {
   CHANNEL_WIDTHS,
   DEVICE_KINDS,
@@ -28,11 +27,16 @@ import {
 } from '@wifiman/shared';
 import { useEffect, useMemo, useState } from 'react';
 import type {
+  BestPracticeView,
   DeviceSpecCreateInput,
   DeviceSpecUpdateInput,
+  DeviceSpecView,
+  IssueReportView,
   TeamUpdateInput,
+  TeamView,
   WifiConfigCreateInput,
   WifiConfigUpdateInput,
+  WifiConfigView,
 } from '../lib/api/client.js';
 import { canEditTeamResources, canViewTeamPrivateFields, isOwnTeam } from '../lib/authz.js';
 import {
@@ -59,6 +63,7 @@ import {
   useTeamDeviceSpecs,
   useTeamWifiConfigs,
   useTournamentBestPractices,
+  useTournamentIssueReports,
   useUpdateDeviceSpecMutation,
   useUpdateTeamMutation,
   useUpdateWifiConfigMutation,
@@ -70,12 +75,166 @@ type TeamDetailPageProps = {
 };
 
 type TeamEditorProps = {
-  team: Team;
+  team: TeamView;
   canEdit: boolean;
   canSeePrivateFields: boolean;
   onSubmit: (values: TeamFormValues) => Promise<void>;
   saving: boolean;
 };
+
+type WifiEditorProps = {
+  initialValues: WifiConfigFormValues;
+  configs: ReadonlyArray<Pick<WifiConfigView, 'id' | 'status' | 'band' | 'name'>>;
+  deviceSpecs: ReadonlyArray<DeviceSpecView>;
+  canEdit: boolean;
+  editingId?: string;
+  bestPractices: ReadonlyArray<BestPracticeView>;
+  onCancel: () => void;
+  onSubmit: (values: WifiConfigFormValues) => Promise<void>;
+  submitting: boolean;
+};
+
+function hasWifiPrivateFields(config: WifiConfigView): config is WifiConfigView & {
+  pingTargetIp?: string | null;
+  notes?: string | null;
+} {
+  return 'pingTargetIp' in config || 'notes' in config;
+}
+
+function hasDevicePrivateFields(spec: DeviceSpecView): spec is DeviceSpecView & {
+  notes?: string | null;
+  archivedAt?: string | null;
+} {
+  return 'notes' in spec || 'archivedAt' in spec;
+}
+
+function isDetailedIssueReport(report: IssueReportView): report is IssueReportView & {
+  reporterName?: string | null;
+  locationLabel?: string | null;
+  description?: string | null;
+} {
+  return 'reporterName' in report || 'locationLabel' in report || 'description' in report;
+}
+
+function toTeamUpdateInput(input: {
+  name?: string | undefined;
+  organization?: string | null | undefined;
+  pitId?: string | null | undefined;
+  contactEmail?: string | null | undefined;
+  displayContactName?: string | null | undefined;
+  notes?: string | null | undefined;
+}): TeamUpdateInput {
+  return {
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.organization !== undefined ? { organization: input.organization } : {}),
+    ...(input.pitId !== undefined ? { pitId: input.pitId } : {}),
+    ...(input.contactEmail !== undefined ? { contactEmail: input.contactEmail } : {}),
+    ...(input.displayContactName !== undefined
+      ? { displayContactName: input.displayContactName }
+      : {}),
+    ...(input.notes !== undefined ? { notes: input.notes } : {}),
+  };
+}
+
+function toWifiConfigInput(input: {
+  name: string;
+  purpose: NonNullable<WifiConfigCreateInput['purpose']>;
+  band: NonNullable<WifiConfigCreateInput['band']>;
+  channel: number;
+  channelWidthMHz: NonNullable<WifiConfigCreateInput['channelWidthMHz']>;
+  role: NonNullable<WifiConfigCreateInput['role']>;
+  status: NonNullable<WifiConfigCreateInput['status']>;
+  apDeviceId?: string | undefined;
+  clientDeviceId?: string | undefined;
+  expectedDistanceCategory?: WifiConfigCreateInput['expectedDistanceCategory'] | undefined;
+  pingTargetIp?: string | undefined;
+  notes?: string | undefined;
+}): WifiConfigCreateInput {
+  return {
+    name: input.name,
+    purpose: input.purpose,
+    band: input.band,
+    channel: input.channel,
+    channelWidthMHz: input.channelWidthMHz,
+    role: input.role,
+    status: input.status,
+    ...(input.apDeviceId !== undefined ? { apDeviceId: input.apDeviceId } : {}),
+    ...(input.clientDeviceId !== undefined ? { clientDeviceId: input.clientDeviceId } : {}),
+    ...(input.expectedDistanceCategory !== undefined
+      ? { expectedDistanceCategory: input.expectedDistanceCategory }
+      : {}),
+    ...(input.pingTargetIp !== undefined ? { pingTargetIp: input.pingTargetIp } : {}),
+    ...(input.notes !== undefined ? { notes: input.notes } : {}),
+  };
+}
+
+function toWifiConfigUpdateInput(input: {
+  name: string;
+  purpose: NonNullable<WifiConfigCreateInput['purpose']>;
+  band: NonNullable<WifiConfigCreateInput['band']>;
+  channel: number;
+  channelWidthMHz: NonNullable<WifiConfigCreateInput['channelWidthMHz']>;
+  role: NonNullable<WifiConfigCreateInput['role']>;
+  status: NonNullable<WifiConfigCreateInput['status']>;
+  apDeviceId?: string | undefined;
+  clientDeviceId?: string | undefined;
+  expectedDistanceCategory?: WifiConfigUpdateInput['expectedDistanceCategory'] | undefined;
+  pingTargetIp?: string | undefined;
+  notes?: string | undefined;
+}): WifiConfigUpdateInput {
+  return {
+    name: input.name,
+    purpose: input.purpose,
+    band: input.band,
+    channel: input.channel,
+    channelWidthMHz: input.channelWidthMHz,
+    role: input.role,
+    status: input.status,
+    ...(input.apDeviceId !== undefined ? { apDeviceId: input.apDeviceId } : {}),
+    ...(input.clientDeviceId !== undefined ? { clientDeviceId: input.clientDeviceId } : {}),
+    ...(input.expectedDistanceCategory !== undefined
+      ? { expectedDistanceCategory: input.expectedDistanceCategory }
+      : {}),
+    ...(input.pingTargetIp !== undefined ? { pingTargetIp: input.pingTargetIp } : {}),
+    ...(input.notes !== undefined ? { notes: input.notes } : {}),
+  };
+}
+
+function toDeviceSpecInput(input: {
+  model: string;
+  kind: NonNullable<DeviceSpecCreateInput['kind']>;
+  supportedBands: NonNullable<DeviceSpecCreateInput['supportedBands']>;
+  vendor?: string | undefined;
+  notes?: string | undefined;
+  knownIssues?: string | undefined;
+}): DeviceSpecCreateInput {
+  return {
+    model: input.model,
+    kind: input.kind,
+    supportedBands: input.supportedBands,
+    ...(input.vendor !== undefined ? { vendor: input.vendor } : {}),
+    ...(input.notes !== undefined ? { notes: input.notes } : {}),
+    ...(input.knownIssues !== undefined ? { knownIssues: input.knownIssues } : {}),
+  };
+}
+
+function toDeviceSpecUpdateInput(input: {
+  model: string;
+  kind: NonNullable<DeviceSpecCreateInput['kind']>;
+  supportedBands: NonNullable<DeviceSpecCreateInput['supportedBands']>;
+  vendor?: string | undefined;
+  notes?: string | undefined;
+  knownIssues?: string | undefined;
+}): DeviceSpecUpdateInput {
+  return {
+    model: input.model,
+    kind: input.kind,
+    supportedBands: input.supportedBands,
+    ...(input.vendor !== undefined ? { vendor: input.vendor } : {}),
+    ...(input.notes !== undefined ? { notes: input.notes } : {}),
+    ...(input.knownIssues !== undefined ? { knownIssues: input.knownIssues } : {}),
+  };
+}
 
 function TeamEditorSection({
   team,
@@ -214,25 +373,13 @@ function TeamEditorSection({
   );
 }
 
-type WifiEditorProps = {
-  initialValues: WifiConfigFormValues;
-  configs: ReadonlyArray<Pick<WifiConfig, 'id' | 'status' | 'band' | 'name'>>;
-  deviceSpecs: DeviceSpec[];
-  canEdit: boolean;
-  editingId?: string;
-  bestPracticeBodies: string[];
-  onCancel: () => void;
-  onSubmit: (values: WifiConfigFormValues) => Promise<void>;
-  submitting: boolean;
-};
-
 function WifiConfigEditorSection({
   initialValues,
   configs,
   deviceSpecs,
   canEdit,
   editingId,
-  bestPracticeBodies,
+  bestPractices,
   onCancel,
   onSubmit,
   submitting,
@@ -250,6 +397,32 @@ function WifiConfigEditorSection({
   const sameBandConfigs = useMemo(
     () => configs.filter((config) => config.band === values.band && config.id !== editingId),
     [configs, editingId, values.band],
+  );
+
+  const selectedDeviceSpecs = useMemo(
+    () =>
+      [values.apDeviceId, values.clientDeviceId]
+        .map((id) => deviceSpecs.find((spec) => spec.id === id))
+        .filter((spec): spec is DeviceSpecView => spec != null),
+    [deviceSpecs, values.apDeviceId, values.clientDeviceId],
+  );
+
+  const bestPracticeBodies = useMemo(
+    () =>
+      findRelevantBestPractices(
+        bestPractices,
+        values.band,
+        selectedDeviceSpecs.map((spec) => spec.model),
+      ).map((practice) => practice.body),
+    [bestPractices, selectedDeviceSpecs, values.band],
+  );
+
+  const knownIssueSummaries = useMemo(
+    () =>
+      selectedDeviceSpecs
+        .filter((spec) => Boolean(spec.knownIssues))
+        .map((spec) => `${spec.model}: ${spec.knownIssues}`),
+    [selectedDeviceSpecs],
   );
 
   return (
@@ -497,6 +670,18 @@ function WifiConfigEditorSection({
               </Alert>
             ) : null}
 
+            {knownIssueSummaries.length > 0 ? (
+              <Alert color='orange' variant='light' title='関連機材の既知の注意点'>
+                <Stack gap='xs'>
+                  {knownIssueSummaries.map((issue) => (
+                    <Text key={issue} size='sm'>
+                      {issue}
+                    </Text>
+                  ))}
+                </Stack>
+              </Alert>
+            ) : null}
+
             {canEdit ? (
               <Group justify='flex-end'>
                 <Button type='submit' loading={submitting}>
@@ -659,6 +844,7 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
   const wifiConfigsQuery = useTeamWifiConfigs(teamId);
   const deviceSpecsQuery = useTeamDeviceSpecs(teamId, includeArchived);
   const bestPracticesQuery = useTournamentBestPractices(tournamentId);
+  const issueReportsQuery = useTournamentIssueReports(tournamentId);
   const updateTeamMutation = useUpdateTeamMutation(teamId, tournamentId);
   const createWifiConfigMutation = useCreateWifiConfigMutation(teamId);
   const updateWifiConfigMutation = useUpdateWifiConfigMutation(teamId);
@@ -671,15 +857,9 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const wifiConfigs = useMemo(
-    () => (wifiConfigsQuery.data ?? []).filter((config): config is WifiConfig => true),
-    [wifiConfigsQuery.data],
-  );
-  const deviceSpecs = useMemo(
-    () => (deviceSpecsQuery.data ?? []).filter((spec): spec is DeviceSpec => true),
-    [deviceSpecsQuery.data],
-  );
-  const team = teamQuery.data as Team | undefined;
+  const wifiConfigs = wifiConfigsQuery.data ?? [];
+  const deviceSpecs = deviceSpecsQuery.data ?? [];
+  const team = teamQuery.data;
   const editingWifi =
     editingWifiId && editingWifiId !== 'new'
       ? wifiConfigs.find((config) => config.id === editingWifiId)
@@ -688,15 +868,20 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
     editingDeviceId && editingDeviceId !== 'new'
       ? deviceSpecs.find((spec) => spec.id === editingDeviceId)
       : undefined;
-  const bestPracticeBodies = findRelevantBestPractices(
-    bestPracticesQuery.data ?? [],
-    editingWifi ? editingWifi.band : '5GHz',
-    [editingWifi?.apDeviceId, editingWifi?.clientDeviceId]
-      .map((id) => deviceSpecs.find((spec) => spec.id === id)?.model ?? '')
-      .filter(Boolean),
-  ).map((practice) => practice.body);
+  const issueReports = useMemo(
+    () =>
+      (issueReportsQuery.data ?? []).filter(
+        (report) => report.teamId === teamId && (ownTeam || report.visibility === 'team_public'),
+      ),
+    [issueReportsQuery.data, ownTeam, teamId],
+  );
 
-  if (teamQuery.isLoading || wifiConfigsQuery.isLoading || deviceSpecsQuery.isLoading) {
+  if (
+    teamQuery.isLoading ||
+    wifiConfigsQuery.isLoading ||
+    deviceSpecsQuery.isLoading ||
+    issueReportsQuery.isLoading
+  ) {
     return (
       <Stack align='center' py='xl'>
         <Loader color='teal' />
@@ -761,7 +946,7 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
             return;
           }
           try {
-            await updateTeamMutation.mutateAsync(parsed.data as TeamUpdateInput);
+            await updateTeamMutation.mutateAsync(toTeamUpdateInput(parsed.data));
             setSubmitMessage('チーム情報を更新しました。');
           } catch (error) {
             setSubmitError(
@@ -771,13 +956,69 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
         }}
       />
 
+      <Divider label='報告一覧' labelPosition='left' />
+
+      {!ownTeam ? (
+        <Alert color='blue' variant='light'>
+          公開サマリのみ表示しています。
+        </Alert>
+      ) : null}
+
+      <Stack gap='md'>
+        {issueReports.map((report) => (
+          <Card key={report.id} className='feature-card' padding='lg' radius='xl'>
+            <Stack gap='xs'>
+              <Group justify='space-between'>
+                <Title order={4}>
+                  {report.symptom} / {report.severity}
+                </Title>
+                <Badge
+                  color={report.visibility === 'team_public' ? 'teal' : 'gray'}
+                  variant='light'
+                >
+                  {report.visibility}
+                </Badge>
+              </Group>
+              <Text size='sm'>
+                {report.band} / CH {report.channel}
+                {report.channelWidthMHz ? ` / ${report.channelWidthMHz}MHz` : ''}
+              </Text>
+              {report.apDeviceModel ? <Text size='sm'>AP: {report.apDeviceModel}</Text> : null}
+              {report.clientDeviceModel ? (
+                <Text size='sm'>Client: {report.clientDeviceModel}</Text>
+              ) : null}
+              {report.avgPingMs != null ? (
+                <Text size='sm'>平均 Ping: {report.avgPingMs} ms</Text>
+              ) : null}
+              {report.packetLossPercent != null ? (
+                <Text size='sm'>Packet loss: {report.packetLossPercent}%</Text>
+              ) : null}
+              {ownTeam && isDetailedIssueReport(report) && report.reporterName ? (
+                <Text size='sm'>報告者: {report.reporterName}</Text>
+              ) : null}
+              {ownTeam && isDetailedIssueReport(report) && report.locationLabel ? (
+                <Text size='sm'>場所: {report.locationLabel}</Text>
+              ) : null}
+              {ownTeam && isDetailedIssueReport(report) && report.description ? (
+                <Text size='sm'>詳細: {report.description}</Text>
+              ) : null}
+            </Stack>
+          </Card>
+        ))}
+        {issueReports.length === 0 ? (
+          <Alert color='gray' variant='light'>
+            このチームに紐づく報告はまだありません。
+          </Alert>
+        ) : null}
+      </Stack>
+
       <Divider label='WiFi 構成' labelPosition='left' />
 
       <Grid>
         <Grid.Col span={{ base: 12, lg: 7 }}>
           <Stack gap='md'>
             {wifiConfigs.map((config) => {
-              const hasSensitiveFields = 'pingTargetIp' in config;
+              const hasSensitiveFields = hasWifiPrivateFields(config);
               return (
                 <Card key={config.id} className='feature-card' padding='lg' radius='xl'>
                   <Stack gap='xs'>
@@ -807,7 +1048,7 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
                     {hasSensitiveFields && config.pingTargetIp ? (
                       <Text size='sm'>Ping 監視先: {config.pingTargetIp}</Text>
                     ) : null}
-                    {'notes' in config && config.notes ? (
+                    {hasSensitiveFields && config.notes ? (
                       <Text size='sm'>{config.notes}</Text>
                     ) : null}
                     <Group>
@@ -859,10 +1100,12 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
               <WifiConfigEditorSection
                 initialValues={buildWifiConfigFormValues(editingWifi)}
                 configs={wifiConfigs}
-                deviceSpecs={deviceSpecs.filter((spec) => spec.archivedAt == null)}
+                deviceSpecs={deviceSpecs.filter(
+                  (spec) => !('archivedAt' in spec) || spec.archivedAt == null,
+                )}
                 canEdit={canEdit}
                 {...(editingWifi ? { editingId: editingWifi.id } : {})}
-                bestPracticeBodies={bestPracticeBodies}
+                bestPractices={bestPracticesQuery.data ?? []}
                 onCancel={() => setEditingWifiId(null)}
                 submitting={
                   createWifiConfigMutation.isPending || updateWifiConfigMutation.isPending
@@ -877,13 +1120,11 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
                     if (editingWifi) {
                       await updateWifiConfigMutation.mutateAsync({
                         id: editingWifi.id,
-                        input: parsed.data as WifiConfigUpdateInput,
+                        input: toWifiConfigUpdateInput(parsed.data),
                       });
                       setSubmitMessage('WiFi 構成を更新しました。');
                     } else {
-                      await createWifiConfigMutation.mutateAsync(
-                        parsed.data as WifiConfigCreateInput,
-                      );
+                      await createWifiConfigMutation.mutateAsync(toWifiConfigInput(parsed.data));
                       setSubmitMessage('WiFi 構成を追加しました。');
                     }
                     setEditingWifiId(null);
@@ -937,7 +1178,7 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
                         {spec.kind} / {spec.supportedBands.join(', ')}
                       </Text>
                     </div>
-                    {spec.archivedAt ? (
+                    {hasDevicePrivateFields(spec) && spec.archivedAt ? (
                       <Badge color='gray' variant='light'>
                         archived
                       </Badge>
@@ -946,13 +1187,15 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
                   {spec.knownIssues ? (
                     <Text size='sm'>既知の注意点: {spec.knownIssues}</Text>
                   ) : null}
-                  {'notes' in spec && spec.notes ? <Text size='sm'>{spec.notes}</Text> : null}
+                  {hasDevicePrivateFields(spec) && spec.notes ? (
+                    <Text size='sm'>{spec.notes}</Text>
+                  ) : null}
                   {canEdit ? (
                     <Group>
                       <Button variant='light' onClick={() => setEditingDeviceId(spec.id)}>
                         編集
                       </Button>
-                      {!spec.archivedAt ? (
+                      {!hasDevicePrivateFields(spec) || !spec.archivedAt ? (
                         <Button
                           variant='subtle'
                           color='red'
@@ -1009,13 +1252,11 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
                     if (editingDevice) {
                       await updateDeviceSpecMutation.mutateAsync({
                         id: editingDevice.id,
-                        input: parsed.data as DeviceSpecUpdateInput,
+                        input: toDeviceSpecUpdateInput(parsed.data),
                       });
                       setSubmitMessage('機材仕様を更新しました。');
                     } else {
-                      await createDeviceSpecMutation.mutateAsync(
-                        parsed.data as DeviceSpecCreateInput,
-                      );
+                      await createDeviceSpecMutation.mutateAsync(toDeviceSpecInput(parsed.data));
                       setSubmitMessage('機材仕様を追加しました。');
                     }
                     setEditingDeviceId(null);

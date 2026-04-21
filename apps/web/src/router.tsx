@@ -63,11 +63,16 @@ async function ensureAuthenticatedForPath(queryClient: QueryClient, pathname: st
     throw redirect({ to: '/login' });
   }
 
+  const [, search = ''] = destination.split('?');
+  const next = new URLSearchParams(search).get('next');
+
+  if (!next) {
+    throw redirect({ to: '/login' });
+  }
+
   throw redirect({
     to: '/login',
-    search: {
-      next: '/app/sync',
-    },
+    search: { next },
   });
 }
 

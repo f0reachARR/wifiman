@@ -48,6 +48,14 @@ export function useTournamentBestPractices(tournamentId: string) {
   });
 }
 
+export function useTournamentIssueReports(tournamentId: string) {
+  return useQuery({
+    queryKey: apiQueryKeys.tournamentIssueReports(tournamentId),
+    queryFn: () => apiClient.listTournamentIssueReports(tournamentId),
+    enabled: tournamentId.length > 0,
+  });
+}
+
 export function useTournamentTeams(tournamentId: string) {
   return useQuery({
     queryKey: apiQueryKeys.tournamentTeams(tournamentId),

@@ -7,11 +7,9 @@ import {
   CreateWifiConfigSchema,
   canActivateWifiConfig,
   canAddWifiConfig,
-  type DeviceSpec,
   isValidChannel,
   isValidChannelWidth,
   MAX_ACTIVE_WIFI_CONFIGS,
-  type Team,
   type UpdateTeam,
   UpdateTeamSchema,
   type WifiConfig,
@@ -59,12 +57,45 @@ export type DeviceSpecFormValues = {
 
 export type FormErrors<T extends string> = Partial<Record<T, string>>;
 
+type TeamFormSource = {
+  name: string;
+  organization?: string | null;
+  pitId?: string | null;
+  contactEmail?: string | null;
+  displayContactName?: string | null;
+  notes?: string | null;
+};
+
+type WifiConfigFormSource = {
+  name: string;
+  purpose: WifiConfigFormValues['purpose'];
+  band: WifiConfigFormValues['band'];
+  channel: number;
+  channelWidthMHz: number;
+  role: WifiConfigFormValues['role'];
+  status: WifiConfigFormValues['status'];
+  apDeviceId?: string | null;
+  clientDeviceId?: string | null;
+  expectedDistanceCategory?: WifiConfigFormValues['expectedDistanceCategory'] | null;
+  pingTargetIp?: string | null;
+  notes?: string | null;
+};
+
+type DeviceSpecFormSource = {
+  vendor?: string | null;
+  model: string;
+  kind: DeviceSpecFormValues['kind'];
+  supportedBands: DeviceSpecFormValues['supportedBands'];
+  notes?: string | null;
+  knownIssues?: string | null;
+};
+
 function normalizeOptionalString(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function buildTeamFormValues(team: Team | UpdateTeam): TeamFormValues {
+export function buildTeamFormValues(team: TeamFormSource | UpdateTeam): TeamFormValues {
   return {
     name: team.name ?? '',
     organization: team.organization ?? '',
@@ -103,7 +134,7 @@ export function parseTeamFormValues(values: TeamFormValues): {
   return { errors };
 }
 
-export function buildWifiConfigFormValues(config?: WifiConfig): WifiConfigFormValues {
+export function buildWifiConfigFormValues(config?: WifiConfigFormSource): WifiConfigFormValues {
   return {
     name: config?.name ?? '',
     purpose: config?.purpose ?? 'control',
@@ -186,7 +217,7 @@ export function parseWifiConfigFormValues(
   return { data: parsed.data, errors: {} };
 }
 
-export function buildDeviceSpecFormValues(spec?: DeviceSpec): DeviceSpecFormValues {
+export function buildDeviceSpecFormValues(spec?: DeviceSpecFormSource): DeviceSpecFormValues {
   return {
     vendor: spec?.vendor ?? '',
     model: spec?.model ?? '',
