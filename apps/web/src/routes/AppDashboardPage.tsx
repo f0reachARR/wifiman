@@ -1,6 +1,8 @@
-import { Badge, Card, Grid, Group, Stack, Text, Title } from '@mantine/core';
+import { Badge, Button, Card, Grid, Group, Stack, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { apiQueryKeys } from '../lib/api/client.js';
+import { resolveSessionTournamentId } from '../lib/authz.js';
 import { getSyncOverview } from '../lib/db/appDb.js';
 import { useAuthSession } from '../lib/useAuthSession.js';
 
@@ -10,6 +12,7 @@ export function AppDashboardPage() {
     queryKey: apiQueryKeys.syncOverview,
     queryFn: getSyncOverview,
   });
+  const sessionTournamentId = resolveSessionTournamentId(session);
 
   return (
     <Stack gap='lg'>
@@ -42,6 +45,16 @@ export function AppDashboardPage() {
                     ? `team access: ${session.teamAccessId} (${session.role})`
                     : '認証情報を取得中です'}
               </Text>
+              {session?.kind === 'team' ? (
+                <Button
+                  component={Link}
+                  to={`/tournaments/${session.tournamentId}/teams/${session.teamId}`}
+                  variant='light'
+                  color='orange'
+                >
+                  自チーム画面へ
+                </Button>
+              ) : null}
             </Stack>
           </Card>
         </Grid.Col>
@@ -53,6 +66,15 @@ export function AppDashboardPage() {
               </Text>
               <Title order={3}>{syncOverview.data?.pending ?? 0}</Title>
               <Text c='dimmed'>IndexedDB 内の未同期レコード件数です。</Text>
+              {sessionTournamentId ? (
+                <Button
+                  component={Link}
+                  to={`/tournaments/${sessionTournamentId}`}
+                  variant='subtle'
+                >
+                  大会トップを開く
+                </Button>
+              ) : null}
             </Stack>
           </Card>
         </Grid.Col>

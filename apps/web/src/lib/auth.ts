@@ -53,5 +53,9 @@ export function getProtectedRedirectPath(pathname: string, session: AuthSession 
     return null;
   }
 
-  return pathname === '/app/sync' ? '/login?next=%2Fapp%2Fsync' : '/login';
+  if (pathname === '/app') {
+    return '/login';
+  }
+
+  return `/login?next=${encodeURIComponent(pathname)}`;
 }

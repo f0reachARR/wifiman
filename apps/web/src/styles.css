@@ -77,6 +77,18 @@ body {
   backdrop-filter: blur(12px);
 }
 
+.tournament-hero-card {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 248, 236, 0.82)),
+    radial-gradient(circle at top right, rgba(182, 95, 42, 0.18), transparent 34%);
+}
+
+.summary-card,
+.notice-card {
+  border: 1px solid rgba(16, 40, 34, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+}
+
 @media (max-width: 768px) {
   .app-shell__content {
     padding-bottom: 4rem;

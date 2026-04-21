@@ -34,6 +34,12 @@ describe('auth helpers', () => {
     expect(getProtectedRedirectPath('/app/sync', null)).toBe('/login?next=%2Fapp%2Fsync');
   });
 
+  it('未認証で保護されたチーム詳細にアクセスした場合は next 付きで login へ誘導する', () => {
+    expect(getProtectedRedirectPath('/tournaments/t-1/teams/team-1', null)).toBe(
+      '/login?next=%2Ftournaments%2Ft-1%2Fteams%2Fteam-1',
+    );
+  });
+
   it('認証済みなら保護ルートでも遷移を妨げない', () => {
     expect(getProtectedRedirectPath('/app', operatorSession)).toBeNull();
     expect(getProtectedRedirectPath('/app/sync', teamSession)).toBeNull();

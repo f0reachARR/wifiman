@@ -482,6 +482,82 @@ export interface paths {
     };
     trace?: never;
   };
+  '/tournaments/{id}/public-overview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description 大会公開サマリ */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            'application/json': {
+              tournament: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                venueName: string;
+                /** Format: date */
+                startDate: string;
+                /** Format: date */
+                endDate: string;
+                description?: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+              };
+              teamCount: number;
+              wifiConfigSummary: {
+                '2.4GHz': number;
+                '5GHz': number;
+                '6GHz': number;
+              };
+              publicIssueReportCount: number;
+              noticeCount: number;
+            };
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            'application/json': {
+              error: {
+                code: string;
+                message: string;
+                details?: unknown;
+              };
+            };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/tournaments/{tournamentId}/channel-map': {
     parameters: {
       query?: never;
