@@ -48,14 +48,20 @@ export function getPostLoginRedirectPath(nextPath: string | null | undefined) {
   return nextPath;
 }
 
-export function getProtectedRedirectPath(pathname: string, session: AuthSession | null) {
+export function getProtectedRedirectPath(
+  pathname: string,
+  session: AuthSession | null,
+  search = '',
+) {
   if (session) {
     return null;
   }
 
-  if (pathname === '/app') {
+  const nextPath = `${pathname}${search}`;
+
+  if (nextPath === '/app') {
     return '/login';
   }
 
-  return `/login?next=${encodeURIComponent(pathname)}`;
+  return `/login?next=${encodeURIComponent(nextPath)}`;
 }

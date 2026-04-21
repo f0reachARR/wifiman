@@ -138,6 +138,43 @@ describe('ChannelMapView', () => {
     expect(onSelect).toHaveBeenNthCalledWith(2, fiveGigahertzEntries[0]);
   });
 
+  it('shows a visible focus outline for the focused bar', () => {
+    const { container } = render(
+      <MantineProvider>
+        <ChannelMapView
+          entries={fiveGigahertzEntries}
+          domain={{
+            minFreqMHz: 5140,
+            maxFreqMHz: 5905,
+            ticks: [
+              { channel: 36, centerFreqMHz: 5180 },
+              { channel: 40, centerFreqMHz: 5200 },
+              { channel: 44, centerFreqMHz: 5220 },
+              { channel: 48, centerFreqMHz: 5240 },
+            ],
+          }}
+          selectedId={null}
+          onSelect={vi.fn()}
+        />
+      </MantineProvider>,
+    );
+
+    const bar = screen.getByLabelText('Control 5G bar');
+
+    expect(bar).not.toHaveAttribute('data-focus-visible', 'true');
+    expect(container.querySelector('rect[data-focus-outline-for="entry-1"]')).toBeNull();
+
+    fireEvent.focus(bar);
+
+    expect(bar).toHaveAttribute('data-focus-visible', 'true');
+    expect(container.querySelector('rect[data-focus-outline-for="entry-1"]')).toBeInTheDocument();
+
+    fireEvent.blur(bar);
+
+    expect(bar).not.toHaveAttribute('data-focus-visible', 'true');
+    expect(container.querySelector('rect[data-focus-outline-for="entry-1"]')).toBeNull();
+  });
+
   it('aligns 5GHz tick labels with the bar center frequency', () => {
     const { container } = render(
       <MantineProvider>

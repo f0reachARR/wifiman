@@ -40,6 +40,12 @@ describe('auth helpers', () => {
     );
   });
 
+  it('未認証の deep link は search params を next に含めて login へ誘導する', () => {
+    expect(
+      getProtectedRedirectPath('/tournaments/t-1/channel-map', null, '?band=5GHz&controlOnly=1'),
+    ).toBe('/login?next=%2Ftournaments%2Ft-1%2Fchannel-map%3Fband%3D5GHz%26controlOnly%3D1');
+  });
+
   it('認証済みなら保護ルートでも遷移を妨げない', () => {
     expect(getProtectedRedirectPath('/app', operatorSession)).toBeNull();
     expect(getProtectedRedirectPath('/app/sync', teamSession)).toBeNull();

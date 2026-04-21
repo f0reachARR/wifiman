@@ -53,9 +53,13 @@ function NotFoundPage() {
   );
 }
 
-async function ensureAuthenticatedForPath(queryClient: QueryClient, pathname: string) {
+async function ensureAuthenticatedForPath(
+  queryClient: QueryClient,
+  pathname: string,
+  search: string,
+) {
   const session = await queryClient.fetchQuery(authSessionQueryOptions());
-  const destination = getProtectedRedirectPath(pathname, session);
+  const destination = getProtectedRedirectPath(pathname, session, search);
 
   if (!destination) {
     return;
@@ -65,8 +69,8 @@ async function ensureAuthenticatedForPath(queryClient: QueryClient, pathname: st
     throw redirect({ to: '/login' });
   }
 
-  const [, search = ''] = destination.split('?');
-  const next = new URLSearchParams(search).get('next');
+  const [, destinationSearch = ''] = destination.split('?');
+  const next = new URLSearchParams(destinationSearch).get('next');
 
   if (!next) {
     throw redirect({ to: '/login' });
@@ -112,7 +116,7 @@ const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: AppDashboardPage,
 });
@@ -121,7 +125,7 @@ const appSyncRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app/sync',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: SyncPage,
 });
@@ -148,7 +152,7 @@ const tournamentChannelMapRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tournaments/$tournamentId/channel-map',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: function TournamentChannelMapRouteComponent() {
     const { tournamentId } = tournamentChannelMapRoute.useParams();
@@ -160,7 +164,7 @@ const tournamentIssueReportCreateRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tournaments/$tournamentId/issue-reports/new',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: function TournamentIssueReportCreateRouteComponent() {
     const { tournamentId } = tournamentIssueReportCreateRoute.useParams();
@@ -172,7 +176,7 @@ const teamDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tournaments/$tournamentId/teams/$teamId',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: function TeamDetailRouteComponent() {
     const { tournamentId, teamId } = teamDetailRoute.useParams();

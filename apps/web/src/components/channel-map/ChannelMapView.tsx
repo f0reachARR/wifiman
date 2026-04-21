@@ -1,5 +1,6 @@
 import { Badge, Box, Stack, Text } from '@mantine/core';
 import type { KeyboardEvent } from 'react';
+import { useState } from 'react';
 import { CHANNEL_MAP_SOURCE_META, type ChannelMapLaneEntry } from '../../lib/channelMap.js';
 
 type ChannelMapViewProps = {
@@ -43,6 +44,7 @@ function handleBarKeyDown(
 
 export function ChannelMapView({ entries, domain, selectedId, onSelect }: ChannelMapViewProps) {
   const height = TOP_PADDING + Math.max(entries.length, 1) * ROW_HEIGHT + 24;
+  const [focusedId, setFocusedId] = useState<string | null>(null);
 
   return (
     <Box className='channel-map-view'>
@@ -79,9 +81,25 @@ export function ChannelMapView({ entries, domain, selectedId, onSelect }: Channe
           const width = Math.max(14, toXPosition(entry.endFreqMHz, domain) - x);
           const meta = CHANNEL_MAP_SOURCE_META[entry.sourceType];
           const isSelected = selectedId === entry.id;
+          const isFocused = focusedId === entry.id;
 
           return (
             <g key={entry.id} transform={`translate(0 ${y})`}>
+              {isFocused ? (
+                <rect
+                  x={x - 5}
+                  y={4}
+                  width={width + 10}
+                  height={32}
+                  rx={16}
+                  fill='none'
+                  stroke='rgba(16, 40, 34, 0.9)'
+                  strokeWidth={2}
+                  strokeDasharray='5 3'
+                  pointerEvents='none'
+                  data-focus-outline-for={entry.id}
+                />
+              ) : null}
               <rect
                 x={x}
                 y={8}
@@ -92,6 +110,7 @@ export function ChannelMapView({ entries, domain, selectedId, onSelect }: Channe
                 aria-label={`${entry.label} bar`}
                 aria-pressed={isSelected}
                 data-entry-id={entry.id}
+                data-focus-visible={isFocused ? 'true' : undefined}
                 tabIndex={0}
                 fill={meta.accent}
                 fillOpacity={isSelected ? 0.92 : 0.72}
@@ -99,6 +118,10 @@ export function ChannelMapView({ entries, domain, selectedId, onSelect }: Channe
                 strokeWidth={isSelected ? 3 : 1.5}
                 style={{ cursor: 'pointer' }}
                 onClick={() => onSelect(entry)}
+                onFocus={() => setFocusedId(entry.id)}
+                onBlur={() => {
+                  setFocusedId((current) => (current === entry.id ? null : current));
+                }}
                 onKeyDown={(event) => handleBarKeyDown(event, entry, onSelect)}
               />
               <text

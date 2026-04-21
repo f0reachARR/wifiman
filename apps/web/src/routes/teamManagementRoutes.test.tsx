@@ -451,6 +451,7 @@ describe('team management routes', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it('公開大会トップからチーム一覧へ遷移できる', async () => {
@@ -636,6 +637,52 @@ describe('team management routes', () => {
     expect(window.location.search).toBe(
       `?next=${encodeURIComponent(`/tournaments/${tournamentId}/teams/${ownTeamId}`)}`,
     );
+  });
+
+  it('未認証の channel map deep link は search params を保ったまま login 後に復帰する', async () => {
+    vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_ENABLE_DEV_OPERATOR_AUTH', 'true');
+
+    renderRoute(`/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`, {
+      ...createBaseResponses(null),
+      '/api/auth/dev-operator-session': {
+        status: 200,
+        body: {
+          kind: 'operator',
+          role: 'operator',
+          sessionId: 'operator-session-1',
+          displayName: 'Operator 1',
+        },
+      },
+      [`/api/tournaments/${tournamentId}/best-practices`]: {
+        status: 200,
+        body: [],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
+    });
+
+    expect(window.location.pathname).toBe('/login');
+    expect(window.location.search).toBe(
+      `?next=${encodeURIComponent(`/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`)}`,
+    );
+
+    fireEvent.change(screen.getByLabelText('表示名'), { target: { value: 'Operator 1' } });
+    fireEvent.change(screen.getByLabelText('パスフレーズ'), {
+      target: { value: 'local-dev-passphrase' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'ダッシュボードへ進む' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/channel-map`);
+    expect(window.location.search).toBe('?band=5GHz&controlOnly=1&model=AP-9000');
+    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
+    expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
   });
 
   it('自チーム詳細では報告一覧に詳細 DTO を表示し、WiFi editor で補助表示を出す', async () => {
