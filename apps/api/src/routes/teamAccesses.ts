@@ -1,13 +1,11 @@
 import { createRoute, z } from '@hono/zod-openapi';
+import { CreateTeamAccessSchema, TeamAccessSchema, VerifyTeamLinkSchema } from '@wifiman/shared';
 import {
-  CreateTeamAccessSchema,
   generateAccessToken,
   hashAccessToken,
   isTokenValid,
-  TeamAccessSchema,
-  VerifyTeamLinkSchema,
   verifyAccessToken,
-} from '@wifiman/shared';
+} from '@wifiman/shared/server';
 import { and, eq, isNull } from 'drizzle-orm';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { db } from '../db/index.js';
@@ -38,6 +36,11 @@ const createTeamAccessResponseSchema = z.object({
 const messageSchema = z.object({ message: z.string() });
 const verifyResponseSchema = z.object({
   teamId: z.string().uuid(),
+  role: z.enum(['editor', 'viewer']),
+});
+const teamAccessSessionResponseSchema = z.object({
+  teamId: z.string().uuid(),
+  tournamentId: z.string().uuid(),
   role: z.enum(['editor', 'viewer']),
 });
 const resendTeamAccessResponseSchema = messageSchema.extend({
@@ -340,6 +343,41 @@ app.openapi(verifyTeamLink, async (c) => {
   deleteCookie(c, 'team_access_id', { path: '/' });
 
   return c.json({ teamId: access.teamId, role: access.role }, 200);
+});
+
+// GET /api/team-accesses/session - 現在のチームアクセス短期セッション確認 (public)
+const getTeamAccessSession = createRoute({
+  method: 'get',
+  path: '/team-accesses/session',
+  tags: ['auth'],
+  responses: {
+    200: {
+      content: {
+        'application/json': { schema: teamAccessSessionResponseSchema },
+      },
+      description: 'チームアクセス短期セッション',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: '未認証',
+    },
+  },
+});
+app.openapi(getTeamAccessSession, async (c) => {
+  const authCtx = c.get('auth');
+
+  if (!authCtx.teamId || !authCtx.teamTournamentId || !authCtx.teamAccessRole) {
+    throw unauthorized();
+  }
+
+  return c.json(
+    {
+      teamId: authCtx.teamId,
+      tournamentId: authCtx.teamTournamentId,
+      role: authCtx.teamAccessRole,
+    },
+    200,
+  );
 });
 
 // DELETE /api/team-accesses/:id - チームアクセス削除 (operator)

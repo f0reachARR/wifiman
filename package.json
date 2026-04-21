@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "dev": "dotenv -- pnpm --filter @wifiman/api dev",
+    "dev": "dotenv -- pnpm --parallel --filter @wifiman/api --filter @wifiman/web dev",
     "build": "pnpm -r build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

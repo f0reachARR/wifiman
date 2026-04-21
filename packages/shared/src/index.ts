@@ -2,7 +2,6 @@
 
 // Domain
 export * from './domain/channel.js';
-export * from './domain/teamAccess.js';
 export * from './domain/wifiConfigLimit.js';
 export * from './enums.js';
 // Errors

@@ -3,6 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "exports": {
+    "./client": {
+      "types": "./src/client.ts",
+      "import": "./src/client.ts",
+      "default": "./src/client.ts"
+    }
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc --noEmit && node esbuild.mjs",
@@ -21,7 +28,7 @@
     "@wifiman/shared": "workspace:*",
     "better-auth": "^1.6.5",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.7.10",
+    "hono": "^4.12.14",
     "nodemailer": "^6.10.1",
     "postgres": "^3.4.5",
     "zod": "^3.25.17"

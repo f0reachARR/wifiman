@@ -1,4 +1,4 @@
-import { isTokenValid } from '@wifiman/shared';
+import { isTokenValid } from '@wifiman/shared/server';
 import { eq } from 'drizzle-orm';
 import type { Context, Next } from 'hono';
 import { getCookie } from 'hono/cookie';
@@ -65,27 +65,28 @@ export async function setAuthContext(c: Context, next: Next) {
     const access = await db.query.teamAccesses.findFirst({
       where: eq(teamAccesses.id, teamAccessSession.teamAccessId),
     });
+
     if (
       access &&
       isTokenValid(access.revokedAt?.toISOString()) &&
       access.teamId === teamAccessSession.teamId &&
       access.role === teamAccessSession.role
     ) {
-      authCtx.teamId = access.teamId;
-      authCtx.teamAccessRole = access.role;
-
       const team = await db.query.teams.findFirst({
         where: eq(teams.id, access.teamId),
       });
-      if (team && team.tournamentId === teamAccessSession.tournamentId) {
-        authCtx.teamTournamentId = team.tournamentId;
-      }
 
-      // last_used_at を更新
-      await db
-        .update(teamAccesses)
-        .set({ lastUsedAt: new Date(), updatedAt: new Date() })
-        .where(eq(teamAccesses.id, teamAccessSession.teamAccessId));
+      if (team && team.tournamentId === teamAccessSession.tournamentId) {
+        authCtx.teamId = access.teamId;
+        authCtx.teamAccessRole = access.role;
+        authCtx.teamTournamentId = team.tournamentId;
+
+        // last_used_at を更新
+        await db
+          .update(teamAccesses)
+          .set({ lastUsedAt: new Date(), updatedAt: new Date() })
+          .where(eq(teamAccesses.id, teamAccessSession.teamAccessId));
+      }
     }
   }
 
