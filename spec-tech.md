@@ -46,7 +46,7 @@ Hono を採用する。
 * TypeScript との相性がよい
 * Web Standard ベースで、Node.js 以外のランタイムにも移しやすい
 * 小さな API サーバとして十分軽量
-* `@hono/client` による型付きクライアント生成がしやすい
+* REST/JSON API と OpenAPI schema を整備しやすい
 * Better Auth の Hono 統合が用意されている
 
 初期ランタイムは Node.js とし、`@hono/node-server` で起動する。
@@ -58,7 +58,7 @@ API は REST/JSON を基本とする。
 * ルート: `/api/*`
 * 認証: Cookie ベースセッション + チーム編集トークン
 * バリデーション: Zod
-* API 型共有: Hono の route type または OpenAPI schema を利用
+* API 型共有: OpenAPI schema を正とし、`openapi-typescript` で frontend 用 TypeScript 型を生成
 * エラー形式: 共通の JSON 形式に統一
 
 初期方針:
@@ -590,6 +590,7 @@ stateless のためのルール:
 | Package manager | pnpm | workspace |
 | Runtime | Node.js 24 LTS | backend |
 | Backend | Hono | REST/JSON API |
+| API client/types | openapi-typescript | OpenAPI schema から frontend 用 TypeScript 型を生成 |
 | ORM | Drizzle ORM | PostgreSQL |
 | Migration | Drizzle Kit | migration はコミット |
 | DB | PostgreSQL | 本番・開発・CI で方言統一 |
