@@ -19,6 +19,7 @@ import { SyncPage } from './routes/SyncPage.js';
 import { TeamAccessPage } from './routes/TeamAccessPage.js';
 import { TeamDetailPage } from './routes/TeamDetailPage.js';
 import { TeamListPage } from './routes/TeamListPage.js';
+import { TournamentChannelMapPage } from './routes/TournamentChannelMapPage.js';
 import { TournamentOverviewPage } from './routes/TournamentOverviewPage.js';
 
 type RouterContext = {
@@ -142,6 +143,18 @@ const tournamentTeamsRoute = createRoute({
   },
 });
 
+const tournamentChannelMapRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/channel-map',
+  beforeLoad: async ({ context, location }) => {
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+  },
+  component: function TournamentChannelMapRouteComponent() {
+    const { tournamentId } = tournamentChannelMapRoute.useParams();
+    return <TournamentChannelMapPage tournamentId={tournamentId} />;
+  },
+});
+
 const teamDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tournaments/$tournamentId/teams/$teamId',
@@ -163,6 +176,7 @@ const routeTree = rootRoute.addChildren([
   appSyncRoute,
   tournamentOverviewRoute,
   tournamentTeamsRoute,
+  tournamentChannelMapRoute,
   teamDetailRoute,
 ]);
 

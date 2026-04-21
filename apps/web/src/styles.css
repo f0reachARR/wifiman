@@ -89,8 +89,38 @@ body {
   background: rgba(255, 255, 255, 0.9);
 }
 
+.channel-map-hero-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(236, 246, 242, 0.9)),
+    radial-gradient(circle at 15% 10%, rgba(20, 184, 166, 0.16), transparent 30%),
+    radial-gradient(circle at 90% 20%, rgba(59, 130, 246, 0.14), transparent 28%);
+}
+
+.channel-map-stage {
+  overflow: hidden;
+}
+
+.channel-map-view {
+  overflow-x: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(16, 40, 34, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(240, 247, 243, 0.9));
+  padding: 1rem;
+}
+
+.channel-map-view svg {
+  min-width: 760px;
+  width: 100%;
+  display: block;
+}
+
 @media (max-width: 768px) {
   .app-shell__content {
     padding-bottom: 4rem;
+  }
+
+  .channel-map-view {
+    padding: 0.75rem;
   }
 }

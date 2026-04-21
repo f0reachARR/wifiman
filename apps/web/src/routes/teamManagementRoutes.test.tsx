@@ -103,6 +103,55 @@ function createBaseResponses(session: typeof ownTeamSession | typeof otherTeamSe
       status: 200,
       body: [],
     },
+    [`/api/tournaments/${tournamentId}/channel-map`]: {
+      status: 200,
+      body: [
+        {
+          sourceType: 'own_team',
+          band: '5GHz',
+          channel: 36,
+          channelWidthMHz: 80,
+          wifiConfigId: ownWifiId,
+          wifiConfigName: 'Control 5G',
+          teamId: ownTeamId,
+          teamName: 'Alpha',
+          purpose: 'control',
+          role: 'primary',
+          status: 'active',
+          apDeviceModel: 'AP-9000',
+          clientDeviceModel: 'Client-1',
+          reportCount: 3,
+        },
+        {
+          sourceType: 'participant_team',
+          band: '5GHz',
+          channel: 149,
+          channelWidthMHz: 80,
+          wifiConfigId: '00000000-0000-4000-8000-000000000099',
+          wifiConfigName: 'Backup 5G',
+          teamId: otherTeamId,
+          teamName: 'Beta',
+          purpose: 'debug',
+          role: 'backup',
+          status: 'standby',
+          apDeviceModel: 'AP-7000',
+          clientDeviceModel: null,
+          reportCount: 1,
+        },
+        {
+          sourceType: 'observed_wifi',
+          band: '5GHz',
+          channel: 40,
+          channelWidthMHz: 20,
+          observedWifiId: '00000000-0000-4000-8000-000000000100',
+          ssid: 'Venue WiFi',
+          source: 'wild',
+          rssi: -68,
+          locationLabel: 'North Hall',
+          observedAt: '2026-04-21T10:00:00.000Z',
+        },
+      ],
+    },
     [`/api/tournaments/${tournamentId}`]: {
       status: 200,
       body: {
@@ -418,6 +467,64 @@ describe('team management routes', () => {
 
     expect(await screen.findByText('Spring Cup チーム一覧')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: '詳細はログイン後' })).toHaveLength(2);
+  });
+
+  it('ホームの大会カードからチャンネルマップへ進むと未認証では login に遷移する', async () => {
+    renderRoute('/', createBaseResponses(null));
+
+    expect(await screen.findByText('公開中の大会')).toBeInTheDocument();
+    expect(await screen.findByText('Spring Cup')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: 'チャンネルマップ' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
+    });
+
+    expect(window.location.pathname).toBe('/login');
+    expect(window.location.search).toBe(
+      `?next=${encodeURIComponent(`/tournaments/${tournamentId}/channel-map`)}`,
+    );
+  });
+
+  it('参加者は大会トップからチャンネルマップへ遷移し、公開範囲内の詳細だけを見る', async () => {
+    renderRoute(`/tournaments/${tournamentId}`, {
+      ...createBaseResponses(ownTeamSession),
+      [`/api/tournaments/${tournamentId}/best-practices`]: {
+        status: 200,
+        body: [
+          {
+            id: '00000000-0000-4000-8000-000000000052',
+            tournamentId,
+            title: 'Band practice',
+            body: '5GHz は DFS を避ける',
+            scope: 'band',
+            targetBand: '5GHz',
+            targetModel: null,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+          },
+        ],
+      },
+    });
+
+    expect(await screen.findByText('Spring Cup')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: 'チャンネルマップを見る' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('自チーム').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('参加チーム').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('観測 WiFi').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('radio', { name: '5GHz' }));
+    fireEvent.click(screen.getByLabelText('Control 5G bar'));
+
+    expect(await screen.findByText('問題報告が集中しています')).toBeInTheDocument();
+    expect(screen.getByText('AP 型番: AP-9000')).toBeInTheDocument();
+    expect(screen.queryByText(/contactEmail|displayContactName|notes/i)).not.toBeInTheDocument();
   });
 
   it('未認証で保護されたチーム詳細に入ると元 URL を next に保持して login へ遷移する', async () => {
