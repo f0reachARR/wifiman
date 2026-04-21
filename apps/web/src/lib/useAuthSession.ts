@@ -1,42 +1,64 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { TeamAccessRole } from '@wifiman/shared';
-import {
-  clearStoredAuthSession,
-  createOperatorSession,
-  createTeamSession,
-  getStoredAuthSession,
-  setStoredAuthSession,
-} from './auth.js';
+import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from './api/client.js';
+import { getLoginMode } from './auth.js';
+import { betterAuthClient } from './betterAuthClient.js';
 
-const authQueryKey = ['auth', 'session'] as const;
+export const authQueryKey = ['auth', 'session'] as const;
+
+export function authSessionQueryOptions() {
+  return queryOptions({
+    queryKey: authQueryKey,
+    queryFn: () => apiClient.getAuthSession(),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
 
 export function useAuthSession() {
-  return useQuery({
-    queryKey: authQueryKey,
-    queryFn: async () => getStoredAuthSession(),
-    initialData: getStoredAuthSession(),
-    staleTime: Number.POSITIVE_INFINITY,
-  });
+  return useQuery(authSessionQueryOptions());
 }
 
 export function useAuthActions() {
   const queryClient = useQueryClient();
 
   return {
-    signInAsOperator(displayName: string) {
-      const session = createOperatorSession(displayName);
-      setStoredAuthSession(session);
+    async signInAsOperator(input: {
+      email: string;
+      password: string;
+      displayName: string;
+      passphrase: string;
+    }) {
+      if (getLoginMode() === 'better-auth') {
+        const result = await betterAuthClient.signIn.email({
+          email: input.email,
+          password: input.password,
+        });
+
+        if (result.error) {
+          throw new Error(result.error.message ?? 'ログインに失敗しました');
+        }
+
+        const session = await apiClient.getAuthSession();
+
+        if (!session) {
+          throw new Error('認証セッションを取得できませんでした');
+        }
+
+        void queryClient.setQueryData(authQueryKey, session);
+        return session;
+      }
+
+      const session = await apiClient.signInDevOperator(input.displayName, input.passphrase);
       void queryClient.setQueryData(authQueryKey, session);
       return session;
     },
-    signInWithTeamAccess(token: string, role: TeamAccessRole) {
-      const session = createTeamSession(token, role);
-      setStoredAuthSession(session);
+    async signInWithTeamAccess(token: string) {
+      const session = await apiClient.verifyTeamAccess(token);
       void queryClient.setQueryData(authQueryKey, session);
       return session;
     },
-    signOut() {
-      clearStoredAuthSession();
+    async signOut() {
+      await Promise.allSettled([apiClient.clearAuthSession(), apiClient.signOutOperator()]);
       void queryClient.setQueryData(authQueryKey, null);
     },
   };

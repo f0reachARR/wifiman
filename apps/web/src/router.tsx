@@ -6,9 +6,11 @@ import {
   createRouter,
   Outlet,
   RouterProvider,
+  redirect,
 } from '@tanstack/react-router';
 import { AppShellLayout } from './components/AppShellLayout.js';
-import { ensureAuthenticatedForPath } from './lib/auth.js';
+import { getProtectedRedirectPath } from './lib/auth.js';
+import { authSessionQueryOptions } from './lib/useAuthSession.js';
 import { AppDashboardPage } from './routes/AppDashboardPage.js';
 import { HomePage } from './routes/HomePage.js';
 import { LoginPage } from './routes/LoginPage.js';
@@ -46,6 +48,26 @@ function NotFoundPage() {
   );
 }
 
+async function ensureAuthenticatedForPath(queryClient: QueryClient, pathname: string) {
+  const session = await queryClient.fetchQuery(authSessionQueryOptions());
+  const destination = getProtectedRedirectPath(pathname, session);
+
+  if (!destination) {
+    return;
+  }
+
+  if (destination === '/login') {
+    throw redirect({ to: '/login' });
+  }
+
+  throw redirect({
+    to: '/login',
+    search: {
+      next: '/app/sync',
+    },
+  });
+}
+
 const rootRoute = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
   notFoundComponent: NotFoundPage,
@@ -79,8 +101,8 @@ const offlineRoute = createRoute({
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app',
-  beforeLoad: ({ location }) => {
-    ensureAuthenticatedForPath(location.pathname);
+  beforeLoad: async ({ context, location }) => {
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
   },
   component: AppDashboardPage,
 });
@@ -88,8 +110,8 @@ const appRoute = createRoute({
 const appSyncRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app/sync',
-  beforeLoad: ({ location }) => {
-    ensureAuthenticatedForPath(location.pathname);
+  beforeLoad: async ({ context, location }) => {
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
   },
   component: SyncPage,
 });

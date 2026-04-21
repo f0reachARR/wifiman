@@ -1,4 +1,5 @@
 import { createOpenApiApp } from './openapi.js';
+import authSessionRoutes from './routes/authSessions.js';
 import bestPracticeRoutes from './routes/bestPractices.js';
 import deviceSpecRoutes from './routes/deviceSpecs.js';
 import issueReportRoutes from './routes/issueReports.js';
@@ -10,6 +11,7 @@ import tournamentRoutes from './routes/tournaments.js';
 import wifiConfigRoutes from './routes/wifiConfigs.js';
 
 const api = createOpenApiApp()
+  .route('/', authSessionRoutes)
   .route('/', tournamentRoutes)
   .route('/', teamRoutes)
   .route('/', teamAccessRoutes)

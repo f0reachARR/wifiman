@@ -33,9 +33,15 @@ export function AppDashboardPage() {
                 Session
               </Text>
               <Title order={3}>
-                {session?.kind === 'operator' ? session.displayName : session?.role}
+                {session?.kind === 'operator' ? session.displayName : session?.teamId}
               </Title>
-              <Text c='dimmed'>保護ルートはローカルセッションの有無で制御されています。</Text>
+              <Text c='dimmed'>
+                {session?.kind === 'operator'
+                  ? `server session: ${session.sessionId}`
+                  : session
+                    ? `team access: ${session.teamAccessId} (${session.role})`
+                    : '認証情報を取得中です'}
+              </Text>
             </Stack>
           </Card>
         </Grid.Col>

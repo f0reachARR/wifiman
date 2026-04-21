@@ -9,6 +9,11 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  DEV_OPERATOR_AUTH_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  DEV_OPERATOR_AUTH_PASSPHRASE: z.string().min(8).optional(),
   // SMTP (optional)
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().optional(),

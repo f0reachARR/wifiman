@@ -89,7 +89,7 @@ export function AppShellLayout({ children }: PropsWithChildren) {
                 color='dark'
                 variant='subtle'
                 onClick={async () => {
-                  signOut();
+                  await signOut();
                   close();
                   await navigate({ to: '/' });
                 }}

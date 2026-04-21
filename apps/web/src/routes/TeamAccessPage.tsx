@@ -1,24 +1,28 @@
-import { Button, Card, SegmentedControl, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Card, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useForm } from '@tanstack/react-form';
 import { useNavigate } from '@tanstack/react-router';
-import type { TeamAccessRole } from '@wifiman/shared';
+import { useState } from 'react';
 import { useAuthActions } from '../lib/useAuthSession.js';
 
 type TeamAccessFormValues = {
   token: string;
-  role: TeamAccessRole;
 };
 
 export function TeamAccessPage() {
   const navigate = useNavigate();
   const { signInWithTeamAccess } = useAuthActions();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const initialToken =
+    typeof window === 'undefined'
+      ? ''
+      : (new URLSearchParams(window.location.search).get('token') ?? '');
   const form = useForm({
     defaultValues: {
-      token: '',
-      role: 'editor' as TeamAccessRole,
+      token: initialToken,
     } satisfies TeamAccessFormValues,
     onSubmit: async ({ value }) => {
-      signInWithTeamAccess(value.token, value.role);
+      setSubmitError(null);
+      await signInWithTeamAccess(value.token);
       await navigate({ to: '/app' });
     },
   });
@@ -29,15 +33,28 @@ export function TeamAccessPage() {
         <div>
           <Title order={2}>チームアクセス</Title>
           <Text c='dimmed'>
-            64 文字トークンを受け取り、編集者または閲覧者セッションを開始します。
+            64 文字トークンをサーバ検証し、role と teamAccessId を含む短期 session を開始します。
           </Text>
         </div>
+
+        <Alert color='orange' variant='light'>
+          role
+          はトークンの発行内容からサーバ側で決定されます。クライアント側の選択では昇格できません。
+        </Alert>
+
+        {submitError ? (
+          <Alert color='red' variant='light'>
+            {submitError}
+          </Alert>
+        ) : null}
 
         <form
           onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            void form.handleSubmit();
+            void form.handleSubmit().catch((error: unknown) => {
+              setSubmitError(error instanceof Error ? error.message : 'トークン検証に失敗しました');
+            });
           }}
         >
           <Stack gap='md'>
@@ -56,19 +73,6 @@ export function TeamAccessPage() {
                   onBlur={field.handleBlur}
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   error={field.state.meta.errors[0]}
-                />
-              )}
-            </form.Field>
-
-            <form.Field name='role'>
-              {(field) => (
-                <SegmentedControl
-                  data={[
-                    { label: '編集者', value: 'editor' },
-                    { label: '閲覧者', value: 'viewer' },
-                  ]}
-                  value={field.state.value}
-                  onChange={(value) => field.handleChange(() => value as TeamAccessRole)}
                 />
               )}
             </form.Field>

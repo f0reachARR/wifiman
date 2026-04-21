@@ -35,12 +35,16 @@ const createTeamAccessResponseSchema = z.object({
 });
 const messageSchema = z.object({ message: z.string() });
 const verifyResponseSchema = z.object({
+  kind: z.literal('team'),
   teamId: z.string().uuid(),
+  tournamentId: z.string().uuid(),
+  teamAccessId: z.string().uuid(),
   role: z.enum(['editor', 'viewer']),
 });
 const teamAccessSessionResponseSchema = z.object({
   teamId: z.string().uuid(),
   tournamentId: z.string().uuid(),
+  teamAccessId: z.string().uuid(),
   role: z.enum(['editor', 'viewer']),
 });
 const resendTeamAccessResponseSchema = messageSchema.extend({
@@ -342,7 +346,16 @@ app.openapi(verifyTeamLink, async (c) => {
   deleteCookie(c, 'team_access_token', { path: '/' });
   deleteCookie(c, 'team_access_id', { path: '/' });
 
-  return c.json({ teamId: access.teamId, role: access.role }, 200);
+  return c.json(
+    {
+      kind: 'team' as const,
+      teamId: access.teamId,
+      tournamentId: team.tournamentId,
+      teamAccessId: access.id,
+      role: access.role,
+    },
+    200,
+  );
 });
 
 // GET /api/team-accesses/session - 現在のチームアクセス短期セッション確認 (public)
@@ -366,7 +379,12 @@ const getTeamAccessSession = createRoute({
 app.openapi(getTeamAccessSession, async (c) => {
   const authCtx = c.get('auth');
 
-  if (!authCtx.teamId || !authCtx.teamTournamentId || !authCtx.teamAccessRole) {
+  if (
+    !authCtx.teamId ||
+    !authCtx.teamTournamentId ||
+    !authCtx.teamAccessRole ||
+    !authCtx.teamAccessId
+  ) {
     throw unauthorized();
   }
 
@@ -374,6 +392,7 @@ app.openapi(getTeamAccessSession, async (c) => {
     {
       teamId: authCtx.teamId,
       tournamentId: authCtx.teamTournamentId,
+      teamAccessId: authCtx.teamAccessId,
       role: authCtx.teamAccessRole,
     },
     200,

@@ -6,6 +6,7 @@ import { env } from './env.js';
 import { errorHandler } from './errors.js';
 import { setAuthContext } from './middleware/auth.js';
 import { createOpenApiApp } from './openapi.js';
+import authSessionRoutes from './routes/authSessions.js';
 import bestPracticeRoutes from './routes/bestPractices.js';
 import deviceSpecRoutes from './routes/deviceSpecs.js';
 import issueReportRoutes from './routes/issueReports.js';
@@ -39,11 +40,6 @@ export function createApp() {
   // Logger
   app.use('*', logger());
 
-  // Better Auth
-  app.on(['POST', 'GET'], '/api/auth/**', (c) => {
-    return auth.handler(c.req.raw);
-  });
-
   // 認証コンテキストをセット
   app.use('/api/*', setAuthContext);
 
@@ -53,6 +49,7 @@ export function createApp() {
   api.route('/', tournamentRoutes);
   api.route('/', teamRoutes);
   api.route('/', teamAccessRoutes);
+  api.route('/', authSessionRoutes);
   api.route('/', wifiConfigRoutes);
   api.route('/', deviceSpecRoutes);
   api.route('/', observedWifiRoutes);
@@ -71,6 +68,11 @@ export function createApp() {
   api.get('/docs', swaggerUI({ url: '/api/openapi.json' }));
 
   app.route('/api', api);
+
+  // Better Auth の catch-all は custom auth routes より後に登録する。
+  app.on(['POST', 'GET'], '/api/auth/**', (c) => {
+    return auth.handler(c.req.raw);
+  });
 
   // グローバルエラーハンドラ
   app.onError(errorHandler);

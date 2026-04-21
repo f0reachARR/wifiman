@@ -117,6 +117,7 @@ describe('team access routes integration (pglite)', () => {
     await expect(res.json()).resolves.toEqual({
       teamId,
       tournamentId,
+      teamAccessId,
       role: 'editor',
     });
 
