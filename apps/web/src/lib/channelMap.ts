@@ -47,6 +47,7 @@ export type ChannelMapDisplayEntry = {
   id: string;
   band: Band;
   sourceType: ChannelMapEntry['sourceType'];
+  teamId: string | null;
   label: string;
   subtitle: string;
   detailKey: string;
@@ -62,6 +63,7 @@ export type ChannelMapDisplayEntry = {
   clientDeviceModel: string | null;
   status: string | null;
   ssid: string | null;
+  bssid: string | null;
   sourceLabel: string | null;
   rssi: number | null;
   locationLabel: string | null;
@@ -83,7 +85,10 @@ export type ChannelMapModel = {
   domain: {
     minFreqMHz: number;
     maxFreqMHz: number;
-    tickChannels: number[];
+    ticks: Array<{
+      channel: number;
+      centerFreqMHz: number;
+    }>;
   };
 };
 
@@ -161,6 +166,7 @@ export function createChannelMapDisplayEntries(
         id: getEntryId(entry),
         band: entry.band,
         sourceType: entry.sourceType,
+        teamId: null,
         label: getEntryLabel(entry),
         subtitle: getEntrySubtitle(entry),
         detailKey: getEntryDetailKey(entry),
@@ -176,6 +182,7 @@ export function createChannelMapDisplayEntries(
         clientDeviceModel: null,
         status: null,
         ssid: entry.ssid ?? null,
+        bssid: entry.bssid ?? null,
         sourceLabel: entry.source,
         rssi: entry.rssi,
         locationLabel: entry.locationLabel,
@@ -187,6 +194,7 @@ export function createChannelMapDisplayEntries(
       id: getEntryId(entry),
       band: entry.band,
       sourceType: entry.sourceType,
+      teamId: entry.teamId,
       label: getEntryLabel(entry),
       subtitle: getEntrySubtitle(entry),
       detailKey: getEntryDetailKey(entry),
@@ -202,6 +210,7 @@ export function createChannelMapDisplayEntries(
       clientDeviceModel: entry.clientDeviceModel,
       status: entry.status,
       ssid: null,
+      bssid: null,
       sourceLabel: null,
       rssi: null,
       locationLabel: null,
@@ -290,7 +299,10 @@ export function getChannelMapDomain(band: Band) {
   return {
     minFreqMHz: minRange.startFreqMHz,
     maxFreqMHz: maxRange.endFreqMHz,
-    tickChannels: channels,
+    ticks: channels.map((channel) => ({
+      channel,
+      centerFreqMHz: getChannelRange(band, channel, 20).centerFreqMHz,
+    })),
   };
 }
 

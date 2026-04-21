@@ -6,6 +6,7 @@ import {
   WIFI_CONFIG_ROLES,
   WIFI_CONFIG_STATUSES,
 } from '../enums.js';
+import { optionalFromNullable } from './common.js';
 
 // ChannelMapEntry の表示元区分 (spec §3.9 sourceType)
 export const CHANNEL_MAP_SOURCE_TYPES = ['own_team', 'participant_team', 'observed_wifi'] as const;
@@ -50,6 +51,7 @@ export const ChannelMapEntrySchema = z.discriminatedUnion('sourceType', [
     channelWidthMHz: z.number().int().positive().optional(),
     observedWifiId: z.string().uuid(),
     ssid: z.string().nullable().optional(),
+    bssid: optionalFromNullable(z.string().regex(/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/)),
     source: z.enum(OBSERVED_WIFI_SOURCES),
     // H-2: RSSI (dBm)。データがない場合は null
     rssi: z.number().nullable(),

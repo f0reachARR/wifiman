@@ -6,7 +6,10 @@ type ChannelMapViewProps = {
   domain: {
     minFreqMHz: number;
     maxFreqMHz: number;
-    tickChannels: number[];
+    ticks: Array<{
+      channel: number;
+      centerFreqMHz: number;
+    }>;
   };
   selectedId: string | null;
   onSelect: (entry: ChannelMapLaneEntry) => void;
@@ -26,21 +29,14 @@ function toXPosition(freqMHz: number, domain: ChannelMapViewProps['domain']) {
 
 export function ChannelMapView({ entries, domain, selectedId, onSelect }: ChannelMapViewProps) {
   const height = TOP_PADDING + Math.max(entries.length, 1) * ROW_HEIGHT + 24;
-  const firstChannel = domain.tickChannels[0] ?? 1;
-  const lastChannel = domain.tickChannels[domain.tickChannels.length - 1] ?? firstChannel;
-  const channelSpan = lastChannel - firstChannel || 1;
 
   return (
     <Box className='channel-map-view'>
       <svg viewBox={`0 0 ${SVG_WIDTH} ${height}`} role='img' aria-label='チャンネルマップ SVG'>
-        {domain.tickChannels.map((channel) => {
-          const tickX = toXPosition(
-            domain.minFreqMHz +
-              ((channel - firstChannel) / channelSpan) * (domain.maxFreqMHz - domain.minFreqMHz),
-            domain,
-          );
+        {domain.ticks.map((tick) => {
+          const tickX = toXPosition(tick.centerFreqMHz, domain);
           return (
-            <g key={channel}>
+            <g key={tick.channel}>
               <line
                 x1={tickX}
                 y1={22}
@@ -49,8 +45,15 @@ export function ChannelMapView({ entries, domain, selectedId, onSelect }: Channe
                 stroke='rgba(16, 40, 34, 0.12)'
                 strokeDasharray='3 6'
               />
-              <text x={tickX} y={16} textAnchor='middle' fontSize='11' fill='#5b6b67'>
-                {channel}
+              <text
+                x={tickX}
+                y={16}
+                textAnchor='middle'
+                fontSize='11'
+                fill='#5b6b67'
+                data-channel={String(tick.channel)}
+              >
+                {tick.channel}
               </text>
             </g>
           );
@@ -73,6 +76,7 @@ export function ChannelMapView({ entries, domain, selectedId, onSelect }: Channe
                 rx={12}
                 role='button'
                 aria-label={`${entry.label} bar`}
+                data-entry-id={entry.id}
                 fill={meta.accent}
                 fillOpacity={isSelected ? 0.92 : 0.72}
                 stroke={meta.color}

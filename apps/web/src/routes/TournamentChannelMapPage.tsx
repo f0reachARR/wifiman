@@ -176,7 +176,7 @@ export function TournamentChannelMapPage({ tournamentId }: TournamentChannelMapP
       <SimpleGrid cols={{ base: 1, lg: 2 }} spacing='lg'>
         <ChannelMapDetailPanel entry={selectedEntry} tournamentId={tournamentId} />
 
-        <Card className='feature-card' padding='lg' radius='xl'>
+        <Card id='channel-map-best-practices' className='feature-card' padding='lg' radius='xl'>
           <Stack gap='md'>
             <Title order={4}>参考ベストプラクティス</Title>
             {(relevantPractices.length === 0 ? (bestPracticesQuery.data ?? []) : relevantPractices)

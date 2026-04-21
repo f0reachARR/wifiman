@@ -49,6 +49,7 @@ const entries: ChannelMapEntry[] = [
     channelWidthMHz: 20,
     observedWifiId: '00000000-0000-4000-8000-000000000003',
     ssid: 'Venue WiFi',
+    bssid: '00:11:22:33:44:55',
     source: 'wild',
     rssi: -68,
     locationLabel: 'North',
@@ -76,6 +77,7 @@ describe('channelMap utilities', () => {
     expect(displayEntries[0]?.label).toBe('Control 5G');
     expect(displayEntries[2]?.label).toBe('Venue WiFi');
     expect(displayEntries[2]?.apDeviceModel).toBeNull();
+    expect(displayEntries[2]?.bssid).toBe('00:11:22:33:44:55');
   });
 
   it('filters by source type, purpose, width and model query', () => {

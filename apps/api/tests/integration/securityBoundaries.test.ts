@@ -32,6 +32,16 @@ const { mockDb, state } = vi.hoisted(() => {
     },
   };
 
+  const createSelectChain = () => {
+    const chain = {
+      innerJoin: vi.fn(() => chain),
+      leftJoin: vi.fn(() => chain),
+      where: vi.fn(async () => mockState.selectQueue.shift() ?? []),
+    };
+
+    return chain;
+  };
+
   const db = {
     query: {
       issueReports: {
@@ -51,9 +61,7 @@ const { mockDb, state } = vi.hoisted(() => {
       },
     },
     select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(async () => mockState.selectQueue.shift() ?? []),
-      })),
+      from: vi.fn(() => createSelectChain()),
     })),
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
@@ -717,6 +725,49 @@ describe('security boundaries integration', () => {
     expect(body).toHaveLength(1);
     expect(body[0]?.id).toBe(ids.observedA);
     expect(body[0]).not.toHaveProperty('notes');
+  });
+
+  it('channel-map は observed_wifi の bssid を返す', async () => {
+    const app = await createTestApp();
+
+    state.findFirstQueue.tournaments.push({
+      id: ids.tournamentA,
+    });
+    state.selectQueue.push(
+      [],
+      [],
+      [
+        {
+          id: ids.observedA,
+          tournamentId: ids.tournamentA,
+          source: 'wild',
+          ssid: 'Free-WiFi',
+          bssid: '00:11:22:33:44:55',
+          band: '5GHz',
+          channel: 36,
+          channelWidthMHz: 80,
+          rssi: -64,
+          locationLabel: 'hall-a',
+          observedAt: new Date('2026-04-10T00:00:00.000Z'),
+          notes: 'internal observation memo',
+          createdAt: new Date('2026-04-10T00:00:00.000Z'),
+          updatedAt: new Date('2026-04-10T00:00:00.000Z'),
+        },
+      ],
+    );
+
+    const res = await app.request(`/api/tournaments/${ids.tournamentA}/channel-map`, {
+      method: 'GET',
+      headers: {
+        'x-test-auth': JSON.stringify(participantAuth(ids.teamA, 'viewer')),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<Record<string, unknown>>;
+    expect(body).toHaveLength(1);
+    expect(body[0]?.sourceType).toBe('observed_wifi');
+    expect(body[0]?.bssid).toBe('00:11:22:33:44:55');
   });
 
   it('observedWifis 作成で帯域に合わないチャンネル幅を拒否する', async () => {

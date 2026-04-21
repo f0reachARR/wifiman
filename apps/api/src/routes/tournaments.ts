@@ -364,6 +364,7 @@ app.openapi(getChannelMap, async (c) => {
         channelWidthMHz: w.channelWidthMHz ?? undefined,
         observedWifiId: w.id,
         ssid: w.ssid,
+        bssid: w.bssid ?? undefined,
         source: w.source,
         rssi: w.rssi ?? null,
         locationLabel: w.locationLabel ?? null,

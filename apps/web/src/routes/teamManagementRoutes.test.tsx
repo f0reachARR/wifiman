@@ -145,6 +145,7 @@ function createBaseResponses(session: typeof ownTeamSession | typeof otherTeamSe
           channelWidthMHz: 20,
           observedWifiId: '00000000-0000-4000-8000-000000000100',
           ssid: 'Venue WiFi',
+          bssid: '00:11:22:33:44:55',
           source: 'wild',
           rssi: -68,
           locationLabel: 'North Hall',
@@ -487,7 +488,7 @@ describe('team management routes', () => {
     );
   });
 
-  it('参加者は大会トップからチャンネルマップへ遷移し、公開範囲内の詳細だけを見る', async () => {
+  it('参加者は大会トップからチャンネルマップへ遷移し、詳細導線を実態どおりに表示する', async () => {
     renderRoute(`/tournaments/${tournamentId}`, {
       ...createBaseResponses(ownTeamSession),
       [`/api/tournaments/${tournamentId}/best-practices`]: {
@@ -524,6 +525,23 @@ describe('team management routes', () => {
 
     expect(await screen.findByText('問題報告が集中しています')).toBeInTheDocument();
     expect(screen.getByText('AP 型番: AP-9000')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', {
+        name: '参考ベストプラクティスへ移動',
+      }),
+    ).toHaveAttribute('href', '#channel-map-best-practices');
+    expect(screen.getByRole('link', { name: 'このチームの詳細を見る' })).toHaveAttribute(
+      'href',
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+    );
+
+    fireEvent.click(screen.getByLabelText('Venue WiFi bar'));
+
+    expect(await screen.findByText('BSSID: 00:11:22:33:44:55')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'チーム一覧から報告先を探す' })).toHaveAttribute(
+      'href',
+      `/tournaments/${tournamentId}/teams`,
+    );
     expect(screen.queryByText(/contactEmail|displayContactName|notes/i)).not.toBeInTheDocument();
   });
 

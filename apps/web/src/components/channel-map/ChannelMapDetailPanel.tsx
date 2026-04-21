@@ -32,6 +32,8 @@ export function ChannelMapDetailPanel({ entry, tournamentId }: ChannelMapDetailP
   }
 
   const meta = CHANNEL_MAP_SOURCE_META[entry.sourceType];
+  const teamDetailHref =
+    entry.teamId !== null ? `/tournaments/${tournamentId}/teams/${entry.teamId}` : null;
 
   return (
     <Card className='feature-card' padding='lg' radius='xl'>
@@ -66,6 +68,7 @@ export function ChannelMapDetailPanel({ entry, tournamentId }: ChannelMapDetailP
           {entry.clientDeviceModel ? <Text>Client 型番: {entry.clientDeviceModel}</Text> : null}
           {entry.reportCount > 0 ? <Text>問題報告: {entry.reportCount} 件</Text> : null}
           {entry.ssid ? <Text>SSID: {entry.ssid}</Text> : null}
+          {entry.bssid ? <Text>BSSID: {entry.bssid}</Text> : null}
           {entry.sourceLabel ? <Text>観測ソース: {entry.sourceLabel}</Text> : null}
           {entry.rssi !== null ? <Text>RSSI: {entry.rssi} dBm</Text> : null}
           {entry.locationLabel ? <Text>観測位置: {entry.locationLabel}</Text> : null}
@@ -73,17 +76,23 @@ export function ChannelMapDetailPanel({ entry, tournamentId }: ChannelMapDetailP
         </Stack>
 
         <Group>
-          <Button component={Link} to={`/tournaments/${tournamentId}`} variant='light'>
-            ベストプラクティスを見る
+          <Button component='a' href='#channel-map-best-practices' variant='light'>
+            参考ベストプラクティスへ移動
           </Button>
-          <Button
-            component={Link}
-            to={`/tournaments/${tournamentId}/teams`}
-            color='orange'
-            variant='light'
-          >
-            報告作成に進むチームを探す
-          </Button>
+          {teamDetailHref ? (
+            <Button component={Link} to={teamDetailHref} color='orange' variant='light'>
+              このチームの詳細を見る
+            </Button>
+          ) : (
+            <Button
+              component={Link}
+              to={`/tournaments/${tournamentId}/teams`}
+              color='orange'
+              variant='light'
+            >
+              チーム一覧から報告先を探す
+            </Button>
+          )}
         </Group>
       </Stack>
     </Card>
