@@ -1,0 +1,289 @@
+import {
+  BANDS,
+  type BestPractice,
+  CHANNEL_WIDTHS,
+  CreateDeviceSpecSchema,
+  CreateTeamSchema,
+  CreateWifiConfigSchema,
+  canActivateWifiConfig,
+  canAddWifiConfig,
+  isValidChannel,
+  isValidChannelWidth,
+  MAX_ACTIVE_WIFI_CONFIGS,
+  type UpdateTeam,
+  UpdateTeamSchema,
+  type WifiConfig,
+} from '@wifiman/shared';
+import type { z } from 'zod';
+
+const TeamEditorSchema = CreateTeamSchema.omit({ tournamentId: true });
+const WifiConfigEditorSchema = CreateWifiConfigSchema.omit({ teamId: true });
+const DeviceSpecEditorSchema = CreateDeviceSpecSchema.omit({ teamId: true });
+
+export type TeamFormValues = {
+  name: string;
+  organization: string;
+  pitId: string;
+  contactEmail: string;
+  displayContactName: string;
+  notes: string;
+};
+
+export type WifiConfigFormValues = {
+  name: string;
+  purpose: z.infer<typeof WifiConfigEditorSchema>['purpose'];
+  band: z.infer<typeof WifiConfigEditorSchema>['band'];
+  channel: string;
+  channelWidthMHz: string;
+  role: z.infer<typeof WifiConfigEditorSchema>['role'];
+  status: z.infer<typeof WifiConfigEditorSchema>['status'];
+  apDeviceId: string;
+  clientDeviceId: string;
+  expectedDistanceCategory:
+    | ''
+    | NonNullable<z.infer<typeof WifiConfigEditorSchema>['expectedDistanceCategory']>;
+  pingTargetIp: string;
+  notes: string;
+};
+
+export type DeviceSpecFormValues = {
+  vendor: string;
+  model: string;
+  kind: z.infer<typeof DeviceSpecEditorSchema>['kind'];
+  supportedBands: Array<z.infer<typeof DeviceSpecEditorSchema>['supportedBands'][number]>;
+  notes: string;
+  knownIssues: string;
+};
+
+export type FormErrors<T extends string> = Partial<Record<T, string>>;
+
+type TeamFormSource = {
+  name: string;
+  organization?: string | null;
+  pitId?: string | null;
+  contactEmail?: string | null;
+  displayContactName?: string | null;
+  notes?: string | null;
+};
+
+type WifiConfigFormSource = {
+  name: string;
+  purpose: WifiConfigFormValues['purpose'];
+  band: WifiConfigFormValues['band'];
+  channel: number;
+  channelWidthMHz: number;
+  role: WifiConfigFormValues['role'];
+  status: WifiConfigFormValues['status'];
+  apDeviceId?: string | null;
+  clientDeviceId?: string | null;
+  expectedDistanceCategory?: WifiConfigFormValues['expectedDistanceCategory'] | null;
+  pingTargetIp?: string | null;
+  notes?: string | null;
+};
+
+type DeviceSpecFormSource = {
+  vendor?: string | null;
+  model: string;
+  kind: DeviceSpecFormValues['kind'];
+  supportedBands: DeviceSpecFormValues['supportedBands'];
+  notes?: string | null;
+  knownIssues?: string | null;
+};
+
+function normalizeOptionalString(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function buildTeamFormValues(team: TeamFormSource | UpdateTeam): TeamFormValues {
+  return {
+    name: team.name ?? '',
+    organization: team.organization ?? '',
+    pitId: team.pitId ?? '',
+    contactEmail: team.contactEmail ?? '',
+    displayContactName: team.displayContactName ?? '',
+    notes: team.notes ?? '',
+  };
+}
+
+export function parseTeamFormValues(values: TeamFormValues): {
+  data?: UpdateTeam;
+  errors: FormErrors<keyof TeamFormValues>;
+} {
+  const candidate = {
+    name: values.name.trim(),
+    organization: normalizeOptionalString(values.organization),
+    pitId: normalizeOptionalString(values.pitId),
+    contactEmail: normalizeOptionalString(values.contactEmail),
+    displayContactName: normalizeOptionalString(values.displayContactName),
+    notes: normalizeOptionalString(values.notes),
+  } satisfies z.input<typeof TeamEditorSchema>;
+
+  const parsed = TeamEditorSchema.safeParse(candidate);
+  if (parsed.success) {
+    return { data: UpdateTeamSchema.parse(parsed.data), errors: {} };
+  }
+
+  const errors: FormErrors<keyof TeamFormValues> = {};
+  for (const issue of parsed.error.issues) {
+    const field = issue.path[0];
+    if (typeof field === 'string' && !(field in errors)) {
+      errors[field as keyof TeamFormValues] = issue.message;
+    }
+  }
+  return { errors };
+}
+
+export function buildWifiConfigFormValues(config?: WifiConfigFormSource): WifiConfigFormValues {
+  return {
+    name: config?.name ?? '',
+    purpose: config?.purpose ?? 'control',
+    band: config?.band ?? '5GHz',
+    channel: config ? String(config.channel) : '36',
+    channelWidthMHz: config ? String(config.channelWidthMHz) : '80',
+    role: config?.role ?? 'primary',
+    status: config?.status ?? 'active',
+    apDeviceId: config?.apDeviceId ?? '',
+    clientDeviceId: config?.clientDeviceId ?? '',
+    expectedDistanceCategory: config?.expectedDistanceCategory ?? '',
+    pingTargetIp: config?.pingTargetIp ?? '',
+    notes: config?.notes ?? '',
+  };
+}
+
+export function parseWifiConfigFormValues(
+  values: WifiConfigFormValues,
+  existingConfigs: ReadonlyArray<Pick<WifiConfig, 'id' | 'status'>>,
+  editingConfigId?: string,
+): {
+  data?: z.infer<typeof WifiConfigEditorSchema>;
+  errors: FormErrors<keyof WifiConfigFormValues>;
+  formError?: string;
+} {
+  const channel = Number(values.channel);
+  const channelWidthMHz = Number(values.channelWidthMHz);
+  const candidate = {
+    name: values.name.trim(),
+    purpose: values.purpose,
+    band: values.band,
+    channel,
+    channelWidthMHz,
+    role: values.role,
+    status: values.status,
+    apDeviceId: normalizeOptionalString(values.apDeviceId),
+    clientDeviceId: normalizeOptionalString(values.clientDeviceId),
+    expectedDistanceCategory:
+      values.expectedDistanceCategory.length > 0 ? values.expectedDistanceCategory : null,
+    pingTargetIp: normalizeOptionalString(values.pingTargetIp),
+    notes: normalizeOptionalString(values.notes),
+  };
+
+  const parsed = WifiConfigEditorSchema.safeParse(candidate);
+  const errors: FormErrors<keyof WifiConfigFormValues> = {};
+
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) {
+      const field = issue.path[0];
+      if (typeof field === 'string' && !(field in errors)) {
+        errors[field as keyof WifiConfigFormValues] = issue.message;
+      }
+    }
+    return { errors };
+  }
+
+  if (!isValidChannel(parsed.data.band, parsed.data.channel)) {
+    errors.channel = `帯域 ${parsed.data.band} に対して無効なチャンネルです`;
+  }
+  if (!isValidChannelWidth(parsed.data.band, parsed.data.channelWidthMHz)) {
+    errors.channelWidthMHz = `帯域 ${parsed.data.band} に対して無効なチャンネル幅です`;
+  }
+  if (Object.keys(errors).length > 0) {
+    return { errors };
+  }
+
+  const formError =
+    editingConfigId == null
+      ? parsed.data.status !== 'disabled' && !canAddWifiConfig(existingConfigs)
+        ? `WiFi 構成は最大 ${MAX_ACTIVE_WIFI_CONFIGS} 件までです`
+        : undefined
+      : !canActivateWifiConfig(existingConfigs, editingConfigId, parsed.data.status)
+        ? `WiFi 構成は最大 ${MAX_ACTIVE_WIFI_CONFIGS} 件までです`
+        : undefined;
+
+  if (formError) {
+    return { errors: {}, formError };
+  }
+
+  return { data: parsed.data, errors: {} };
+}
+
+export function buildDeviceSpecFormValues(spec?: DeviceSpecFormSource): DeviceSpecFormValues {
+  return {
+    vendor: spec?.vendor ?? '',
+    model: spec?.model ?? '',
+    kind: spec?.kind ?? 'ap',
+    supportedBands: spec?.supportedBands ?? ['5GHz'],
+    notes: spec?.notes ?? '',
+    knownIssues: spec?.knownIssues ?? '',
+  };
+}
+
+export function parseDeviceSpecFormValues(values: DeviceSpecFormValues): {
+  data?: z.infer<typeof DeviceSpecEditorSchema>;
+  errors: FormErrors<keyof DeviceSpecFormValues>;
+} {
+  const candidate = {
+    vendor: normalizeOptionalString(values.vendor),
+    model: values.model.trim(),
+    kind: values.kind,
+    supportedBands: values.supportedBands,
+    notes: normalizeOptionalString(values.notes),
+    knownIssues: normalizeOptionalString(values.knownIssues),
+  };
+
+  const parsed = DeviceSpecEditorSchema.safeParse(candidate);
+  if (parsed.success) {
+    return { data: parsed.data, errors: {} };
+  }
+
+  const errors: FormErrors<keyof DeviceSpecFormValues> = {};
+  for (const issue of parsed.error.issues) {
+    const field = issue.path[0];
+    if (typeof field === 'string' && !(field in errors)) {
+      errors[field as keyof DeviceSpecFormValues] = issue.message;
+    }
+  }
+  return { errors };
+}
+
+export function getBandOptions() {
+  return [...BANDS];
+}
+
+export function getChannelWidthOptions() {
+  return [...CHANNEL_WIDTHS];
+}
+
+export function countActiveWifiConfigs(configs: ReadonlyArray<Pick<WifiConfig, 'status'>>): number {
+  return configs.filter((config) => config.status === 'active' || config.status === 'standby')
+    .length;
+}
+
+export function findRelevantBestPractices(
+  bestPractices: ReadonlyArray<BestPractice>,
+  band: WifiConfigFormValues['band'],
+  relatedModels: ReadonlyArray<string>,
+): BestPractice[] {
+  const modelSet = new Set(
+    relatedModels.map((model) => model.trim().toLowerCase()).filter(Boolean),
+  );
+  return bestPractices.filter((practice) => {
+    if (practice.scope === 'general' || practice.scope === 'tournament') {
+      return true;
+    }
+    if (practice.scope === 'band') {
+      return practice.targetBand === band;
+    }
+    return practice.targetModel != null && modelSet.has(practice.targetModel.trim().toLowerCase());
+  });
+}

@@ -17,6 +17,9 @@ import { LoginPage } from './routes/LoginPage.js';
 import { OfflinePage } from './routes/OfflinePage.js';
 import { SyncPage } from './routes/SyncPage.js';
 import { TeamAccessPage } from './routes/TeamAccessPage.js';
+import { TeamDetailPage } from './routes/TeamDetailPage.js';
+import { TeamListPage } from './routes/TeamListPage.js';
+import { TournamentOverviewPage } from './routes/TournamentOverviewPage.js';
 
 type RouterContext = {
   queryClient: QueryClient;
@@ -60,11 +63,16 @@ async function ensureAuthenticatedForPath(queryClient: QueryClient, pathname: st
     throw redirect({ to: '/login' });
   }
 
+  const [, search = ''] = destination.split('?');
+  const next = new URLSearchParams(search).get('next');
+
+  if (!next) {
+    throw redirect({ to: '/login' });
+  }
+
   throw redirect({
     to: '/login',
-    search: {
-      next: '/app/sync',
-    },
+    search: { next },
   });
 }
 
@@ -116,6 +124,36 @@ const appSyncRoute = createRoute({
   component: SyncPage,
 });
 
+const tournamentOverviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId',
+  component: function TournamentOverviewRouteComponent() {
+    const { tournamentId } = tournamentOverviewRoute.useParams();
+    return <TournamentOverviewPage tournamentId={tournamentId} />;
+  },
+});
+
+const tournamentTeamsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/teams',
+  component: function TournamentTeamsRouteComponent() {
+    const { tournamentId } = tournamentTeamsRoute.useParams();
+    return <TeamListPage tournamentId={tournamentId} />;
+  },
+});
+
+const teamDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/teams/$teamId',
+  beforeLoad: async ({ context, location }) => {
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+  },
+  component: function TeamDetailRouteComponent() {
+    const { tournamentId, teamId } = teamDetailRoute.useParams();
+    return <TeamDetailPage tournamentId={tournamentId} teamId={teamId} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   loginRoute,
@@ -123,6 +161,9 @@ const routeTree = rootRoute.addChildren([
   offlineRoute,
   appRoute,
   appSyncRoute,
+  tournamentOverviewRoute,
+  tournamentTeamsRoute,
+  teamDetailRoute,
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {

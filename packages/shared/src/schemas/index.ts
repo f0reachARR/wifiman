@@ -9,4 +9,5 @@ export * from './syncRecord.js';
 export * from './team.js';
 export * from './teamAccess.js';
 export * from './tournament.js';
+export * from './tournamentPublicOverview.js';
 export * from './wifiConfig.js';

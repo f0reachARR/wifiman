@@ -1,5 +1,6 @@
-import { Button, Card, Grid, Group, Stack, Text, ThemeIcon, Title } from '@mantine/core';
+import { Button, Card, Grid, Group, Loader, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
+import { useTournaments } from '../lib/useTeamManagement.js';
 
 const pillars = [
   {
@@ -17,6 +18,8 @@ const pillars = [
 ];
 
 export function HomePage() {
+  const tournamentsQuery = useTournaments();
+
   return (
     <Stack gap='xl'>
       <Card className='hero-card' padding='xl' radius='xl'>
@@ -33,8 +36,7 @@ export function HomePage() {
             </div>
           </Group>
           <Text size='lg'>
-            React + Vite + TanStack + Mantine + PWA の基盤を整え、公開画面と保護画面を同じ App Shell
-            で運用できる状態にしました。
+            会場全体の公開情報から、自チームの WiFi 構成と機材仕様の管理までを同一導線で扱います。
           </Text>
           <Group>
             <Button component={Link} to='/login' size='md' color='teal'>
@@ -59,6 +61,50 @@ export function HomePage() {
           </Grid.Col>
         ))}
       </Grid>
+
+      <Stack gap='md'>
+        <Group justify='space-between'>
+          <div>
+            <Title order={2}>公開中の大会</Title>
+            <Text c='dimmed'>大会トップは未認証でも閲覧できます。</Text>
+          </div>
+        </Group>
+
+        {tournamentsQuery.isLoading ? (
+          <Group>
+            <Loader color='teal' size='sm' />
+            <Text c='dimmed'>大会一覧を読み込んでいます</Text>
+          </Group>
+        ) : (
+          <Grid>
+            {(tournamentsQuery.data ?? []).map((tournament) => (
+              <Grid.Col key={tournament.id} span={{ base: 12, md: 6 }}>
+                <Card className='feature-card' padding='lg' radius='xl'>
+                  <Stack gap='sm'>
+                    <Title order={3}>{tournament.name}</Title>
+                    <Text c='dimmed'>
+                      {tournament.venueName} / {tournament.startDate} - {tournament.endDate}
+                    </Text>
+                    {tournament.description ? <Text>{tournament.description}</Text> : null}
+                    <Group>
+                      <Button component={Link} to={`/tournaments/${tournament.id}`}>
+                        大会トップへ
+                      </Button>
+                      <Button
+                        component={Link}
+                        to={`/tournaments/${tournament.id}/teams`}
+                        variant='light'
+                      >
+                        チーム一覧
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Card>
+              </Grid.Col>
+            ))}
+          </Grid>
+        )}
+      </Stack>
     </Stack>
   );
 }
