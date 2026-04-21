@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getLoginMode, getProtectedRedirectPath, parseAuthSession } from './auth.js';
+import {
+  DEFAULT_AUTHENTICATED_REDIRECT_PATH,
+  getLoginMode,
+  getPostLoginRedirectPath,
+  getProtectedRedirectPath,
+  parseAuthSession,
+} from './auth.js';
 
 describe('auth helpers', () => {
   afterEach(() => {
@@ -31,6 +37,23 @@ describe('auth helpers', () => {
   it('認証済みなら保護ルートでも遷移を妨げない', () => {
     expect(getProtectedRedirectPath('/app', operatorSession)).toBeNull();
     expect(getProtectedRedirectPath('/app/sync', teamSession)).toBeNull();
+  });
+
+  it('login 成功後は安全な内部 next パスへ遷移する', () => {
+    expect(getPostLoginRedirectPath('/app/sync')).toBe('/app/sync');
+    expect(getPostLoginRedirectPath('/app?tab=operators#status')).toBe('/app?tab=operators#status');
+  });
+
+  it('危険または無効な next は /app にフォールバックする', () => {
+    expect(getPostLoginRedirectPath(null)).toBe(DEFAULT_AUTHENTICATED_REDIRECT_PATH);
+    expect(getPostLoginRedirectPath('')).toBe(DEFAULT_AUTHENTICATED_REDIRECT_PATH);
+    expect(getPostLoginRedirectPath('https://example.com/app')).toBe(
+      DEFAULT_AUTHENTICATED_REDIRECT_PATH,
+    );
+    expect(getPostLoginRedirectPath('//example.com/app')).toBe(DEFAULT_AUTHENTICATED_REDIRECT_PATH);
+    expect(getPostLoginRedirectPath('/\\example.com/app')).toBe(
+      DEFAULT_AUTHENTICATED_REDIRECT_PATH,
+    );
   });
 
   it('team session はサーバ発行の識別子を必須にする', () => {

@@ -22,6 +22,8 @@ export type AuthSession = z.infer<typeof AuthSessionSchema>;
 
 export type LoginMode = 'better-auth' | 'dev-operator';
 
+export const DEFAULT_AUTHENTICATED_REDIRECT_PATH = '/app';
+
 export function parseAuthSession(input: unknown): AuthSession {
   return AuthSessionSchema.parse(input);
 }
@@ -32,6 +34,18 @@ export function isDevOperatorAuthEnabled(): boolean {
 
 export function getLoginMode(): LoginMode {
   return isDevOperatorAuthEnabled() ? 'dev-operator' : 'better-auth';
+}
+
+function isSafeInternalRedirectPath(path: string) {
+  return path.startsWith('/') && !path.startsWith('//') && !path.includes('\\');
+}
+
+export function getPostLoginRedirectPath(nextPath: string | null | undefined) {
+  if (!nextPath || !isSafeInternalRedirectPath(nextPath)) {
+    return DEFAULT_AUTHENTICATED_REDIRECT_PATH;
+  }
+
+  return nextPath;
 }
 
 export function getProtectedRedirectPath(pathname: string, session: AuthSession | null) {

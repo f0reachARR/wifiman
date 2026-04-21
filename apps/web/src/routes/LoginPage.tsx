@@ -2,7 +2,7 @@ import { Alert, Button, Card, PasswordInput, Stack, Text, TextInput, Title } fro
 import { useForm } from '@tanstack/react-form';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
-import { getLoginMode } from '../lib/auth.js';
+import { getLoginMode, getPostLoginRedirectPath } from '../lib/auth.js';
 import { useAuthActions } from '../lib/useAuthSession.js';
 
 type LoginFormValues = {
@@ -16,6 +16,9 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { signInAsOperator } = useAuthActions();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const postLoginRedirectPath = getPostLoginRedirectPath(
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('next'),
+  );
   const loginMode = getLoginMode();
   const usesDevOperatorLogin = loginMode === 'dev-operator';
   const form = useForm({
@@ -28,7 +31,7 @@ export function LoginPage() {
     onSubmit: async ({ value }) => {
       setSubmitError(null);
       await signInAsOperator(value);
-      await navigate({ to: '/app' });
+      await navigate({ href: postLoginRedirectPath });
     },
   });
 

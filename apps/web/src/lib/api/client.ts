@@ -1,14 +1,20 @@
-import {
-  AUTH_SESSION_PATH,
-  type AuthSessionContract,
-  type CreateDevOperatorSessionInput,
-  DEV_OPERATOR_SESSION_PATH,
-  type OperatorSessionContract,
-  type TeamSessionContract,
-  VERIFY_TEAM_ACCESS_PATH,
-  type VerifyTeamAccessInput,
-} from '@wifiman/api/contracts';
 import { type AuthSession, parseAuthSession } from '../auth.js';
+import type { paths } from './generated/schema.js';
+
+const AUTH_SESSION_PATH = '/auth/session';
+const DEV_OPERATOR_SESSION_PATH = '/auth/dev-operator-session';
+const VERIFY_TEAM_ACCESS_PATH = '/team-accesses/verify';
+
+type AuthSessionContract =
+  paths['/auth/session']['get']['responses'][200]['content']['application/json'];
+type CreateDevOperatorSessionInput =
+  paths['/auth/dev-operator-session']['post']['requestBody']['content']['application/json'];
+type OperatorSessionContract =
+  paths['/auth/dev-operator-session']['post']['responses'][200]['content']['application/json'];
+type TeamSessionContract =
+  paths['/team-accesses/verify']['post']['responses'][200]['content']['application/json'];
+type VerifyTeamAccessInput =
+  paths['/team-accesses/verify']['post']['requestBody']['content']['application/json'];
 
 export class ApiClientError extends Error {
   readonly status: number;
