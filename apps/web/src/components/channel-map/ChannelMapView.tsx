@@ -48,7 +48,7 @@ export function ChannelMapView({ entries, domain, selectedId, onSelect }: Channe
 
   return (
     <Box className='channel-map-view'>
-      <svg viewBox={`0 0 ${SVG_WIDTH} ${height}`} role='img' aria-label='チャンネルマップ SVG'>
+      <svg viewBox={`0 0 ${SVG_WIDTH} ${height}`} aria-label='チャンネルマップ SVG'>
         {domain.ticks.map((tick) => {
           const tickX = toXPosition(tick.centerFreqMHz, domain);
           return (

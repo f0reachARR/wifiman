@@ -99,9 +99,36 @@ describe('ChannelMapView', () => {
       </MantineProvider>,
     );
 
-    expect(screen.getByRole('img', { name: 'チャンネルマップ SVG' })).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText('Control 5G bar'));
+    expect(screen.getByLabelText('チャンネルマップ SVG')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Control 5G bar' }));
     expect(onSelect).toHaveBeenCalledWith(fiveGigahertzEntries[0]);
+  });
+
+  it('exposes each bar as an accessible button within the labeled SVG', () => {
+    render(
+      <MantineProvider>
+        <ChannelMapView
+          entries={fiveGigahertzEntries}
+          domain={{
+            minFreqMHz: 5140,
+            maxFreqMHz: 5905,
+            ticks: [
+              { channel: 36, centerFreqMHz: 5180 },
+              { channel: 40, centerFreqMHz: 5200 },
+              { channel: 44, centerFreqMHz: 5220 },
+              { channel: 48, centerFreqMHz: 5240 },
+            ],
+          }}
+          selectedId={null}
+          onSelect={vi.fn()}
+        />
+      </MantineProvider>,
+    );
+
+    expect(screen.queryByRole('img', { name: 'チャンネルマップ SVG' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('チャンネルマップ SVG')).toContainElement(
+      screen.getByRole('button', { name: 'Control 5G bar' }),
+    );
   });
 
   it('supports keyboard selection with Enter and Space', () => {
@@ -127,7 +154,7 @@ describe('ChannelMapView', () => {
       </MantineProvider>,
     );
 
-    const bar = screen.getByLabelText('Control 5G bar');
+    const bar = screen.getByRole('button', { name: 'Control 5G bar' });
 
     expect(bar).toHaveAttribute('tabindex', '0');
 
@@ -159,7 +186,7 @@ describe('ChannelMapView', () => {
       </MantineProvider>,
     );
 
-    const bar = screen.getByLabelText('Control 5G bar');
+    const bar = screen.getByRole('button', { name: 'Control 5G bar' });
 
     expect(bar).not.toHaveAttribute('data-focus-visible', 'true');
     expect(container.querySelector('rect[data-focus-outline-for="entry-1"]')).toBeNull();
