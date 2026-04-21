@@ -8,11 +8,17 @@
       "types": "./src/client.ts",
       "import": "./src/client.ts",
       "default": "./src/client.ts"
+    },
+    "./contracts": {
+      "types": "./src/contracts.ts",
+      "import": "./src/contracts.ts",
+      "default": "./src/contracts.ts"
     }
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc --noEmit && node esbuild.mjs",
+    "openapi:generate": "tsx src/generateOpenApi.ts",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
     "test:unit": "vitest run tests/unit",

@@ -2,19 +2,11 @@ import { swaggerUI } from '@hono/swagger-ui';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { auth } from './auth.js';
+import { createApiRouteApp, OPENAPI_DOCUMENT_CONFIG } from './client.js';
 import { env } from './env.js';
 import { errorHandler } from './errors.js';
 import { setAuthContext } from './middleware/auth.js';
 import { createOpenApiApp } from './openapi.js';
-import bestPracticeRoutes from './routes/bestPractices.js';
-import deviceSpecRoutes from './routes/deviceSpecs.js';
-import issueReportRoutes from './routes/issueReports.js';
-import noticeRoutes from './routes/notices.js';
-import observedWifiRoutes from './routes/observedWifis.js';
-import teamAccessRoutes from './routes/teamAccesses.js';
-import teamRoutes from './routes/teams.js';
-import tournamentRoutes from './routes/tournaments.js';
-import wifiConfigRoutes from './routes/wifiConfigs.js';
 
 export function createApp() {
   const app = createOpenApiApp();
@@ -39,38 +31,24 @@ export function createApp() {
   // Logger
   app.use('*', logger());
 
-  // Better Auth
-  app.on(['POST', 'GET'], '/api/auth/**', (c) => {
-    return auth.handler(c.req.raw);
-  });
-
   // 認証コンテキストをセット
   app.use('/api/*', setAuthContext);
 
   // Routes
-  const api = createOpenApiApp();
-
-  api.route('/', tournamentRoutes);
-  api.route('/', teamRoutes);
-  api.route('/', teamAccessRoutes);
-  api.route('/', wifiConfigRoutes);
-  api.route('/', deviceSpecRoutes);
-  api.route('/', observedWifiRoutes);
-  api.route('/', issueReportRoutes);
-  api.route('/', bestPracticeRoutes);
-  api.route('/', noticeRoutes);
+  const api = createApiRouteApp();
 
   // OpenAPI ドキュメント
-  api.doc('/openapi.json', {
-    openapi: '3.1.0',
-    info: { title: 'WiFiMan API', version: '1.0.0' },
-    servers: [{ url: '/api', description: 'WiFiMan API server' }],
-  });
+  api.doc('/openapi.json', OPENAPI_DOCUMENT_CONFIG);
 
   // Swagger UI
   api.get('/docs', swaggerUI({ url: '/api/openapi.json' }));
 
   app.route('/api', api);
+
+  // Better Auth の catch-all は custom auth routes より後に登録する。
+  app.on(['POST', 'GET'], '/api/auth/**', (c) => {
+    return auth.handler(c.req.raw);
+  });
 
   // グローバルエラーハンドラ
   app.onError(errorHandler);
