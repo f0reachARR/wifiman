@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="WiFiMan icon">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#173f35" />
+      <stop offset="100%" stop-color="#b65f2a" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <circle cx="256" cy="256" r="26" fill="#f7f3ea" />
+  <path d="M173 242c45-45 121-45 166 0" fill="none" stroke="#f7f3ea" stroke-linecap="round" stroke-width="24" />
+  <path d="M130 196c69-69 183-69 252 0" fill="none" stroke="#f7f3ea" stroke-linecap="round" stroke-width="24" />
+  <path d="M224 336h64l34 72h-132z" fill="#f7f3ea" />
+</svg>

@@ -6,15 +6,23 @@ import { auth } from '../auth.js';
 import { canEditTeam, canViewTeam, hasParticipantRole } from '../authz.js';
 import { db } from '../db/index.js';
 import { teamAccesses, teams } from '../db/schema/index.js';
+import { env } from '../env.js';
 import { forbidden, unauthorized } from '../errors.js';
+import {
+  OPERATOR_DEV_SESSION_COOKIE_NAME,
+  verifyOperatorDevSessionCookie,
+} from '../operatorDevSession.js';
 import { verifyTeamAccessSessionCookie } from '../teamAccessSession.js';
 
 export type AuthContext = {
   userId?: string;
   userRole?: 'user' | 'operator';
+  operatorDisplayName?: string;
+  operatorSessionId?: string;
   teamId?: string;
   teamTournamentId?: string;
   teamAccessRole?: 'editor' | 'viewer';
+  teamAccessId?: string;
 };
 
 declare module 'hono' {
@@ -53,10 +61,28 @@ export async function setAuthContext(c: Context, next: Next) {
   const authCtx: AuthContext = {};
 
   // Better Auth セッションの確認
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const session = (await auth.api.getSession({ headers: c.req.raw.headers })) as {
+    user?: { id: string; name?: string; email?: string; role?: 'user' | 'operator' };
+    session?: { id?: string };
+  } | null;
   if (session?.user) {
     authCtx.userId = session.user.id;
-    authCtx.userRole = (session.user as { role?: 'user' | 'operator' }).role ?? 'user';
+    authCtx.userRole = session.user.role ?? 'user';
+    authCtx.operatorDisplayName = session.user.name ?? session.user.email ?? 'Operator';
+    authCtx.operatorSessionId = session.session?.id ?? session.user.id;
+  }
+
+  if (!authCtx.userId && env.DEV_OPERATOR_AUTH_ENABLED && env.NODE_ENV !== 'production') {
+    const devOperatorSession = verifyOperatorDevSessionCookie(
+      getCookie(c, OPERATOR_DEV_SESSION_COOKIE_NAME),
+    );
+
+    if (devOperatorSession) {
+      authCtx.userId = `dev-operator:${devOperatorSession.sessionId}`;
+      authCtx.userRole = 'operator';
+      authCtx.operatorDisplayName = devOperatorSession.displayName;
+      authCtx.operatorSessionId = devOperatorSession.sessionId;
+    }
   }
 
   // チーム編集の短期セッション Cookie を確認する。
@@ -80,6 +106,7 @@ export async function setAuthContext(c: Context, next: Next) {
         authCtx.teamId = access.teamId;
         authCtx.teamAccessRole = access.role;
         authCtx.teamTournamentId = team.tournamentId;
+        authCtx.teamAccessId = access.id;
 
         // last_used_at を更新
         await db

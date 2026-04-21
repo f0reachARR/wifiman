@@ -3,6 +3,7 @@ import {
   type ChannelMapEntry,
   ChannelMapEntrySchema,
   CreateTournamentSchema,
+  TournamentPublicOverviewSchema,
   TournamentSchema,
   UpdateTournamentSchema,
 } from '@wifiman/shared';
@@ -12,6 +13,7 @@ import { db } from '../db/index.js';
 import {
   deviceSpecs,
   issueReports,
+  notices,
   observedWifis,
   teams,
   tournaments,
@@ -25,6 +27,7 @@ const idParam = z.object({ id: z.string() });
 const app = createOpenApiApp();
 const tournamentResponseSchema = TournamentSchema;
 const tournamentListResponseSchema = z.array(tournamentResponseSchema);
+const tournamentPublicOverviewResponseSchema = TournamentPublicOverviewSchema;
 
 // GET /api/tournaments - 大会一覧 (public)
 const listTournaments = createRoute({
@@ -116,6 +119,79 @@ app.openapi(getTournament, async (c) => {
   });
   if (!row) throw notFound('大会が見つかりません');
   return c.json(tournamentResponseSchema.parse(row), 200);
+});
+
+// GET /api/tournaments/:id/public-overview - 大会トップ用公開サマリ (public)
+const getTournamentPublicOverview = createRoute({
+  method: 'get',
+  path: '/tournaments/{id}/public-overview',
+  tags: ['tournaments'],
+  request: { params: idParam },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: tournamentPublicOverviewResponseSchema } },
+      description: '大会公開サマリ',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Not Found',
+    },
+  },
+});
+app.openapi(getTournamentPublicOverview, async (c) => {
+  const { id } = c.req.valid('param');
+  const tournament = await db.query.tournaments.findFirst({
+    where: eq(tournaments.id, id),
+  });
+  if (!tournament) throw notFound('大会が見つかりません');
+
+  const tournamentTeams = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(eq(teams.tournamentId, id));
+  const teamIds = new Set(tournamentTeams.map((team) => team.id));
+
+  const tournamentWifiConfigs = await db
+    .select({ band: wifiConfigs.band, status: wifiConfigs.status, teamId: wifiConfigs.teamId })
+    .from(wifiConfigs)
+    .where(ne(wifiConfigs.status, 'disabled'));
+
+  const wifiConfigSummary = {
+    '2.4GHz': 0,
+    '5GHz': 0,
+    '6GHz': 0,
+  };
+
+  for (const config of tournamentWifiConfigs) {
+    if (!teamIds.has(config.teamId)) {
+      continue;
+    }
+    wifiConfigSummary[config.band] += 1;
+  }
+
+  const publicIssueReports = await db
+    .select({ id: issueReports.id, visibility: issueReports.visibility })
+    .from(issueReports)
+    .where(eq(issueReports.tournamentId, id));
+  const visibleIssueReportCount = publicIssueReports.filter(
+    (issueReport) => issueReport.visibility === 'team_public',
+  ).length;
+
+  const tournamentNotices = await db
+    .select({ id: notices.id })
+    .from(notices)
+    .where(eq(notices.tournamentId, id));
+
+  return c.json(
+    tournamentPublicOverviewResponseSchema.parse({
+      tournament,
+      teamCount: tournamentTeams.length,
+      wifiConfigSummary,
+      publicIssueReportCount: visibleIssueReportCount,
+      noticeCount: tournamentNotices.length,
+    }),
+    200,
+  );
 });
 
 // PATCH /api/tournaments/:id - 大会更新 (operator)
