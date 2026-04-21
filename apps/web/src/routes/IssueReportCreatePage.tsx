@@ -8,8 +8,8 @@ import {
   NumberInput,
   Stack,
   Text,
-  TextInput,
   Textarea,
+  TextInput,
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -21,8 +21,8 @@ import {
   SYMPTOMS,
 } from '@wifiman/shared';
 import { useEffect, useMemo, useState } from 'react';
-import { canEditTeamResources } from '../lib/authz.js';
 import type { IssueReportCreateInput } from '../lib/api/client.js';
+import { canEditTeamResources } from '../lib/authz.js';
 import { useAuthSession } from '../lib/useAuthSession.js';
 import { useCreateIssueReportMutation, useTeamWifiConfigs } from '../lib/useTeamManagement.js';
 
@@ -77,7 +77,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
     }
 
     setValues((current) => {
-      if (current.wifiConfigId && wifiConfigs.some((config) => config.id === current.wifiConfigId)) {
+      if (
+        current.wifiConfigId &&
+        wifiConfigs.some((config) => config.id === current.wifiConfigId)
+      ) {
         return current;
       }
 
@@ -152,8 +155,12 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
       severity: values.severity,
       band: selectedConfig.band,
       channel: selectedConfig.channel,
-      ...(selectedConfig.channelWidthMHz ? { channelWidthMHz: selectedConfig.channelWidthMHz } : {}),
-      ...(values.reporterName.trim().length > 0 ? { reporterName: values.reporterName.trim() } : {}),
+      ...(selectedConfig.channelWidthMHz
+        ? { channelWidthMHz: selectedConfig.channelWidthMHz }
+        : {}),
+      ...(values.reporterName.trim().length > 0
+        ? { reporterName: values.reporterName.trim() }
+        : {}),
       ...(values.avgPingMs !== '' ? { avgPingMs: values.avgPingMs } : {}),
       ...(values.distanceCategory ? { distanceCategory: values.distanceCategory } : {}),
       ...(values.description.trim().length > 0 ? { description: values.description.trim() } : {}),
@@ -178,7 +185,8 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
         <div>
           <Title order={2}>不具合報告を作成</Title>
           <Text c='dimmed'>
-            チャンネルマップまたは自チーム画面から開始し、既存 WiFi 構成の情報を自動補完して短時間で報告します。
+            チャンネルマップまたは自チーム画面から開始し、既存 WiFi
+            構成の情報を自動補完して短時間で報告します。
           </Text>
         </div>
 

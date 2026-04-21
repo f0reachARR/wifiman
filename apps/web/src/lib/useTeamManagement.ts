@@ -72,8 +72,12 @@ export function useCreateIssueReportMutation(tournamentId: string) {
     mutationFn: (input: IssueReportCreateInput) => apiClient.createIssueReport(tournamentId, input),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: apiQueryKeys.tournamentIssueReports(tournamentId) }),
-        queryClient.invalidateQueries({ queryKey: apiQueryKeys.tournamentChannelMap(tournamentId) }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentIssueReports(tournamentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentChannelMap(tournamentId),
+        }),
         queryClient.invalidateQueries({
           queryKey: apiQueryKeys.tournamentPublicOverview(tournamentId),
         }),

@@ -1,11 +1,11 @@
 import { Alert, Badge, Button, Card, Group, Stack, Text, Title } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
+import { canEditTeamResources } from '../../lib/authz.js';
 import {
   CHANNEL_MAP_REPORT_WARNING_THRESHOLD,
   CHANNEL_MAP_SOURCE_META,
   type ChannelMapDisplayEntry,
 } from '../../lib/channelMap.js';
-import { canEditTeamResources } from '../../lib/authz.js';
 import { useAuthSession } from '../../lib/useAuthSession.js';
 
 type ChannelMapDetailPanelProps = {
