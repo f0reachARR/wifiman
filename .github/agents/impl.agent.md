@@ -10,7 +10,7 @@ tools:
     "todo",
     "ms-vscode.vscode-websearchforcopilot/websearch",
   ]
-model: "Claude Sonnet 4.6"
+model: "GPT-5.4"
 ---
 
 与えられた実行計画に従って、実装を行ってください。TDD に倣って、以下のステップで実施します。

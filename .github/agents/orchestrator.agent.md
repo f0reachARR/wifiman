@@ -19,8 +19,8 @@ model: "GPT-5.3-Codex"
 
 ## 手順 (#tool:todo)
 
-1. #tool:agent/runSubagent で issue エージェントを呼び出し、イシューを作成する
-2. 作成したイシューそれぞれに、以下を行い、実装を進める
+1. #tool:agent/runSubagent で issue エージェントを呼び出し、イシューを1つ以上作成する
+2. 作成したイシュー1つずつについて、以下を行い、実装を進める。エージェントにはissueのIDを渡して、イシューの内容を伝える。
    - #tool:agent/runSubagent で plan エージェントを呼び出し、実装計画を立てる
    - #tool:agent/runSubagent で impl エージェントを呼び出し、実装を行う
    - #tool:agent/runSubagent で review エージェントを呼び出し、コードレビューと修正を行う
