@@ -1376,6 +1376,65 @@ describe('team management routes', () => {
     });
   });
 
+  it('作成画面の必須欠落は field error として表示し submit error は出さない', async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+
+    expect(await screen.findByText('症状を選択してください')).toBeInTheDocument();
+    expect(await screen.findByText('深刻度を選択してください')).toBeInTheDocument();
+    expect(screen.queryByText('報告の保存に失敗しました')).not.toBeInTheDocument();
+  });
+
+  it('作成画面の API 失敗は submit error として表示する', async () => {
+    const ownResponses = createOwnTeamDetailResponses();
+
+    renderRoute(`/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`, {
+      ...ownResponses,
+      [`/api/tournaments/${tournamentId}/issue-reports`]: {
+        status: 200,
+        body: getRequiredResponse(ownResponses, `/api/tournaments/${tournamentId}/issue-reports`)
+          .body,
+      },
+    });
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+        return jsonResponse(
+          { error: { code: 'BAD_REQUEST', message: 'server submit failed' } },
+          400,
+        );
+      }
+
+      const matched = ownResponses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
+    fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
+    fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+
+    expect(await screen.findByText('server submit failed')).toBeInTheDocument();
+    expect(screen.queryByText('症状を選択してください')).not.toBeInTheDocument();
+    expect(screen.queryByText('深刻度を選択してください')).not.toBeInTheDocument();
+  });
+
   it('同期状況画面から local pending 報告詳細へ移動できる', async () => {
     const record = await queueIssueReportSync(tournamentId, {
       teamId: ownTeamId,
@@ -1791,6 +1850,85 @@ describe('team management routes', () => {
         attachments: null,
       });
     });
+  });
+
+  it('報告詳細の不正入力は field error として表示し submit error は出さない', async () => {
+    const ownResponses = createOwnTeamDetailResponses();
+    const issueReports = getRequiredResponse(
+      ownResponses,
+      `/api/tournaments/${tournamentId}/issue-reports`,
+    ).body as Array<Record<string, unknown>>;
+    const reportId = '00000000-0000-4000-8000-000000000061';
+    const report = issueReports[0];
+    if (!report) {
+      throw new Error('issue report fixture not found');
+    }
+
+    renderRoute(`/tournaments/${tournamentId}/issue-reports/${reportId}`, {
+      ...ownResponses,
+      [`/api/issue-reports/${reportId}`]: {
+        status: 200,
+        body: report,
+      },
+    });
+
+    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '-1' } });
+    fireEvent.click(screen.getByRole('button', { name: '追記を保存' }));
+
+    expect(await screen.findByText('0 以上の値を入力してください')).toBeInTheDocument();
+    expect(screen.queryByText('報告の更新に失敗しました')).not.toBeInTheDocument();
+  });
+
+  it('報告詳細の API 失敗は submit error として表示する', async () => {
+    const ownResponses = createOwnTeamDetailResponses();
+    const issueReports = getRequiredResponse(
+      ownResponses,
+      `/api/tournaments/${tournamentId}/issue-reports`,
+    ).body as Array<Record<string, unknown>>;
+    const reportId = '00000000-0000-4000-8000-000000000061';
+    const report = issueReports[0];
+    if (!report) {
+      throw new Error('issue report fixture not found');
+    }
+    const responses: Record<string, MockResponse> = {
+      ...ownResponses,
+      [`/api/issue-reports/${reportId}`]: {
+        status: 200,
+        body: report,
+      },
+    };
+
+    renderRoute(`/tournaments/${tournamentId}/issue-reports/${reportId}`, responses);
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/issue-reports/${reportId}` && init?.method === 'PATCH') {
+        return jsonResponse(
+          { error: { code: 'BAD_REQUEST', message: 'server patch failed' } },
+          400,
+        );
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '追記を保存' }));
+
+    expect(await screen.findByText('server patch failed')).toBeInTheDocument();
+    expect(screen.queryByText('0 以上の値を入力してください')).not.toBeInTheDocument();
   });
 
   it('他チームからは team_private 報告詳細を閲覧できない', async () => {

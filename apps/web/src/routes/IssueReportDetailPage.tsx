@@ -27,7 +27,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   apiClient,
   type IssueReportCreateInput,
-  type IssueReportUpdateInput,
   type IssueReportView,
 } from '../lib/api/client.js';
 import { canEditTeamResources } from '../lib/authz.js';
@@ -36,6 +35,14 @@ import {
   updateIssueReportSyncPayload,
   updateSyncRecordAfterAttempt,
 } from '../lib/db/appDb.js';
+import {
+  buildIssueReportPatchFormValues,
+  createEmptyIssueReportAttachment,
+  issueReportPatchFormSchema,
+  toIssueReportPatchInput,
+  type IssueReportPatchFormValues,
+} from '../lib/issueReportForm.js';
+import { getSubmitErrorMessage } from '../lib/tanstackFormZod.js';
 import { useAuthSession } from '../lib/useAuthSession.js';
 import { useIssueReport, useUpdateIssueReportMutation } from '../lib/useTeamManagement.js';
 
@@ -44,200 +51,9 @@ type IssueReportDetailPageProps = {
   issueReportId: string;
 };
 
-type IssueReportUpdateAttachment = NonNullable<
-  NonNullable<IssueReportUpdateInput['attachments']>[number]
->;
-
-type DetailFormValues = {
-  visibility: 'team_private' | 'team_public';
-  reporterName: string;
-  avgPingMs: number | '';
-  maxPingMs: number | '';
-  packetLossPercent: number | '';
-  distanceCategory: '' | 'near' | 'mid' | 'far' | 'obstacle';
-  estimatedDistanceMeters: number | '';
-  reproducibility: '' | 'always' | 'sometimes' | 'once';
-  locationLabel: string;
-  description: string;
-  mitigationTried: Array<(typeof MITIGATIONS)[number]>;
-  improved: '' | 'true' | 'false';
-  attachments: Array<{
-    id: string;
-    name: string;
-    url: string;
-    mimeType: string;
-    sizeBytes: number | '';
-  }>;
-};
-
-type AttachmentDraft = DetailFormValues['attachments'][number];
-
-function createEmptyAttachment(): AttachmentDraft {
-  return {
-    id: crypto.randomUUID(),
-    name: '',
-    url: '',
-    mimeType: '',
-    sizeBytes: '',
-  };
-}
-
-function toAttachmentDrafts(
-  attachments?: IssueReportUpdateAttachment[] | null,
-): DetailFormValues['attachments'] {
-  return (attachments ?? []).map((attachment) => ({
-    id: crypto.randomUUID(),
-    name: attachment.name,
-    url: attachment.url ?? '',
-    mimeType: attachment.mimeType ?? '',
-    sizeBytes: attachment.sizeBytes ?? '',
-  }));
-}
-
-function sanitizeAttachments(drafts: AttachmentDraft[]): IssueReportUpdateAttachment[] {
-  return drafts.flatMap((draft) => {
-    const name = draft.name.trim();
-    const url = draft.url.trim();
-    const mimeType = draft.mimeType.trim();
-
-    if (name.length === 0 && url.length === 0 && mimeType.length === 0 && draft.sizeBytes === '') {
-      return [];
-    }
-
-    if (name.length === 0) {
-      return [];
-    }
-
-    const attachment: IssueReportUpdateAttachment = { name };
-
-    if (url.length > 0) {
-      attachment.url = url;
-    }
-    if (mimeType.length > 0) {
-      attachment.mimeType = mimeType;
-    }
-    if (draft.sizeBytes !== '') {
-      attachment.sizeBytes = draft.sizeBytes;
-    }
-
-    return [attachment];
-  });
-}
-
-function isDetailedReport(report: IssueReportView): report is IssueReportView & {
-  reporterName?: string | null;
-  locationLabel?: string | null;
-  description?: string | null;
-  reproducibility?: 'always' | 'sometimes' | 'once' | null;
-  maxPingMs?: number | null;
-  packetLossPercent?: number | null;
-  distanceCategory?: 'near' | 'mid' | 'far' | 'obstacle' | null;
-  estimatedDistanceMeters?: number | null;
-  mitigationTried?: Array<(typeof MITIGATIONS)[number]> | null;
-  improved?: boolean | null;
-  attachments?: IssueReportUpdateAttachment[] | null;
-} {
-  return (
-    'reporterName' in report ||
-    'locationLabel' in report ||
-    'description' in report ||
-    'attachments' in report
-  );
-}
-
-function toInitialFormValues(
-  report: IssueReportView | null,
-  localPayload?: IssueReportCreateInput,
-): DetailFormValues {
-  return {
-    visibility: (report?.visibility ?? localPayload?.visibility ?? 'team_private') as
-      | 'team_private'
-      | 'team_public',
-    reporterName:
-      report && isDetailedReport(report)
-        ? (report.reporterName ?? '')
-        : (localPayload?.reporterName ?? ''),
-    avgPingMs: report?.avgPingMs ?? localPayload?.avgPingMs ?? '',
-    maxPingMs:
-      report && isDetailedReport(report)
-        ? (report.maxPingMs ?? '')
-        : (localPayload?.maxPingMs ?? ''),
-    packetLossPercent:
-      report && isDetailedReport(report)
-        ? (report.packetLossPercent ?? '')
-        : (localPayload?.packetLossPercent ?? ''),
-    distanceCategory:
-      report && isDetailedReport(report)
-        ? ((report.distanceCategory ?? '') as DetailFormValues['distanceCategory'])
-        : ((localPayload?.distanceCategory ?? '') as DetailFormValues['distanceCategory']),
-    estimatedDistanceMeters:
-      report && isDetailedReport(report)
-        ? (report.estimatedDistanceMeters ?? '')
-        : (localPayload?.estimatedDistanceMeters ?? ''),
-    reproducibility:
-      report && isDetailedReport(report)
-        ? ((report.reproducibility ?? '') as DetailFormValues['reproducibility'])
-        : ((localPayload?.reproducibility ?? '') as DetailFormValues['reproducibility']),
-    locationLabel:
-      report && isDetailedReport(report)
-        ? (report.locationLabel ?? '')
-        : (localPayload?.locationLabel ?? ''),
-    description:
-      report && isDetailedReport(report)
-        ? (report.description ?? '')
-        : (localPayload?.description ?? ''),
-    mitigationTried:
-      report && isDetailedReport(report)
-        ? (report.mitigationTried ?? [])
-        : (localPayload?.mitigationTried ?? []),
-    improved:
-      report && isDetailedReport(report)
-        ? report.improved == null
-          ? ''
-          : report.improved
-            ? 'true'
-            : 'false'
-        : localPayload?.improved == null
-          ? ''
-          : localPayload.improved
-            ? 'true'
-            : 'false',
-    attachments:
-      report && isDetailedReport(report)
-        ? toAttachmentDrafts(report.attachments)
-        : toAttachmentDrafts(localPayload?.attachments),
-  };
-}
-
-function buildIssueReportPatch(values: DetailFormValues) {
-  const reporterName = values.reporterName.trim();
-  const locationLabel = values.locationLabel.trim();
-  const description = values.description.trim();
-
-  return {
-    visibility: values.visibility,
-    reporterName: reporterName.length > 0 ? reporterName : null,
-    avgPingMs: values.avgPingMs !== '' ? values.avgPingMs : null,
-    maxPingMs: values.maxPingMs !== '' ? values.maxPingMs : null,
-    packetLossPercent: values.packetLossPercent !== '' ? values.packetLossPercent : null,
-    distanceCategory: values.distanceCategory || null,
-    estimatedDistanceMeters:
-      values.estimatedDistanceMeters !== '' ? values.estimatedDistanceMeters : null,
-    reproducibility: values.reproducibility || null,
-    locationLabel: locationLabel.length > 0 ? locationLabel : null,
-    description: description.length > 0 ? description : null,
-    mitigationTried: values.mitigationTried.length > 0 ? values.mitigationTried : null,
-    improved: values.improved === '' ? null : values.improved === 'true',
-    attachments: (() => {
-      const attachments = sanitizeAttachments(values.attachments);
-      return attachments.length > 0 ? attachments : null;
-    })(),
-  } satisfies IssueReportUpdateInput;
-}
-
 function buildCreatePayloadForResend(
   payload: IssueReportCreateInput,
-  patch: IssueReportUpdateInput,
+  patch: ReturnType<typeof toIssueReportPatchInput>,
 ): IssueReportCreateInput {
   const nextPayload = { ...payload };
 
@@ -268,13 +84,75 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
   const resolvedReport = issueReportQuery.data ?? null;
   const localRecord = localSyncQuery.data;
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [values, setValues] = useState<DetailFormValues>(() =>
-    toInitialFormValues(null, localRecord?.payload),
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<keyof IssueReportPatchFormValues, string>>
+  >({});
+  const [values, setValues] = useState<IssueReportPatchFormValues>(() =>
+    buildIssueReportPatchFormValues(null, localRecord?.payload),
   );
 
   useEffect(() => {
-    setValues(toInitialFormValues(resolvedReport, localRecord?.payload));
+    setValues(buildIssueReportPatchFormValues(resolvedReport, localRecord?.payload));
+    setFieldErrors({});
   }, [localRecord?.payload, resolvedReport]);
+
+  const clearMessageForField = (fieldName?: keyof IssueReportPatchFormValues) => {
+    setSubmitError(null);
+
+    if (!fieldName) {
+      return;
+    }
+
+    setFieldErrors((current) => {
+      if (!(fieldName in current)) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[fieldName];
+      return next;
+    });
+  };
+
+  const updateFieldValue = <TName extends keyof IssueReportPatchFormValues>(
+    fieldName: TName,
+    nextValue: IssueReportPatchFormValues[TName],
+  ) => {
+    clearMessageForField(fieldName);
+    setValues((current) => ({
+      ...current,
+      [fieldName]: nextValue,
+    }));
+  };
+
+  const validateValues = () => {
+    const parsed = issueReportPatchFormSchema.safeParse(values);
+
+    if (parsed.success) {
+      setFieldErrors({});
+      return true;
+    }
+
+    const nextFieldErrors: Partial<Record<keyof IssueReportPatchFormValues, string>> = {};
+
+    for (const issue of parsed.error.issues) {
+      const fieldName = issue.path[0];
+      if (typeof fieldName !== 'string') {
+        continue;
+      }
+
+      const typedFieldName = fieldName as keyof IssueReportPatchFormValues;
+      if (nextFieldErrors[typedFieldName]) {
+        continue;
+      }
+
+      nextFieldErrors[typedFieldName] = issue.message;
+    }
+
+    setFieldErrors(nextFieldErrors);
+    setSubmitError(null);
+    return false;
+  };
 
   const effectiveTeamId = resolvedReport?.teamId ?? localRecord?.payload.teamId ?? '';
   const canEdit = Boolean(effectiveTeamId && canEditTeamResources(session, effectiveTeamId));
@@ -341,11 +219,17 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
   const handleSave = async () => {
     setSubmitError(null);
 
+    if (!validateValues()) {
+      return;
+    }
+
+    const patch = toIssueReportPatchInput(values);
+
     try {
       if (localRecord) {
-        await updateIssueReportSyncPayload(localRecord.id, buildIssueReportPatch(values));
+        await updateIssueReportSyncPayload(localRecord.id, patch);
       } else {
-        await updateIssueReportMutation.mutateAsync(buildIssueReportPatch(values));
+        await updateIssueReportMutation.mutateAsync(patch);
       }
 
       notifications.show({
@@ -354,7 +238,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
         message: localRecord ? 'ローカル保存内容を更新しました。' : '追記内容を保存しました。',
       });
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '報告の更新に失敗しました');
+      setSubmitError(getSubmitErrorMessage(error, '報告の更新に失敗しました'));
     }
   };
 
@@ -369,7 +253,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
     });
 
     try {
-      const patch = buildIssueReportPatch(values);
+      const patch = toIssueReportPatchInput(values);
       const created = await apiClient.createIssueReport(tournamentId, {
         ...buildCreatePayloadForResend(localRecord.payload, patch),
       });
@@ -389,9 +273,9 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
     } catch (error) {
       await updateSyncRecordAfterAttempt(localRecord.id, {
         status: 'failed',
-        errorMessage: error instanceof Error ? error.message : 'failed to resend',
+        errorMessage: getSubmitErrorMessage(error, 'failed to resend'),
       });
-      setSubmitError(error instanceof Error ? error.message : '再送に失敗しました');
+      setSubmitError(getSubmitErrorMessage(error, '再送に失敗しました'));
     }
   };
 
@@ -446,26 +330,20 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
           <NativeSelect
             label='公開範囲'
             value={values.visibility}
+            error={fieldErrors.visibility}
             disabled={!canEdit}
             data={ISSUE_REPORT_VISIBILITIES.map((value) => ({ value, label: value }))}
             onChange={(event) => {
-              const visibility = event.currentTarget.value as DetailFormValues['visibility'];
-              setValues((current) => ({
-                ...current,
-                visibility,
-              }));
+              updateFieldValue('visibility', event.currentTarget.value);
             }}
           />
           <TextInput
             label='報告者名'
             value={values.reporterName}
+            error={fieldErrors.reporterName}
             disabled={!canEdit}
             onChange={(event) => {
-              const reporterName = event.currentTarget.value;
-              setValues((current) => ({
-                ...current,
-                reporterName,
-              }));
+              updateFieldValue('reporterName', event.currentTarget.value);
             }}
           />
         </Group>
@@ -474,38 +352,32 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
           <NumberInput
             label='平均 Ping (ms)'
             value={values.avgPingMs}
+            error={fieldErrors.avgPingMs}
             disabled={!canEdit}
             min={0}
             onChange={(value) => {
-              setValues((current) => ({
-                ...current,
-                avgPingMs: typeof value === 'number' ? value : '',
-              }));
+              updateFieldValue('avgPingMs', typeof value === 'number' ? value : '');
             }}
           />
           <NumberInput
             label='最大 Ping (ms)'
             value={values.maxPingMs}
+            error={fieldErrors.maxPingMs}
             disabled={!canEdit}
             min={0}
             onChange={(value) => {
-              setValues((current) => ({
-                ...current,
-                maxPingMs: typeof value === 'number' ? value : '',
-              }));
+              updateFieldValue('maxPingMs', typeof value === 'number' ? value : '');
             }}
           />
           <NumberInput
             label='パケットロス率 (%)'
             value={values.packetLossPercent}
+            error={fieldErrors.packetLossPercent}
             disabled={!canEdit}
             min={0}
             max={100}
             onChange={(value) => {
-              setValues((current) => ({
-                ...current,
-                packetLossPercent: typeof value === 'number' ? value : '',
-              }));
+              updateFieldValue('packetLossPercent', typeof value === 'number' ? value : '');
             }}
           />
         </Group>
@@ -515,46 +387,36 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
             label='距離カテゴリ'
             disabled={!canEdit}
             value={values.distanceCategory}
+            error={fieldErrors.distanceCategory}
             data={[
               { value: '', label: '未選択' },
               ...DISTANCE_CATEGORIES.map((value) => ({ value, label: value })),
             ]}
             onChange={(event) => {
-              const distanceCategory = event.currentTarget
-                .value as DetailFormValues['distanceCategory'];
-              setValues((current) => ({
-                ...current,
-                distanceCategory,
-              }));
+              updateFieldValue('distanceCategory', event.currentTarget.value);
             }}
           />
           <NumberInput
             label='推定距離[m]'
             value={values.estimatedDistanceMeters}
+            error={fieldErrors.estimatedDistanceMeters}
             disabled={!canEdit}
             min={0}
             onChange={(value) => {
-              setValues((current) => ({
-                ...current,
-                estimatedDistanceMeters: typeof value === 'number' ? value : '',
-              }));
+              updateFieldValue('estimatedDistanceMeters', typeof value === 'number' ? value : '');
             }}
           />
           <NativeSelect
             label='再現性'
             disabled={!canEdit}
             value={values.reproducibility}
+            error={fieldErrors.reproducibility}
             data={[
               { value: '', label: '未選択' },
               ...REPRODUCIBILITIES.map((value) => ({ value, label: value })),
             ]}
             onChange={(event) => {
-              const reproducibility = event.currentTarget
-                .value as DetailFormValues['reproducibility'];
-              setValues((current) => ({
-                ...current,
-                reproducibility,
-              }));
+              updateFieldValue('reproducibility', event.currentTarget.value);
             }}
           />
         </Group>
@@ -562,13 +424,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
         <TextInput
           label='観測位置'
           value={values.locationLabel}
+          error={fieldErrors.locationLabel}
           disabled={!canEdit}
           onChange={(event) => {
-            const locationLabel = event.currentTarget.value;
-            setValues((current) => ({
-              ...current,
-              locationLabel,
-            }));
+            updateFieldValue('locationLabel', event.currentTarget.value);
           }}
         />
 
@@ -576,10 +435,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
           label='対処内容'
           value={values.mitigationTried}
           onChange={(mitigationTried) => {
-            setValues((current) => ({
-              ...current,
-              mitigationTried: mitigationTried as DetailFormValues['mitigationTried'],
-            }));
+            updateFieldValue('mitigationTried', mitigationTried);
           }}
         >
           <Group mt='xs'>
@@ -593,17 +449,14 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
           label='改善有無'
           disabled={!canEdit}
           value={values.improved}
+          error={fieldErrors.improved}
           data={[
             { value: '', label: '未選択' },
             { value: 'true', label: '改善した' },
             { value: 'false', label: '改善しない' },
           ]}
           onChange={(event) => {
-            const improved = event.currentTarget.value as DetailFormValues['improved'];
-            setValues((current) => ({
-              ...current,
-              improved,
-            }));
+            updateFieldValue('improved', event.currentTarget.value as IssueReportPatchFormValues['improved']);
           }}
         />
 
@@ -615,9 +468,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                 variant='light'
                 size='xs'
                 onClick={() => {
+                  clearMessageForField('attachments');
                   setValues((current) => ({
                     ...current,
-                    attachments: [...current.attachments, createEmptyAttachment()],
+                    attachments: [...current.attachments, createEmptyIssueReportAttachment()],
                   }));
                 }}
               >
@@ -633,9 +487,11 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                   <TextInput
                     label={`添付ファイル名 ${index + 1}`}
                     value={attachment.name}
+                    error={fieldErrors.attachments}
                     disabled={!canEdit}
                     onChange={(event) => {
                       const name = event.currentTarget.value;
+                      clearMessageForField('attachments');
                       setValues((current) => ({
                         ...current,
                         attachments: current.attachments.map((entry, entryIndex) =>
@@ -650,6 +506,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     disabled={!canEdit}
                     onChange={(event) => {
                       const url = event.currentTarget.value;
+                      clearMessageForField('attachments');
                       setValues((current) => ({
                         ...current,
                         attachments: current.attachments.map((entry, entryIndex) =>
@@ -666,6 +523,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     disabled={!canEdit}
                     onChange={(event) => {
                       const mimeType = event.currentTarget.value;
+                      clearMessageForField('attachments');
                       setValues((current) => ({
                         ...current,
                         attachments: current.attachments.map((entry, entryIndex) =>
@@ -680,6 +538,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     disabled={!canEdit}
                     min={0}
                     onChange={(value) => {
+                      clearMessageForField('attachments');
                       setValues((current) => ({
                         ...current,
                         attachments: current.attachments.map((entry, entryIndex) =>
@@ -698,6 +557,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                       variant='subtle'
                       size='xs'
                       onClick={() => {
+                        clearMessageForField('attachments');
                         setValues((current) => ({
                           ...current,
                           attachments: current.attachments.filter(
@@ -719,13 +579,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
           label='自由記述'
           minRows={5}
           value={values.description}
+          error={fieldErrors.description}
           disabled={!canEdit}
           onChange={(event) => {
-            const description = event.currentTarget.value;
-            setValues((current) => ({
-              ...current,
-              description,
-            }));
+            updateFieldValue('description', event.currentTarget.value);
           }}
         />
 
