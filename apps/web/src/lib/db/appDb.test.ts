@@ -49,13 +49,25 @@ describe('AppDatabase', () => {
         updatedAt: '2026-04-21T11:00:00.000Z',
         queuedAt: '2026-04-21T10:10:00.000Z',
       },
+      {
+        id: crypto.randomUUID(),
+        entityType: 'issue-report',
+        entityId: crypto.randomUUID(),
+        action: 'update',
+        status: 'conflict',
+        errorMessage: 'server conflict',
+        createdAt: '2026-04-21T10:20:00.000Z',
+        updatedAt: '2026-04-21T12:00:00.000Z',
+        queuedAt: '2026-04-21T10:20:00.000Z',
+      },
     ]);
 
     await expect(getSyncOverview()).resolves.toEqual({
-      total: 2,
+      total: 3,
       pending: 1,
       failed: 1,
-      lastUpdatedAt: '2026-04-21T11:00:00.000Z',
+      conflict: 1,
+      lastUpdatedAt: '2026-04-21T12:00:00.000Z',
     });
   });
 

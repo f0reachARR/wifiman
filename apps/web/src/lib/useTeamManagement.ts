@@ -6,6 +6,10 @@ import {
   type DeviceSpecUpdateInput,
   type IssueReportCreateInput,
   type IssueReportUpdateInput,
+  type NoticeCreateInput,
+  type NoticeUpdateInput,
+  type ObservedWifiBulkCreateInput,
+  type ObservedWifiCreateInput,
   type TeamUpdateInput,
   type WifiConfigCreateInput,
   type WifiConfigUpdateInput,
@@ -42,6 +46,39 @@ export function useTournamentNotices(tournamentId: string) {
   });
 }
 
+export function useCreateTournamentNoticeMutation(tournamentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: NoticeCreateInput) => apiClient.createTournamentNotice(tournamentId, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: apiQueryKeys.tournamentNotices(tournamentId) }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentPublicOverview(tournamentId),
+        }),
+      ]);
+    },
+  });
+}
+
+export function useUpdateNoticeMutation(tournamentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: NoticeUpdateInput }) =>
+      apiClient.updateNotice(id, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: apiQueryKeys.tournamentNotices(tournamentId) }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentPublicOverview(tournamentId),
+        }),
+      ]);
+    },
+  });
+}
+
 export function useTournamentBestPractices(tournamentId: string) {
   return useQuery({
     queryKey: apiQueryKeys.tournamentBestPractices(tournamentId),
@@ -55,6 +92,52 @@ export function useTournamentChannelMap(tournamentId: string) {
     queryKey: apiQueryKeys.tournamentChannelMap(tournamentId),
     queryFn: () => apiClient.listTournamentChannelMap(tournamentId),
     enabled: tournamentId.length > 0,
+  });
+}
+
+export function useObservedWifis(tournamentId: string) {
+  return useQuery({
+    queryKey: apiQueryKeys.tournamentObservedWifis(tournamentId),
+    queryFn: () => apiClient.listObservedWifis(tournamentId),
+    enabled: tournamentId.length > 0,
+  });
+}
+
+export function useCreateObservedWifiMutation(tournamentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: ObservedWifiCreateInput) =>
+      apiClient.createObservedWifi(tournamentId, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentObservedWifis(tournamentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentChannelMap(tournamentId),
+        }),
+      ]);
+    },
+  });
+}
+
+export function useBulkCreateObservedWifiMutation(tournamentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: ObservedWifiBulkCreateInput) =>
+      apiClient.bulkCreateObservedWifis(tournamentId, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentObservedWifis(tournamentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentChannelMap(tournamentId),
+        }),
+      ]);
+    },
   });
 }
 
@@ -129,6 +212,25 @@ export function useTeam(teamId: string) {
     queryKey: apiQueryKeys.team(teamId),
     queryFn: () => apiClient.getTeam(teamId),
     enabled: teamId.length > 0,
+  });
+}
+
+export function useTeamAccesses(teamId: string) {
+  return useQuery({
+    queryKey: apiQueryKeys.teamAccesses(teamId),
+    queryFn: () => apiClient.listTeamAccesses(teamId),
+    enabled: teamId.length > 0,
+  });
+}
+
+export function useResendTeamAccessMutation(teamId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => apiClient.resendTeamAccess(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: apiQueryKeys.teamAccesses(teamId) });
+    },
   });
 }
 

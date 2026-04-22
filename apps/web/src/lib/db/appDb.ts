@@ -2,7 +2,10 @@ import type { SyncRecord, SyncRecordStatus } from '@wifiman/shared';
 import Dexie, { type Table } from 'dexie';
 import type { IssueReportCreateInput, IssueReportUpdateInput } from '../api/client.js';
 
+export type LocalSyncRecordStatus = SyncRecordStatus | 'conflict';
+
 export type SyncRecordEntry = SyncRecord & {
+  status: LocalSyncRecordStatus;
   queuedAt: string;
   lastAttemptAt?: string;
   payload?: unknown;
@@ -27,6 +30,7 @@ export type SyncOverview = {
   total: number;
   pending: number;
   failed: number;
+  conflict: number;
   lastUpdatedAt: string | null;
 };
 
@@ -50,7 +54,7 @@ function getNow() {
   return new Date().toISOString();
 }
 
-function countByStatus(records: SyncRecordEntry[], status: SyncRecordStatus) {
+function countByStatus(records: SyncRecordEntry[], status: LocalSyncRecordStatus) {
   return records.filter((record) => record.status === status).length;
 }
 
@@ -64,6 +68,7 @@ export async function getSyncOverview(): Promise<SyncOverview> {
     total: records.length,
     pending: countByStatus(records, 'pending') + countByStatus(records, 'processing'),
     failed: countByStatus(records, 'failed'),
+    conflict: countByStatus(records, 'conflict'),
     lastUpdatedAt,
   };
 }
@@ -94,7 +99,7 @@ export async function queueIssueReportSync(
 }
 
 type SyncAttemptUpdate = {
-  status: SyncRecordStatus;
+  status: LocalSyncRecordStatus;
   attemptedAt?: string;
   errorMessage?: string | undefined;
   entityId?: string;
@@ -129,7 +134,7 @@ function asIssueReportSyncRecord(record?: SyncRecordEntry) {
 type ListIssueReportSyncRecordOptions = {
   tournamentId?: string;
   teamId?: string;
-  statuses?: ReadonlyArray<SyncRecordStatus>;
+  statuses?: ReadonlyArray<LocalSyncRecordStatus>;
 };
 
 export async function listIssueReportSyncRecords(options: ListIssueReportSyncRecordOptions = {}) {

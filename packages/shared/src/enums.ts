@@ -78,7 +78,13 @@ export const SYNC_ACTIONS = ['create', 'update', 'delete'] as const;
 export type SyncAction = (typeof SYNC_ACTIONS)[number];
 
 // 同期レコードステータス
-export const SYNC_RECORD_STATUSES = ['pending', 'processing', 'failed', 'done'] as const;
+export const SYNC_RECORD_STATUSES = [
+  'pending',
+  'processing',
+  'failed',
+  'conflict',
+  'done',
+] as const;
 export type SyncRecordStatus = (typeof SYNC_RECORD_STATUSES)[number];
 
 // チームアクセスロール

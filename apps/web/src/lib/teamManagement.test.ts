@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildWifiConfigFormValues,
   filterBestPractices,
+  parseObservedWifiCsv,
   parseDeviceSpecFormValues,
   parseTeamFormValues,
   parseWifiConfigFormValues,
@@ -130,5 +131,32 @@ describe('team management validation', () => {
 
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.title).toBe('Controller uplink tuning');
+  });
+
+  it('野良 WiFi CSV を行番号付きで検証し、有効行だけを正規化する', () => {
+    const result = parseObservedWifiCsv(
+      [
+        'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+        'analyzer_import,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
+        'manual,Bad Row,00:11:22:33:44:56,2.4GHz,149,80,-50,South Hall,2026-04-21T10:05:00.000Z,invalid channel',
+      ].join('\n'),
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      source: 'analyzer_import',
+      ssid: 'Venue WiFi',
+      band: '5GHz',
+      channel: 40,
+      channelWidthMHz: 20,
+      rssi: -68,
+      locationLabel: 'North Hall',
+    });
+    expect(result.errors).toEqual([
+      {
+        row: 3,
+        message: '3 行目: 帯域 2.4GHz に対してチャンネル 149 は無効です',
+      },
+    ]);
   });
 });

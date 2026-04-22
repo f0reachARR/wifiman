@@ -2,6 +2,7 @@ import { AppShell, Badge, Box, Burger, Button, Group, Stack, Text, Title } from 
 import { useDisclosure } from '@mantine/hooks';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { type PropsWithChildren, useEffect, useMemo, useState } from 'react';
+import { isOperatorSession } from '../lib/authz.js';
 import { useAuthActions, useAuthSession } from '../lib/useAuthSession.js';
 
 type NavItem = {
@@ -9,6 +10,7 @@ type NavItem = {
   to: '/' | '/login' | '/team-access' | '/offline' | '/app' | '/app/sync';
   privateOnly?: boolean;
   publicOnly?: boolean;
+  operatorOnly?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -16,8 +18,8 @@ const navItems: NavItem[] = [
   { label: '運営ログイン', to: '/login', publicOnly: true },
   { label: 'チームアクセス', to: '/team-access', publicOnly: true },
   { label: 'オフライン', to: '/offline' },
-  { label: 'ダッシュボード', to: '/app', privateOnly: true },
-  { label: '同期状況', to: '/app/sync', privateOnly: true },
+  { label: 'ダッシュボード', to: '/app', privateOnly: true, operatorOnly: true },
+  { label: '同期状況', to: '/app/sync', privateOnly: true, operatorOnly: true },
 ];
 
 function useOnlineStatus() {
@@ -50,6 +52,10 @@ export function AppShellLayout({ children }: PropsWithChildren) {
 
   const visibleItems = useMemo(() => {
     return navItems.filter((item) => {
+      if (item.operatorOnly) {
+        return isOperatorSession(session);
+      }
+
       if (item.privateOnly) {
         return Boolean(session);
       }

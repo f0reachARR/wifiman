@@ -65,7 +65,16 @@ const otherTeamSession = {
   teamAccessId: '00000000-0000-4000-8000-000000000042',
 };
 
-function createBaseResponses(session: typeof ownTeamSession | typeof otherTeamSession | null) {
+const operatorSession = {
+  kind: 'operator' as const,
+  role: 'operator' as const,
+  sessionId: 'operator-session-1',
+  displayName: 'Operator 1',
+};
+
+function createBaseResponses(
+  session: typeof ownTeamSession | typeof otherTeamSession | typeof operatorSession | null,
+) {
   return {
     '/api/auth/session': session
       ? ({ status: 200, body: session } satisfies MockResponse)
@@ -349,6 +358,16 @@ function createOwnTeamDetailResponses(): Record<string, MockResponse> {
           updatedAt: '2026-04-01T00:00:00.000Z',
         },
       ],
+    },
+  } satisfies Record<string, MockResponse>;
+}
+
+function createOperatorResponses(): Record<string, MockResponse> {
+  return {
+    ...createBaseResponses(operatorSession),
+    [`/api/tournaments/${tournamentId}/best-practices`]: {
+      status: 200,
+      body: [],
     },
   } satisfies Record<string, MockResponse>;
 }
@@ -1021,7 +1040,7 @@ describe('team management routes', () => {
     });
 
     renderRoute('/app/sync', {
-      ...createOwnTeamDetailResponses(),
+      ...createOperatorResponses(),
       [`/api/issue-reports/${record.entityId}`]: {
         status: 404,
         body: { error: { code: 'NOT_FOUND', message: 'not found' } },
@@ -1036,6 +1055,14 @@ describe('team management routes', () => {
     expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
     expect(screen.getByText('pending')).toBeInTheDocument();
     expect(screen.getByDisplayValue('offline sync from sync page')).toBeInTheDocument();
+  });
+
+  it('team session で operator 向け同期状況画面へ直接アクセスするとトップへ戻す', async () => {
+    renderRoute('/app/sync', createOwnTeamDetailResponses());
+
+    expect(await screen.findByRole('heading', { name: 'WiFiMan Web' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByRole('heading', { name: '同期状況' })).not.toBeInTheDocument();
   });
 
   it('自チームの報告詳細で同期状態と公開範囲を表示し、追記編集できる', async () => {
