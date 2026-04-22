@@ -1,7 +1,16 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appDb, queueIssueReportSync } from './db/appDb.js';
-import { syncIssueReportRecord, syncPendingIssueReports } from './syncEngine.js';
+
+vi.mock('./useAuthSession.js', () => ({
+  useAuthSession: () => ({ data: null, isLoading: false }),
+}));
+
+import {
+  flushPendingIssueReportsIfOnline,
+  syncIssueReportRecord,
+  syncPendingIssueReports,
+} from './syncEngine.js';
 
 describe('sync engine', () => {
   beforeEach(async () => {
@@ -86,6 +95,61 @@ describe('sync engine', () => {
 
     expect(synced?.status).toBe('conflict');
     expect(synced?.errorMessage).toContain('server has newer data');
+  });
+
+  it('401 応答は pending を維持する', async () => {
+    const record = await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'unauthorized' } }),
+            { status: 401, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    const synced = await syncIssueReportRecord(record.id);
+
+    expect(synced?.status).toBe('pending');
+    expect(synced?.errorMessage).toContain('unauthorized');
+    await expect(appDb.syncRecords.get(record.id)).resolves.toMatchObject({
+      status: 'pending',
+      errorMessage: 'unauthorized',
+    });
+  });
+
+  it('オフライン時は flush を実行しない', async () => {
+    await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+    });
+
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: false,
+    });
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(flushPendingIssueReportsIfOnline()).resolves.toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('pending レコードを一括同期する', async () => {

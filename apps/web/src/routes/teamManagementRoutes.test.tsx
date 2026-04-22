@@ -754,22 +754,29 @@ function createOtherTeamDetailResponses(): Record<string, MockResponse> {
   } satisfies Record<string, MockResponse>;
 }
 
-function renderRoute(pathname: string, responses: Record<string, MockResponse>) {
+function renderRoute(
+  pathname: string,
+  responses: Record<string, MockResponse>,
+  fetchImpl?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+) {
   window.history.pushState({}, '', pathname);
 
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
-      const matched = responses[path];
+    vi.fn(
+      fetchImpl ??
+        (async (input: RequestInfo | URL) => {
+          const url = String(input);
+          const path = url.replace('http://localhost:3000', '');
+          const matched = responses[path];
 
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
+          if (!matched) {
+            throw new Error(`Unhandled fetch: ${path}`);
+          }
 
-      return jsonResponse(matched.body, matched.status);
-    }),
+          return jsonResponse(matched.body, matched.status);
+        }),
+    ),
   );
 
   const queryClient = new QueryClient();
@@ -1399,7 +1406,7 @@ describe('team management routes', () => {
     });
 
     renderRoute('/', {
-      ...createBaseResponses(null),
+      ...createBaseResponses(ownTeamSession),
       [`/api/tournaments/${tournamentId}/issue-reports`]: {
         status: 201,
         body: {
@@ -1432,6 +1439,55 @@ describe('team management routes', () => {
             init?.method === 'POST',
         ),
     ).toBe(true);
+  });
+
+  it('未認証マウント時はオンラインでも pending を自動同期しない', async () => {
+    const record = await queueIssueReportSync(tournamentId, {
+      teamId: ownTeamId,
+      wifiConfigId: ownWifiId,
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+    });
+
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: true,
+    });
+
+    const responses: Record<string, MockResponse> = createBaseResponses(null);
+    const issueReportPostSpy = vi.fn();
+
+    renderRoute('/', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+        issueReportPostSpy();
+        return jsonResponse({ error: { code: 'UNAUTHORIZED', message: 'unauthorized' } }, 401);
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('公開中の大会')).toBeInTheDocument();
+    });
+
+    await waitFor(async () => {
+      const synced = await appDb.syncRecords.get(record.id);
+      expect(synced?.status).toBe('pending');
+    });
+
+    expect(issueReportPostSpy).not.toHaveBeenCalled();
   });
 
   it('自チームの報告詳細で同期状態と公開範囲を表示し、追記編集できる', async () => {

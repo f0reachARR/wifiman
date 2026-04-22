@@ -7,6 +7,21 @@ import {
   listIssueReportSyncRecords,
   updateSyncRecordAfterAttempt,
 } from './db/appDb.js';
+import { useAuthSession } from './useAuthSession.js';
+
+function getSyncFailureStatus(error: unknown): IssueReportSyncRecord['status'] {
+  if (error instanceof ApiClientError) {
+    if (error.status === 409) {
+      return 'conflict';
+    }
+
+    if (error.status === 401 || error.status === 403) {
+      return 'pending';
+    }
+  }
+
+  return 'failed';
+}
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiClientError) {
@@ -48,7 +63,7 @@ async function syncIssueReportRecordInternal(record: IssueReportSyncRecord) {
     });
   } catch (error) {
     await updateSyncRecordAfterAttempt(record.id, {
-      status: error instanceof ApiClientError && error.status === 409 ? 'conflict' : 'failed',
+      status: getSyncFailureStatus(error),
       errorMessage: getErrorMessage(error),
     });
   }
@@ -110,8 +125,13 @@ export async function flushPendingIssueReportsIfOnline(queryClient?: QueryClient
 
 export function useAutoSyncPendingIssueReports() {
   const queryClient = useQueryClient();
+  const { data: session, isLoading: isSessionLoading } = useAuthSession();
 
   useEffect(() => {
+    if (isSessionLoading || !session) {
+      return;
+    }
+
     const run = () => {
       void flushPendingIssueReportsIfOnline(queryClient);
     };
@@ -122,5 +142,5 @@ export function useAutoSyncPendingIssueReports() {
     return () => {
       window.removeEventListener('online', run);
     };
-  }, [queryClient]);
+  }, [isSessionLoading, queryClient, session]);
 }
