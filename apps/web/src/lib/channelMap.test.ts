@@ -88,6 +88,7 @@ describe('channelMap utilities', () => {
       ...DEFAULT_CHANNEL_MAP_FILTERS,
       sourceTypes: ['own_team'],
       controlOnly: true,
+      reportOnly: true,
       widths: [80],
       modelQuery: 'ap-9000',
     });

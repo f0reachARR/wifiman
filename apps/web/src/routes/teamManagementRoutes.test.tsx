@@ -612,6 +612,28 @@ describe('team management routes', () => {
     });
   });
 
+  it('チャンネルマップは source と width を含む複数フィルタを URL から復元する', async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/channel-map?band=5GHz&source=observed_wifi&width=20`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
+    expect(screen.getByLabelText('Venue WiFi bar')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Control 5G bar')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Backup 5G bar')).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      const searchParams = new URLSearchParams(window.location.search);
+      expect(searchParams.get('band')).toBe('5GHz');
+      expect(searchParams.getAll('source')).toEqual(['observed_wifi']);
+      expect(searchParams.getAll('width')).toEqual(['20']);
+    });
+  });
+
   it('報告作成 route はクエリの wifiConfigId から既存構成を初期選択する', async () => {
     renderRoute(
       `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
