@@ -129,6 +129,38 @@ describe('sync engine', () => {
     });
   });
 
+  it('403 応答は pending を維持する', async () => {
+    const record = await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ error: { code: 'FORBIDDEN', message: 'forbidden' } }),
+            { status: 403, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    const synced = await syncIssueReportRecord(record.id);
+
+    expect(synced?.status).toBe('pending');
+    expect(synced?.errorMessage).toContain('forbidden');
+    await expect(appDb.syncRecords.get(record.id)).resolves.toMatchObject({
+      status: 'pending',
+      errorMessage: 'forbidden',
+    });
+  });
+
   it('オフライン時は flush を実行しない', async () => {
     await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
       teamId: '00000000-0000-4000-8000-000000000011',
