@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IssueReportView } from './api/client.js';
 import {
+  applyIssueReportPatchToCreatePayload,
   buildIssueReportCreateFormValues,
   buildIssueReportPatchFormValues,
   createEmptyIssueReportAttachment,
@@ -8,6 +9,7 @@ import {
   issueReportPatchFormSchema,
   toIssueReportCreatePayload,
   toIssueReportPatchInput,
+  toValidatedIssueReportPatchInput,
 } from './issueReportForm.js';
 
 describe('issueReportForm', () => {
@@ -16,7 +18,9 @@ describe('issueReportForm', () => {
 
     expect(parsed.success).toBe(false);
     expect(parsed.error?.issues.map((issue) => issue.message)).toContain('症状を選択してください');
-    expect(parsed.error?.issues.map((issue) => issue.message)).toContain('深刻度を選択してください');
+    expect(parsed.error?.issues.map((issue) => issue.message)).toContain(
+      '深刻度を選択してください',
+    );
   });
 
   it('patch schema は負数を拒否する', () => {
@@ -85,6 +89,48 @@ describe('issueReportForm', () => {
       improved: null,
       attachments: null,
     });
+  });
+
+  it('validated patch と resend payload merge は同じ patch 経路を使う', () => {
+    const patch = toValidatedIssueReportPatchInput({
+      ...buildIssueReportPatchFormValues(null),
+      visibility: 'team_public',
+      reporterName: '  Updated Reporter  ',
+      avgPingMs: 55,
+      description: '',
+    });
+    const payload = applyIssueReportPatchToCreatePayload(
+      {
+        teamId: '00000000-0000-4000-8000-000000000011',
+        wifiConfigId: '00000000-0000-4000-8000-000000000021',
+        visibility: 'team_private',
+        symptom: 'high_latency',
+        severity: 'high',
+        band: '5GHz',
+        channel: 36,
+        description: 'offline note',
+      },
+      patch,
+    );
+
+    expect(patch).toMatchObject({
+      visibility: 'team_public',
+      reporterName: 'Updated Reporter',
+      avgPingMs: 55,
+      description: null,
+    });
+    expect(payload).toMatchObject({
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_public',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+      reporterName: 'Updated Reporter',
+      avgPingMs: 55,
+    });
+    expect(payload).not.toHaveProperty('description');
   });
 
   it('patch form values は local payload と server record の両方から初期化できる', () => {

@@ -109,7 +109,10 @@ const attachmentDraftSchema = z
         '有効な URL を入力してください',
       ),
     mimeType: optionalTextField(200),
-    sizeBytes: z.union([z.literal(''), z.number().int().nonnegative('0 以上の値を入力してください')]),
+    sizeBytes: z.union([
+      z.literal(''),
+      z.number().int().nonnegative('0 以上の値を入力してください'),
+    ]),
   })
   .superRefine((value, ctx) => {
     const hasAnyValue =
@@ -286,7 +289,9 @@ export function buildIssueReportPatchFormValues(
         : (localPayload?.reporterName ?? ''),
     avgPingMs: report?.avgPingMs ?? localPayload?.avgPingMs ?? '',
     maxPingMs:
-      report && isDetailedReport(report) ? (report.maxPingMs ?? '') : (localPayload?.maxPingMs ?? ''),
+      report && isDetailedReport(report)
+        ? (report.maxPingMs ?? '')
+        : (localPayload?.maxPingMs ?? ''),
     packetLossPercent:
       report && isDetailedReport(report)
         ? (report.packetLossPercent ?? '')
@@ -350,18 +355,30 @@ export function toIssueReportCreatePayload(
     ...(values.avgPingMs !== '' ? { avgPingMs: values.avgPingMs } : {}),
     ...(values.packetLossPercent !== '' ? { packetLossPercent: values.packetLossPercent } : {}),
     ...(values.distanceCategory.length > 0
-      ? { distanceCategory: values.distanceCategory as NonNullable<IssueReportCreateInput['distanceCategory']> }
+      ? {
+          distanceCategory: values.distanceCategory as NonNullable<
+            IssueReportCreateInput['distanceCategory']
+          >,
+        }
       : {}),
     ...(values.maxPingMs !== '' ? { maxPingMs: values.maxPingMs } : {}),
     ...(values.estimatedDistanceMeters !== ''
       ? { estimatedDistanceMeters: values.estimatedDistanceMeters }
       : {}),
     ...(values.reproducibility.length > 0
-      ? { reproducibility: values.reproducibility as NonNullable<IssueReportCreateInput['reproducibility']> }
+      ? {
+          reproducibility: values.reproducibility as NonNullable<
+            IssueReportCreateInput['reproducibility']
+          >,
+        }
       : {}),
     ...(locationLabel.length > 0 ? { locationLabel } : {}),
     ...(values.mitigationTried.length > 0
-      ? { mitigationTried: values.mitigationTried as NonNullable<IssueReportCreateInput['mitigationTried']> }
+      ? {
+          mitigationTried: values.mitigationTried as NonNullable<
+            IssueReportCreateInput['mitigationTried']
+          >,
+        }
       : {}),
     ...(values.improved === 'true' ? { improved: true } : {}),
     ...(values.improved === 'false' ? { improved: false } : {}),
@@ -374,7 +391,9 @@ export function toIssueReportCreatePayload(
   };
 }
 
-export function toIssueReportPatchInput(values: IssueReportPatchFormValues): IssueReportUpdateInput {
+export function toIssueReportPatchInput(
+  values: IssueReportPatchFormValues,
+): IssueReportUpdateInput {
   const attachments = sanitizeAttachments(values.attachments) as IssueReportUpdateAttachment[];
   const reporterName = values.reporterName.trim();
   const locationLabel = values.locationLabel.trim();
@@ -386,7 +405,10 @@ export function toIssueReportPatchInput(values: IssueReportPatchFormValues): Iss
     avgPingMs: values.avgPingMs !== '' ? values.avgPingMs : null,
     maxPingMs: values.maxPingMs !== '' ? values.maxPingMs : null,
     packetLossPercent: values.packetLossPercent !== '' ? values.packetLossPercent : null,
-    distanceCategory: values.distanceCategory.length > 0 ? (values.distanceCategory as NonNullable<IssueReportUpdateInput['distanceCategory']>) : null,
+    distanceCategory:
+      values.distanceCategory.length > 0
+        ? (values.distanceCategory as NonNullable<IssueReportUpdateInput['distanceCategory']>)
+        : null,
     estimatedDistanceMeters:
       values.estimatedDistanceMeters !== '' ? values.estimatedDistanceMeters : null,
     reproducibility:
@@ -402,4 +424,32 @@ export function toIssueReportPatchInput(values: IssueReportPatchFormValues): Iss
     improved: values.improved === '' ? null : values.improved === 'true',
     attachments: attachments.length > 0 ? attachments : null,
   };
+}
+
+export function toValidatedIssueReportPatchInput(
+  values: IssueReportPatchFormValues,
+): IssueReportUpdateInput {
+  const validatedValues = issueReportPatchFormSchema.parse(values);
+
+  return toIssueReportPatchInput(validatedValues);
+}
+
+export function applyIssueReportPatchToCreatePayload(
+  payload: IssueReportCreateInput,
+  patch: IssueReportUpdateInput,
+): IssueReportCreateInput {
+  const nextPayload = { ...payload };
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      delete nextPayload[key as keyof IssueReportCreateInput];
+      continue;
+    }
+
+    Object.assign(nextPayload, {
+      [key]: value,
+    });
+  }
+
+  return nextPayload;
 }

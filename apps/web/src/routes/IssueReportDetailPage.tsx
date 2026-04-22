@@ -23,12 +23,9 @@ import {
   MITIGATIONS,
   REPRODUCIBILITIES,
 } from '@wifiman/shared';
-import { useEffect, useMemo, useState } from 'react';
-import {
-  apiClient,
-  type IssueReportCreateInput,
-  type IssueReportView,
-} from '../lib/api/client.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useForm } from '@tanstack/react-form';
+import { apiClient, type IssueReportView } from '../lib/api/client.js';
 import { canEditTeamResources } from '../lib/authz.js';
 import {
   findIssueReportSyncRecord,
@@ -36,13 +33,17 @@ import {
   updateSyncRecordAfterAttempt,
 } from '../lib/db/appDb.js';
 import {
+  applyIssueReportPatchToCreatePayload,
   buildIssueReportPatchFormValues,
   createEmptyIssueReportAttachment,
   issueReportPatchFormSchema,
-  toIssueReportPatchInput,
   type IssueReportPatchFormValues,
+  toValidatedIssueReportPatchInput,
 } from '../lib/issueReportForm.js';
-import { getSubmitErrorMessage } from '../lib/tanstackFormZod.js';
+import {
+  createTanStackFormZodHelpers,
+  getSubmitErrorMessage,
+} from '../lib/tanstackFormZod.js';
 import { useAuthSession } from '../lib/useAuthSession.js';
 import { useIssueReport, useUpdateIssueReportMutation } from '../lib/useTeamManagement.js';
 
@@ -50,26 +51,6 @@ type IssueReportDetailPageProps = {
   tournamentId: string;
   issueReportId: string;
 };
-
-function buildCreatePayloadForResend(
-  payload: IssueReportCreateInput,
-  patch: ReturnType<typeof toIssueReportPatchInput>,
-): IssueReportCreateInput {
-  const nextPayload = { ...payload };
-
-  for (const [key, value] of Object.entries(patch)) {
-    if (value === null) {
-      delete nextPayload[key as keyof IssueReportCreateInput];
-      continue;
-    }
-
-    Object.assign(nextPayload, {
-      [key]: value,
-    });
-  }
-
-  return nextPayload;
-}
 
 export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueReportDetailPageProps) {
   const navigate = useNavigate();
@@ -81,78 +62,19 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
     retry: false,
   });
   const updateIssueReportMutation = useUpdateIssueReportMutation(issueReportId, tournamentId);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const submitModeRef = useRef<'save' | 'resend'>('save');
+  const zodFormHelpers = useMemo(
+    () =>
+      createTanStackFormZodHelpers(
+        issueReportPatchFormSchema,
+        setSubmitError,
+        '報告の更新に失敗しました',
+      ),
+    [],
+  );
   const resolvedReport = issueReportQuery.data ?? null;
   const localRecord = localSyncQuery.data;
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<
-    Partial<Record<keyof IssueReportPatchFormValues, string>>
-  >({});
-  const [values, setValues] = useState<IssueReportPatchFormValues>(() =>
-    buildIssueReportPatchFormValues(null, localRecord?.payload),
-  );
-
-  useEffect(() => {
-    setValues(buildIssueReportPatchFormValues(resolvedReport, localRecord?.payload));
-    setFieldErrors({});
-  }, [localRecord?.payload, resolvedReport]);
-
-  const clearMessageForField = (fieldName?: keyof IssueReportPatchFormValues) => {
-    setSubmitError(null);
-
-    if (!fieldName) {
-      return;
-    }
-
-    setFieldErrors((current) => {
-      if (!(fieldName in current)) {
-        return current;
-      }
-
-      const next = { ...current };
-      delete next[fieldName];
-      return next;
-    });
-  };
-
-  const updateFieldValue = <TName extends keyof IssueReportPatchFormValues>(
-    fieldName: TName,
-    nextValue: IssueReportPatchFormValues[TName],
-  ) => {
-    clearMessageForField(fieldName);
-    setValues((current) => ({
-      ...current,
-      [fieldName]: nextValue,
-    }));
-  };
-
-  const validateValues = () => {
-    const parsed = issueReportPatchFormSchema.safeParse(values);
-
-    if (parsed.success) {
-      setFieldErrors({});
-      return true;
-    }
-
-    const nextFieldErrors: Partial<Record<keyof IssueReportPatchFormValues, string>> = {};
-
-    for (const issue of parsed.error.issues) {
-      const fieldName = issue.path[0];
-      if (typeof fieldName !== 'string') {
-        continue;
-      }
-
-      const typedFieldName = fieldName as keyof IssueReportPatchFormValues;
-      if (nextFieldErrors[typedFieldName]) {
-        continue;
-      }
-
-      nextFieldErrors[typedFieldName] = issue.message;
-    }
-
-    setFieldErrors(nextFieldErrors);
-    setSubmitError(null);
-    return false;
-  };
 
   const effectiveTeamId = resolvedReport?.teamId ?? localRecord?.payload.teamId ?? '';
   const canEdit = Boolean(effectiveTeamId && canEditTeamResources(session, effectiveTeamId));
@@ -165,7 +87,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
       return resolvedReport;
     }
 
-    if (!sourcePayload) {
+    if (!sourcePayload || !localRecord) {
       return null;
     }
 
@@ -194,10 +116,80 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
       attachments: sourcePayload.attachments ?? null,
       apDeviceModel: sourcePayload.apDeviceModel ?? null,
       clientDeviceModel: sourcePayload.clientDeviceModel ?? null,
-      createdAt: localRecord?.createdAt ?? new Date().toISOString(),
-      updatedAt: localRecord?.updatedAt ?? new Date().toISOString(),
+      createdAt: localRecord.createdAt,
+      updatedAt: localRecord.updatedAt,
     } satisfies IssueReportView;
   }, [issueReportId, localRecord, resolvedReport, sourcePayload]);
+  const initialValues = useMemo(
+    () => buildIssueReportPatchFormValues(resolvedReport, localRecord?.payload),
+    [localRecord?.payload, resolvedReport],
+  );
+  const form = useForm({
+    defaultValues: initialValues,
+    onSubmit: async ({ value }) => {
+      zodFormHelpers.clearSubmitError();
+      const patch = toValidatedIssueReportPatchInput(value);
+
+      if (submitModeRef.current === 'resend') {
+        if (!localRecord) {
+          return;
+        }
+
+        await updateSyncRecordAfterAttempt(localRecord.id, {
+          status: 'processing',
+        });
+
+        try {
+          const created = await apiClient.createIssueReport(
+            tournamentId,
+            applyIssueReportPatchToCreatePayload(localRecord.payload, patch),
+          );
+
+          await updateSyncRecordAfterAttempt(localRecord.id, {
+            status: 'done',
+            entityId: created.id,
+          });
+
+          notifications.show({
+            color: 'teal',
+            title: '再送しました',
+            message: '同期状態を更新しました。',
+          });
+
+          await navigate({ to: `/tournaments/${tournamentId}/issue-reports/${created.id}` });
+          return;
+        } catch (error) {
+          await updateSyncRecordAfterAttempt(localRecord.id, {
+            status: 'failed',
+            errorMessage: getSubmitErrorMessage(error, 'failed to resend'),
+          });
+          setSubmitError(getSubmitErrorMessage(error, '再送に失敗しました'));
+          return;
+        }
+      }
+
+      try {
+        if (localRecord) {
+          await updateIssueReportSyncPayload(localRecord.id, patch);
+        } else {
+          await updateIssueReportMutation.mutateAsync(patch);
+        }
+
+        notifications.show({
+          color: 'teal',
+          title: '報告を更新しました',
+          message: localRecord ? 'ローカル保存内容を更新しました。' : '追記内容を保存しました。',
+        });
+      } catch (error) {
+        setSubmitError(getSubmitErrorMessage(error, '報告の更新に失敗しました'));
+      }
+    },
+  });
+
+  useEffect(() => {
+    form.reset(initialValues);
+    zodFormHelpers.clearSubmitError();
+  }, [form, initialValues, zodFormHelpers]);
 
   if (issueReportQuery.isLoading || localSyncQuery.isLoading) {
     return (
@@ -215,69 +207,6 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
       </Alert>
     );
   }
-
-  const handleSave = async () => {
-    setSubmitError(null);
-
-    if (!validateValues()) {
-      return;
-    }
-
-    const patch = toIssueReportPatchInput(values);
-
-    try {
-      if (localRecord) {
-        await updateIssueReportSyncPayload(localRecord.id, patch);
-      } else {
-        await updateIssueReportMutation.mutateAsync(patch);
-      }
-
-      notifications.show({
-        color: 'teal',
-        title: '報告を更新しました',
-        message: localRecord ? 'ローカル保存内容を更新しました。' : '追記内容を保存しました。',
-      });
-    } catch (error) {
-      setSubmitError(getSubmitErrorMessage(error, '報告の更新に失敗しました'));
-    }
-  };
-
-  const handleResend = async () => {
-    if (!localRecord) {
-      return;
-    }
-
-    setSubmitError(null);
-    await updateSyncRecordAfterAttempt(localRecord.id, {
-      status: 'processing',
-    });
-
-    try {
-      const patch = toIssueReportPatchInput(values);
-      const created = await apiClient.createIssueReport(tournamentId, {
-        ...buildCreatePayloadForResend(localRecord.payload, patch),
-      });
-
-      await updateSyncRecordAfterAttempt(localRecord.id, {
-        status: 'done',
-        entityId: created.id,
-      });
-
-      notifications.show({
-        color: 'teal',
-        title: '再送しました',
-        message: '同期状態を更新しました。',
-      });
-
-      await navigate({ to: `/tournaments/${tournamentId}/issue-reports/${created.id}` });
-    } catch (error) {
-      await updateSyncRecordAfterAttempt(localRecord.id, {
-        status: 'failed',
-        errorMessage: getSubmitErrorMessage(error, 'failed to resend'),
-      });
-      setSubmitError(getSubmitErrorMessage(error, '再送に失敗しました'));
-    }
-  };
 
   return (
     <Card className='form-card' padding='xl' radius='xl'>
@@ -325,279 +254,472 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
             readOnly
           />
         </Group>
-
-        <Group grow align='flex-start'>
-          <NativeSelect
-            label='公開範囲'
-            value={values.visibility}
-            error={fieldErrors.visibility}
-            disabled={!canEdit}
-            data={ISSUE_REPORT_VISIBILITIES.map((value) => ({ value, label: value }))}
-            onChange={(event) => {
-              updateFieldValue('visibility', event.currentTarget.value);
-            }}
-          />
-          <TextInput
-            label='報告者名'
-            value={values.reporterName}
-            error={fieldErrors.reporterName}
-            disabled={!canEdit}
-            onChange={(event) => {
-              updateFieldValue('reporterName', event.currentTarget.value);
-            }}
-          />
-        </Group>
-
-        <Group grow align='flex-start'>
-          <NumberInput
-            label='平均 Ping (ms)'
-            value={values.avgPingMs}
-            error={fieldErrors.avgPingMs}
-            disabled={!canEdit}
-            min={0}
-            onChange={(value) => {
-              updateFieldValue('avgPingMs', typeof value === 'number' ? value : '');
-            }}
-          />
-          <NumberInput
-            label='最大 Ping (ms)'
-            value={values.maxPingMs}
-            error={fieldErrors.maxPingMs}
-            disabled={!canEdit}
-            min={0}
-            onChange={(value) => {
-              updateFieldValue('maxPingMs', typeof value === 'number' ? value : '');
-            }}
-          />
-          <NumberInput
-            label='パケットロス率 (%)'
-            value={values.packetLossPercent}
-            error={fieldErrors.packetLossPercent}
-            disabled={!canEdit}
-            min={0}
-            max={100}
-            onChange={(value) => {
-              updateFieldValue('packetLossPercent', typeof value === 'number' ? value : '');
-            }}
-          />
-        </Group>
-
-        <Group grow align='flex-start'>
-          <NativeSelect
-            label='距離カテゴリ'
-            disabled={!canEdit}
-            value={values.distanceCategory}
-            error={fieldErrors.distanceCategory}
-            data={[
-              { value: '', label: '未選択' },
-              ...DISTANCE_CATEGORIES.map((value) => ({ value, label: value })),
-            ]}
-            onChange={(event) => {
-              updateFieldValue('distanceCategory', event.currentTarget.value);
-            }}
-          />
-          <NumberInput
-            label='推定距離[m]'
-            value={values.estimatedDistanceMeters}
-            error={fieldErrors.estimatedDistanceMeters}
-            disabled={!canEdit}
-            min={0}
-            onChange={(value) => {
-              updateFieldValue('estimatedDistanceMeters', typeof value === 'number' ? value : '');
-            }}
-          />
-          <NativeSelect
-            label='再現性'
-            disabled={!canEdit}
-            value={values.reproducibility}
-            error={fieldErrors.reproducibility}
-            data={[
-              { value: '', label: '未選択' },
-              ...REPRODUCIBILITIES.map((value) => ({ value, label: value })),
-            ]}
-            onChange={(event) => {
-              updateFieldValue('reproducibility', event.currentTarget.value);
-            }}
-          />
-        </Group>
-
-        <TextInput
-          label='観測位置'
-          value={values.locationLabel}
-          error={fieldErrors.locationLabel}
-          disabled={!canEdit}
-          onChange={(event) => {
-            updateFieldValue('locationLabel', event.currentTarget.value);
-          }}
-        />
-
-        <Checkbox.Group
-          label='対処内容'
-          value={values.mitigationTried}
-          onChange={(mitigationTried) => {
-            updateFieldValue('mitigationTried', mitigationTried);
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            zodFormHelpers.handleSubmitInvalid();
+            void form.handleSubmit();
           }}
         >
-          <Group mt='xs'>
-            {MITIGATIONS.map((value) => (
-              <Checkbox key={value} value={value} label={value} disabled={!canEdit} />
-            ))}
-          </Group>
-        </Checkbox.Group>
+          <form.Subscribe
+            selector={(state) => ({
+              values: state.values,
+              isSubmitting: state.isSubmitting,
+            })}
+          >
+            {({ values, isSubmitting }) => {
+              const handleFieldChange = <T,>(handleChange: (value: T) => void, nextValue: T) => {
+                zodFormHelpers.clearSubmitError();
+                handleChange(nextValue);
+              };
 
-        <NativeSelect
-          label='改善有無'
-          disabled={!canEdit}
-          value={values.improved}
-          error={fieldErrors.improved}
-          data={[
-            { value: '', label: '未選択' },
-            { value: 'true', label: '改善した' },
-            { value: 'false', label: '改善しない' },
-          ]}
-          onChange={(event) => {
-            updateFieldValue('improved', event.currentTarget.value as IssueReportPatchFormValues['improved']);
-          }}
-        />
+              return (
+                <Stack gap='md'>
+                  <Group grow align='flex-start'>
+                    <form.Field
+                      name='visibility'
+                      validators={{ onSubmit: zodFormHelpers.getFieldValidator('visibility') }}
+                    >
+                      {(field) => (
+                        <NativeSelect
+                          label='公開範囲'
+                          value={field.state.value}
+                          error={field.state.meta.errors[0]}
+                          disabled={!canEdit}
+                          data={ISSUE_REPORT_VISIBILITIES.map((entry) => ({
+                            value: entry,
+                            label: entry,
+                          }))}
+                          onBlur={field.handleBlur}
+                          onChange={(event) => {
+                            handleFieldChange(field.handleChange, event.currentTarget.value);
+                          }}
+                        />
+                      )}
+                    </form.Field>
 
-        <Stack gap='sm'>
-          <Group justify='space-between'>
-            <Text fw={700}>添付ファイル</Text>
-            {canEdit ? (
-              <Button
-                variant='light'
-                size='xs'
-                onClick={() => {
-                  clearMessageForField('attachments');
-                  setValues((current) => ({
-                    ...current,
-                    attachments: [...current.attachments, createEmptyIssueReportAttachment()],
-                  }));
-                }}
-              >
-                添付を追加
-              </Button>
-            ) : null}
-          </Group>
-
-          {values.attachments.map((attachment, index) => (
-            <Card key={attachment.id} withBorder radius='md' padding='md'>
-              <Stack gap='sm'>
-                <Group grow align='flex-start'>
-                  <TextInput
-                    label={`添付ファイル名 ${index + 1}`}
-                    value={attachment.name}
-                    error={fieldErrors.attachments}
-                    disabled={!canEdit}
-                    onChange={(event) => {
-                      const name = event.currentTarget.value;
-                      clearMessageForField('attachments');
-                      setValues((current) => ({
-                        ...current,
-                        attachments: current.attachments.map((entry, entryIndex) =>
-                          entryIndex === index ? { ...entry, name } : entry,
-                        ),
-                      }));
-                    }}
-                  />
-                  <TextInput
-                    label={`参照 URL ${index + 1}`}
-                    value={attachment.url}
-                    disabled={!canEdit}
-                    onChange={(event) => {
-                      const url = event.currentTarget.value;
-                      clearMessageForField('attachments');
-                      setValues((current) => ({
-                        ...current,
-                        attachments: current.attachments.map((entry, entryIndex) =>
-                          entryIndex === index ? { ...entry, url } : entry,
-                        ),
-                      }));
-                    }}
-                  />
-                </Group>
-                <Group grow align='flex-start'>
-                  <TextInput
-                    label={`MIME type ${index + 1}`}
-                    value={attachment.mimeType}
-                    disabled={!canEdit}
-                    onChange={(event) => {
-                      const mimeType = event.currentTarget.value;
-                      clearMessageForField('attachments');
-                      setValues((current) => ({
-                        ...current,
-                        attachments: current.attachments.map((entry, entryIndex) =>
-                          entryIndex === index ? { ...entry, mimeType } : entry,
-                        ),
-                      }));
-                    }}
-                  />
-                  <NumberInput
-                    label={`サイズ (bytes) ${index + 1}`}
-                    value={attachment.sizeBytes}
-                    disabled={!canEdit}
-                    min={0}
-                    onChange={(value) => {
-                      clearMessageForField('attachments');
-                      setValues((current) => ({
-                        ...current,
-                        attachments: current.attachments.map((entry, entryIndex) =>
-                          entryIndex === index
-                            ? { ...entry, sizeBytes: typeof value === 'number' ? value : '' }
-                            : entry,
-                        ),
-                      }));
-                    }}
-                  />
-                </Group>
-                {canEdit ? (
-                  <Group justify='flex-end'>
-                    <Button
-                      color='red'
-                      variant='subtle'
-                      size='xs'
-                      onClick={() => {
-                        clearMessageForField('attachments');
-                        setValues((current) => ({
-                          ...current,
-                          attachments: current.attachments.filter(
-                            (_, entryIndex) => entryIndex !== index,
-                          ),
-                        }));
+                    <form.Field
+                      name='reporterName'
+                      validators={{
+                        onChange: zodFormHelpers.getFieldValidator('reporterName'),
+                        onSubmit: zodFormHelpers.getFieldValidator('reporterName'),
                       }}
                     >
-                      添付を削除
-                    </Button>
+                      {(field) => (
+                        <TextInput
+                          label='報告者名'
+                          value={field.state.value}
+                          error={field.state.meta.errors[0]}
+                          disabled={!canEdit}
+                          onBlur={field.handleBlur}
+                          onChange={(event) => {
+                            handleFieldChange(field.handleChange, event.currentTarget.value);
+                          }}
+                        />
+                      )}
+                    </form.Field>
                   </Group>
-                ) : null}
-              </Stack>
-            </Card>
-          ))}
-        </Stack>
 
-        <Textarea
-          label='自由記述'
-          minRows={5}
-          value={values.description}
-          error={fieldErrors.description}
-          disabled={!canEdit}
-          onChange={(event) => {
-            updateFieldValue('description', event.currentTarget.value);
-          }}
-        />
+                  <Group grow align='flex-start'>
+                    <form.Field
+                      name='avgPingMs'
+                      validators={{
+                        onChange: zodFormHelpers.getFieldValidator('avgPingMs'),
+                        onSubmit: zodFormHelpers.getFieldValidator('avgPingMs'),
+                      }}
+                    >
+                      {(field) => (
+                        <NumberInput
+                          label='平均 Ping (ms)'
+                          value={field.state.value}
+                          error={field.state.meta.errors[0]}
+                          disabled={!canEdit}
+                          min={0}
+                          onBlur={field.handleBlur}
+                          onChange={(value) => {
+                            handleFieldChange(
+                              field.handleChange,
+                              typeof value === 'number' ? value : '',
+                            );
+                          }}
+                        />
+                      )}
+                    </form.Field>
 
-        <Group justify='flex-end'>
-          {localRecord ? (
-            <Button color='orange' variant='light' onClick={() => void handleResend()}>
-              再送
-            </Button>
-          ) : null}
-          {canEdit ? (
-            <Button loading={updateIssueReportMutation.isPending} onClick={() => void handleSave()}>
-              追記を保存
-            </Button>
-          ) : null}
-        </Group>
+                    <form.Field
+                      name='maxPingMs'
+                      validators={{
+                        onChange: zodFormHelpers.getFieldValidator('maxPingMs'),
+                        onSubmit: zodFormHelpers.getFieldValidator('maxPingMs'),
+                      }}
+                    >
+                      {(field) => (
+                        <NumberInput
+                          label='最大 Ping (ms)'
+                          value={field.state.value}
+                          error={field.state.meta.errors[0]}
+                          disabled={!canEdit}
+                          min={0}
+                          onBlur={field.handleBlur}
+                          onChange={(value) => {
+                            handleFieldChange(
+                              field.handleChange,
+                              typeof value === 'number' ? value : '',
+                            );
+                          }}
+                        />
+                      )}
+                    </form.Field>
+
+                    <form.Field
+                      name='packetLossPercent'
+                      validators={{
+                        onChange: zodFormHelpers.getFieldValidator('packetLossPercent'),
+                        onSubmit: zodFormHelpers.getFieldValidator('packetLossPercent'),
+                      }}
+                    >
+                      {(field) => (
+                        <NumberInput
+                          label='パケットロス率 (%)'
+                          value={field.state.value}
+                          error={field.state.meta.errors[0]}
+                          disabled={!canEdit}
+                          min={0}
+                          max={100}
+                          onBlur={field.handleBlur}
+                          onChange={(value) => {
+                            handleFieldChange(
+                              field.handleChange,
+                              typeof value === 'number' ? value : '',
+                            );
+                          }}
+                        />
+                      )}
+                    </form.Field>
+                  </Group>
+
+                  <Group grow align='flex-start'>
+                    <form.Field
+                      name='distanceCategory'
+                      validators={{
+                        onChange: zodFormHelpers.getFieldValidator('distanceCategory'),
+                        onSubmit: zodFormHelpers.getFieldValidator('distanceCategory'),
+                      }}
+                    >
+                      {(field) => (
+                        <NativeSelect
+                          label='距離カテゴリ'
+                          disabled={!canEdit}
+                          value={field.state.value}
+                          error={field.state.meta.errors[0]}
+                          data={[
+                            { value: '', label: '未選択' },
+                            ...DISTANCE_CATEGORIES.map((entry) => ({ value: entry, label: entry })),
+                          ]}
+                          onBlur={field.handleBlur}
+                          onChange={(event) => {
+                            handleFieldChange(field.handleChange, event.currentTarget.value);
+                          }}
+                        />
+                      )}
+                    </form.Field>
+
+                    <form.Field
+                      name='estimatedDistanceMeters'
+                      validators={{
+                        onChange: zodFormHelpers.getFieldValidator('estimatedDistanceMeters'),
+                        onSubmit: zodFormHelpers.getFieldValidator('estimatedDistanceMeters'),
+                      }}
+                    >
+                      {(field) => (
+                        <NumberInput
+                          label='推定距離[m]'
+                          value={field.state.value}
+                          error={field.state.meta.errors[0]}
+                          disabled={!canEdit}
+                          min={0}
+                          onBlur={field.handleBlur}
+                          onChange={(value) => {
+                            handleFieldChange(
+                              field.handleChange,
+                              typeof value === 'number' ? value : '',
+                            );
+                          }}
+                        />
+                      )}
+                    </form.Field>
+
+                    <form.Field
+                      name='reproducibility'
+                      validators={{
+                        onChange: zodFormHelpers.getFieldValidator('reproducibility'),
+                        onSubmit: zodFormHelpers.getFieldValidator('reproducibility'),
+                      }}
+                    >
+                      {(field) => (
+                        <NativeSelect
+                          label='再現性'
+                          disabled={!canEdit}
+                          value={field.state.value}
+                          error={field.state.meta.errors[0]}
+                          data={[
+                            { value: '', label: '未選択' },
+                            ...REPRODUCIBILITIES.map((entry) => ({ value: entry, label: entry })),
+                          ]}
+                          onBlur={field.handleBlur}
+                          onChange={(event) => {
+                            handleFieldChange(field.handleChange, event.currentTarget.value);
+                          }}
+                        />
+                      )}
+                    </form.Field>
+                  </Group>
+
+                  <form.Field
+                    name='locationLabel'
+                    validators={{
+                      onChange: zodFormHelpers.getFieldValidator('locationLabel'),
+                      onSubmit: zodFormHelpers.getFieldValidator('locationLabel'),
+                    }}
+                  >
+                    {(field) => (
+                      <TextInput
+                        label='観測位置'
+                        value={field.state.value}
+                        error={field.state.meta.errors[0]}
+                        disabled={!canEdit}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => {
+                          handleFieldChange(field.handleChange, event.currentTarget.value);
+                        }}
+                      />
+                    )}
+                  </form.Field>
+
+                  <form.Field name='mitigationTried'>
+                    {(field) => (
+                      <Checkbox.Group
+                        label='対処内容'
+                        value={field.state.value}
+                        onChange={(value) => {
+                          handleFieldChange(field.handleChange, value);
+                        }}
+                      >
+                        <Group mt='xs'>
+                          {MITIGATIONS.map((entry) => (
+                            <Checkbox key={entry} value={entry} label={entry} disabled={!canEdit} />
+                          ))}
+                        </Group>
+                      </Checkbox.Group>
+                    )}
+                  </form.Field>
+
+                  <form.Field name='improved'>
+                    {(field) => (
+                      <NativeSelect
+                        label='改善有無'
+                        disabled={!canEdit}
+                        value={field.state.value}
+                        error={field.state.meta.errors[0]}
+                        data={[
+                          { value: '', label: '未選択' },
+                          { value: 'true', label: '改善した' },
+                          { value: 'false', label: '改善しない' },
+                        ]}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => {
+                          handleFieldChange(
+                            field.handleChange,
+                            event.currentTarget.value as IssueReportPatchFormValues['improved'],
+                          );
+                        }}
+                      />
+                    )}
+                  </form.Field>
+
+                  <form.Field
+                    name='attachments'
+                    mode='array'
+                    validators={{ onSubmit: zodFormHelpers.getFieldValidator('attachments') }}
+                  >
+                    {(field) => (
+                      <Stack gap='sm'>
+                        <Group justify='space-between'>
+                          <Text fw={700}>添付ファイル</Text>
+                          {canEdit ? (
+                            <Button
+                              type='button'
+                              variant='light'
+                              size='xs'
+                              onClick={() => {
+                                zodFormHelpers.clearSubmitError();
+                                field.pushValue(createEmptyIssueReportAttachment());
+                              }}
+                            >
+                              添付を追加
+                            </Button>
+                          ) : null}
+                        </Group>
+
+                        {field.state.meta.errors[0] ? (
+                          <Text c='red' size='sm'>
+                            {field.state.meta.errors[0]}
+                          </Text>
+                        ) : null}
+
+                        {values.attachments.map((attachment, index) => (
+                          <Card key={attachment.id} withBorder radius='md' padding='md'>
+                            <Stack gap='sm'>
+                              <Group grow align='flex-start'>
+                                <form.Field name={`attachments[${index}].name`}>
+                                  {(subField) => (
+                                    <TextInput
+                                      label={`添付ファイル名 ${index + 1}`}
+                                      value={subField.state.value}
+                                      disabled={!canEdit}
+                                      onBlur={subField.handleBlur}
+                                      onChange={(event) => {
+                                        handleFieldChange(
+                                          subField.handleChange,
+                                          event.currentTarget.value,
+                                        );
+                                      }}
+                                    />
+                                  )}
+                                </form.Field>
+
+                                <form.Field name={`attachments[${index}].url`}>
+                                  {(subField) => (
+                                    <TextInput
+                                      label={`参照 URL ${index + 1}`}
+                                      value={subField.state.value}
+                                      disabled={!canEdit}
+                                      onBlur={subField.handleBlur}
+                                      onChange={(event) => {
+                                        handleFieldChange(
+                                          subField.handleChange,
+                                          event.currentTarget.value,
+                                        );
+                                      }}
+                                    />
+                                  )}
+                                </form.Field>
+                              </Group>
+
+                              <Group grow align='flex-start'>
+                                <form.Field name={`attachments[${index}].mimeType`}>
+                                  {(subField) => (
+                                    <TextInput
+                                      label={`MIME type ${index + 1}`}
+                                      value={subField.state.value}
+                                      disabled={!canEdit}
+                                      onBlur={subField.handleBlur}
+                                      onChange={(event) => {
+                                        handleFieldChange(
+                                          subField.handleChange,
+                                          event.currentTarget.value,
+                                        );
+                                      }}
+                                    />
+                                  )}
+                                </form.Field>
+
+                                <form.Field name={`attachments[${index}].sizeBytes`}>
+                                  {(subField) => (
+                                    <NumberInput
+                                      label={`サイズ (bytes) ${index + 1}`}
+                                      value={subField.state.value}
+                                      disabled={!canEdit}
+                                      min={0}
+                                      onBlur={subField.handleBlur}
+                                      onChange={(value) => {
+                                        handleFieldChange(
+                                          subField.handleChange,
+                                          typeof value === 'number' ? value : '',
+                                        );
+                                      }}
+                                    />
+                                  )}
+                                </form.Field>
+                              </Group>
+
+                              {canEdit ? (
+                                <Group justify='flex-end'>
+                                  <Button
+                                    type='button'
+                                    color='red'
+                                    variant='subtle'
+                                    size='xs'
+                                    onClick={() => {
+                                      zodFormHelpers.clearSubmitError();
+                                      field.removeValue(index);
+                                    }}
+                                  >
+                                    添付を削除
+                                  </Button>
+                                </Group>
+                              ) : null}
+                            </Stack>
+                          </Card>
+                        ))}
+                      </Stack>
+                    )}
+                  </form.Field>
+
+                  <form.Field
+                    name='description'
+                    validators={{
+                      onChange: zodFormHelpers.getFieldValidator('description'),
+                      onSubmit: zodFormHelpers.getFieldValidator('description'),
+                    }}
+                  >
+                    {(field) => (
+                      <Textarea
+                        label='自由記述'
+                        minRows={5}
+                        value={field.state.value}
+                        error={field.state.meta.errors[0]}
+                        disabled={!canEdit}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => {
+                          handleFieldChange(field.handleChange, event.currentTarget.value);
+                        }}
+                      />
+                    )}
+                  </form.Field>
+
+                  <Group justify='flex-end'>
+                    {localRecord ? (
+                      <Button
+                        type='submit'
+                        color='orange'
+                        variant='light'
+                        loading={Boolean(isSubmitting) && submitModeRef.current === 'resend'}
+                        onClick={() => {
+                          submitModeRef.current = 'resend';
+                        }}
+                      >
+                        再送
+                      </Button>
+                    ) : null}
+                    {canEdit ? (
+                      <Button
+                        type='submit'
+                        loading={Boolean(isSubmitting) && submitModeRef.current === 'save'}
+                        onClick={() => {
+                          submitModeRef.current = 'save';
+                        }}
+                      >
+                        追記を保存
+                      </Button>
+                    ) : null}
+                  </Group>
+                </Stack>
+              );
+            }}
+          </form.Subscribe>
+        </form>
       </Stack>
     </Card>
   );

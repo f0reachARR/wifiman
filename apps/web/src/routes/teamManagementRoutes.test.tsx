@@ -1881,6 +1881,183 @@ describe('team management routes', () => {
     expect(screen.queryByText('報告の更新に失敗しました')).not.toBeInTheDocument();
   });
 
+  it('local sync record の再送は validation 済み payload で create API を呼ぶ', async () => {
+    const record = await queueIssueReportSync(tournamentId, {
+      teamId: ownTeamId,
+      wifiConfigId: ownWifiId,
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+      reporterName: 'Offline Reporter',
+      description: 'offline note',
+    });
+    const createdId = '00000000-0000-4000-8000-000000000302';
+    const ownResponses = createOwnTeamDetailResponses();
+    const responses: Record<string, MockResponse> = {
+      ...ownResponses,
+      [`/api/issue-reports/${record.entityId}`]: {
+        status: 404,
+        body: { error: { code: 'NOT_FOUND', message: 'not found' } },
+      },
+      [`/api/issue-reports/${createdId}`]: {
+        status: 200,
+        body: {
+          id: createdId,
+          tournamentId,
+          teamId: ownTeamId,
+          wifiConfigId: ownWifiId,
+          visibility: 'team_public',
+          symptom: 'high_latency',
+          severity: 'high',
+          band: '5GHz',
+          channel: 36,
+          reporterName: 'Updated Reporter',
+          avgPingMs: 55,
+          createdAt: '2026-04-22T12:00:00.000Z',
+          updatedAt: '2026-04-22T12:00:00.000Z',
+        },
+      },
+    };
+    let capturedCreateBody: Record<string, unknown> | undefined;
+
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: false,
+    });
+
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/${record.entityId}`,
+      responses,
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace('http://localhost:3000', '');
+
+        if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+          capturedCreateBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+          return jsonResponse({
+            id: createdId,
+            tournamentId,
+            teamId: ownTeamId,
+            wifiConfigId: ownWifiId,
+            visibility: 'team_public',
+            symptom: 'high_latency',
+            severity: 'high',
+            band: '5GHz',
+            channel: 36,
+            reporterName: 'Updated Reporter',
+            avgPingMs: 55,
+            createdAt: '2026-04-22T12:00:00.000Z',
+            updatedAt: '2026-04-22T12:00:00.000Z',
+          }, 201);
+        }
+
+        const matched = responses[path];
+
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
+
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
+
+    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('公開範囲'), { target: { value: 'team_public' } });
+    fireEvent.change(screen.getByLabelText('報告者名'), { target: { value: '  Updated Reporter  ' } });
+    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '55' } });
+    fireEvent.change(screen.getByLabelText('自由記述'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '再送' }));
+
+    await waitFor(() => {
+      expect(capturedCreateBody).toMatchObject({
+        teamId: ownTeamId,
+        wifiConfigId: ownWifiId,
+        visibility: 'team_public',
+        symptom: 'high_latency',
+        severity: 'high',
+        band: '5GHz',
+        channel: 36,
+        reporterName: 'Updated Reporter',
+        avgPingMs: 55,
+      });
+    });
+    expect(capturedCreateBody).not.toHaveProperty('description');
+
+    await waitFor(async () => {
+      const synced = await appDb.syncRecords.get(record.id);
+
+      expect(synced?.status).toBe('done');
+      expect(synced?.entityId).toBe(createdId);
+    });
+  });
+
+  it('local sync record の再送で不正入力なら field error を出して API を呼ばない', async () => {
+    const record = await queueIssueReportSync(tournamentId, {
+      teamId: ownTeamId,
+      wifiConfigId: ownWifiId,
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+      description: 'offline note',
+    });
+    const ownResponses = createOwnTeamDetailResponses();
+    const responses: Record<string, MockResponse> = {
+      ...ownResponses,
+      [`/api/issue-reports/${record.entityId}`]: {
+        status: 404,
+        body: { error: { code: 'NOT_FOUND', message: 'not found' } },
+      },
+    };
+    const createSpy = vi.fn();
+
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: false,
+    });
+
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/${record.entityId}`,
+      responses,
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace('http://localhost:3000', '');
+
+        if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+          createSpy();
+          return jsonResponse({ error: { code: 'BAD_REQUEST', message: 'unexpected' } }, 400);
+        }
+
+        const matched = responses[path];
+
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
+
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
+
+    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '-1' } });
+    fireEvent.click(screen.getByRole('button', { name: '再送' }));
+
+    expect(await screen.findByText('0 以上の値を入力してください')).toBeInTheDocument();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText('再送に失敗しました')).not.toBeInTheDocument();
+
+    await waitFor(async () => {
+      const synced = await appDb.syncRecords.get(record.id);
+
+      expect(synced?.status).toBe('pending');
+    });
+  });
+
   it('報告詳細の API 失敗は submit error として表示する', async () => {
     const ownResponses = createOwnTeamDetailResponses();
     const issueReports = getRequiredResponse(

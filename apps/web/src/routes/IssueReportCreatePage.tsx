@@ -270,7 +270,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                     {(field) => (
                       <NativeSelect
                         label='WiFi 構成'
-                        data={wifiConfigs.map((config) => ({ value: config.id, label: config.name }))}
+                        data={wifiConfigs.map((config) => ({
+                          value: config.id,
+                          label: config.name,
+                        }))}
                         value={field.state.value}
                         error={field.state.meta.errors[0]}
                         onBlur={field.handleBlur}
@@ -294,7 +297,11 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                     />
                     <TextInput
                       label='帯域幅 (MHz)'
-                      value={selectedConfig?.channelWidthMHz ? String(selectedConfig.channelWidthMHz) : ''}
+                      value={
+                        selectedConfig?.channelWidthMHz
+                          ? String(selectedConfig.channelWidthMHz)
+                          : ''
+                      }
                       readOnly
                     />
                   </Group>
@@ -353,7 +360,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                       {(field) => (
                         <NativeSelect
                           label='公開範囲'
-                          data={ISSUE_REPORT_VISIBILITIES.map((entry) => ({ value: entry, label: entry }))}
+                          data={ISSUE_REPORT_VISIBILITIES.map((entry) => ({
+                            value: entry,
+                            label: entry,
+                          }))}
                           value={field.state.value}
                           onBlur={field.handleBlur}
                           onChange={(event) => {
@@ -402,7 +412,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                           error={field.state.meta.errors[0]}
                           onBlur={field.handleBlur}
                           onChange={(value) => {
-                            handleFieldChange(field.handleChange, typeof value === 'number' ? value : '');
+                            handleFieldChange(
+                              field.handleChange,
+                              typeof value === 'number' ? value : '',
+                            );
                           }}
                         />
                       )}
@@ -425,7 +438,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                           error={field.state.meta.errors[0]}
                           onBlur={field.handleBlur}
                           onChange={(value) => {
-                            handleFieldChange(field.handleChange, typeof value === 'number' ? value : '');
+                            handleFieldChange(
+                              field.handleChange,
+                              typeof value === 'number' ? value : '',
+                            );
                           }}
                         />
                       )}
@@ -510,7 +526,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                               error={field.state.meta.errors[0]}
                               onBlur={field.handleBlur}
                               onChange={(value) => {
-                                handleFieldChange(field.handleChange, typeof value === 'number' ? value : '');
+                                handleFieldChange(
+                                  field.handleChange,
+                                  typeof value === 'number' ? value : '',
+                                );
                               }}
                             />
                           )}
@@ -532,7 +551,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                               error={field.state.meta.errors[0]}
                               onBlur={field.handleBlur}
                               onChange={(value) => {
-                                handleFieldChange(field.handleChange, typeof value === 'number' ? value : '');
+                                handleFieldChange(
+                                  field.handleChange,
+                                  typeof value === 'number' ? value : '',
+                                );
                               }}
                             />
                           )}
@@ -552,7 +574,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                               label='再現性'
                               data={[
                                 { value: '', label: '未選択' },
-                                ...REPRODUCIBILITIES.map((entry) => ({ value: entry, label: entry })),
+                                ...REPRODUCIBILITIES.map((entry) => ({
+                                  value: entry,
+                                  label: entry,
+                                })),
                               ]}
                               value={field.state.value}
                               error={field.state.meta.errors[0]}
@@ -664,7 +689,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                                           value={subField.state.value}
                                           onBlur={subField.handleBlur}
                                           onChange={(event) => {
-                                            handleFieldChange(subField.handleChange, event.currentTarget.value);
+                                            handleFieldChange(
+                                              subField.handleChange,
+                                              event.currentTarget.value,
+                                            );
                                           }}
                                         />
                                       )}
@@ -677,7 +705,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                                           value={subField.state.value}
                                           onBlur={subField.handleBlur}
                                           onChange={(event) => {
-                                            handleFieldChange(subField.handleChange, event.currentTarget.value);
+                                            handleFieldChange(
+                                              subField.handleChange,
+                                              event.currentTarget.value,
+                                            );
                                           }}
                                         />
                                       )}
@@ -692,7 +723,10 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                                           value={subField.state.value}
                                           onBlur={subField.handleBlur}
                                           onChange={(event) => {
-                                            handleFieldChange(subField.handleChange, event.currentTarget.value);
+                                            handleFieldChange(
+                                              subField.handleChange,
+                                              event.currentTarget.value,
+                                            );
                                           }}
                                         />
                                       )}
@@ -740,7 +774,11 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                   ) : null}
 
                   <Group justify='space-between'>
-                    <Button component={Link} to={`/tournaments/${tournamentId}/channel-map`} variant='subtle'>
+                    <Button
+                      component={Link}
+                      to={`/tournaments/${tournamentId}/channel-map`}
+                      variant='subtle'
+                    >
                       チャンネルマップへ戻る
                     </Button>
                     <Group>
@@ -756,7 +794,9 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                       </Button>
                       <Button
                         type='submit'
-                        loading={createIssueReportMutation.isPending && submitModeRef.current === 'create'}
+                        loading={
+                          createIssueReportMutation.isPending && submitModeRef.current === 'create'
+                        }
                         onClick={() => {
                           submitModeRef.current = 'create';
                         }}
