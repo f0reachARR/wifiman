@@ -81,6 +81,34 @@ const observedWifiEntry: ChannelMapDisplayEntry = {
   observedAt: '2026-04-21T10:00:00.000Z',
 };
 
+const participantTeamEntry: ChannelMapDisplayEntry = {
+  id: 'entry-3',
+  band: '5GHz',
+  sourceType: 'participant_team',
+  teamId: '00000000-0000-4000-8000-000000000012',
+  wifiConfigId: '00000000-0000-4000-8000-000000000022',
+  label: 'Backup 5G',
+  subtitle: 'Beta / 予備',
+  detailKey: '149ch / 80MHz / standby',
+  channel: 149,
+  channelWidthMHz: 80,
+  startFreqMHz: 5705,
+  endFreqMHz: 5785,
+  centerFreqMHz: 5745,
+  reportCount: 1,
+  isWarning: false,
+  purposeLabel: 'デバッグ',
+  apDeviceModel: 'AP-7000',
+  clientDeviceModel: null,
+  status: 'standby',
+  ssid: null,
+  bssid: null,
+  sourceLabel: null,
+  rssi: null,
+  locationLabel: null,
+  observedAt: null,
+};
+
 afterEach(() => {
   mockedSession = null;
 });
@@ -144,6 +172,31 @@ describe('ChannelMapDetailPanel', () => {
     expect(screen.getByText('Control 5G')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'この構成で報告を作成する' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'このチームの詳細を見る' })).toBeInTheDocument();
+  });
+
+  it('participant_team 構成は editor セッションでも公開情報だけを表示し報告作成導線を出さない', () => {
+    mockedSession = {
+      kind: 'team',
+      role: 'editor',
+      teamId: '00000000-0000-4000-8000-000000000011',
+      tournamentId: '00000000-0000-4000-8000-000000000001',
+      teamAccessId: '00000000-0000-4000-8000-000000000041',
+    };
+
+    renderWithMantine(
+      <ChannelMapDetailPanel
+        entry={participantTeamEntry}
+        tournamentId='00000000-0000-4000-8000-000000000001'
+      />,
+    );
+
+    expect(screen.getByText('Backup 5G')).toBeInTheDocument();
+    expect(screen.getByText('AP 型番: AP-7000')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'この構成で報告を作成する' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'このチームの詳細を見る' })).toHaveAttribute(
+      'href',
+      '/tournaments/00000000-0000-4000-8000-000000000001/teams/00000000-0000-4000-8000-000000000012',
+    );
   });
 
   it('observed wifi では公開可能な観測情報だけを表示しチーム一覧導線へ切り替える', () => {

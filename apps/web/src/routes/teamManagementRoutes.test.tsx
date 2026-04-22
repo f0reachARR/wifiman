@@ -1137,14 +1137,16 @@ describe('team management routes', () => {
 
     expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
-    fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
-    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '42' } });
-    fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '3' } });
-    fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: 'mid' } });
-    fireEvent.change(screen.getByLabelText('公開範囲'), { target: { value: 'team_public' } });
-    fireEvent.change(screen.getByLabelText('一言メモ'), { target: { value: 'quick note' } });
-    fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
+      fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
+      fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '42' } });
+      fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '3' } });
+      fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: 'mid' } });
+      fireEvent.change(screen.getByLabelText('公開範囲'), { target: { value: 'team_public' } });
+      fireEvent.change(screen.getByLabelText('一言メモ'), { target: { value: 'quick note' } });
+      fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+    });
 
     await waitFor(() => {
       expect(createIssueReport).toHaveBeenCalledTimes(1);
@@ -1236,34 +1238,39 @@ describe('team management routes', () => {
 
     expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'unstable' } });
-    fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'critical' } });
-    fireEvent.click(screen.getByRole('button', { name: '詳細モードを開く' }));
-    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '42' } });
-    fireEvent.change(screen.getByLabelText('最大 Ping (ms)'), { target: { value: '90' } });
-    fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '12' } });
-    fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: 'far' } });
-    fireEvent.change(screen.getByLabelText('推定距離[m]'), { target: { value: '24' } });
-    fireEvent.change(screen.getByLabelText('再現性'), { target: { value: 'always' } });
-    fireEvent.change(screen.getByLabelText('改善有無'), { target: { value: 'false' } });
-    fireEvent.change(screen.getByLabelText('観測位置'), { target: { value: 'North pit' } });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'change_channel' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'move_position' }));
-    fireEvent.click(screen.getByRole('button', { name: '添付を追加' }));
-    fireEvent.change(screen.getByLabelText('添付ファイル名 1'), {
-      target: { value: 'speedtest.png' },
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'unstable' } });
+      fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'critical' } });
+      fireEvent.click(screen.getByRole('button', { name: '詳細モードを開く' }));
+      fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '42' } });
+      fireEvent.change(screen.getByLabelText('最大 Ping (ms)'), { target: { value: '90' } });
+      fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '12' } });
+      fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: 'far' } });
+      fireEvent.change(screen.getByLabelText('推定距離[m]'), { target: { value: '24' } });
+      fireEvent.change(screen.getByLabelText('再現性'), { target: { value: 'always' } });
+      fireEvent.change(screen.getByLabelText('改善有無'), { target: { value: 'false' } });
+      fireEvent.change(screen.getByLabelText('観測位置'), { target: { value: 'North pit' } });
+      fireEvent.click(screen.getByRole('checkbox', { name: 'change_channel' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'move_position' }));
+      fireEvent.click(screen.getByRole('button', { name: '添付を追加' }));
     });
-    fireEvent.change(screen.getByLabelText('参照 URL 1'), {
-      target: { value: 'https://example.com/speedtest.png' },
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('添付ファイル名 1'), {
+        target: { value: 'speedtest.png' },
+      });
+      fireEvent.change(screen.getByLabelText('参照 URL 1'), {
+        target: { value: 'https://example.com/speedtest.png' },
+      });
+      fireEvent.change(screen.getByLabelText('MIME type 1'), {
+        target: { value: 'image/png' },
+      });
+      fireEvent.change(screen.getByLabelText('サイズ (bytes) 1'), {
+        target: { value: '4096' },
+      });
+      fireEvent.change(screen.getByLabelText('自由記述'), { target: { value: 'long form note' } });
+      fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
     });
-    fireEvent.change(screen.getByLabelText('MIME type 1'), {
-      target: { value: 'image/png' },
-    });
-    fireEvent.change(screen.getByLabelText('サイズ (bytes) 1'), {
-      target: { value: '4096' },
-    });
-    fireEvent.change(screen.getByLabelText('自由記述'), { target: { value: 'long form note' } });
-    fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
 
     await waitFor(() => {
       expect(capturedBody).toMatchObject({
@@ -1289,41 +1296,44 @@ describe('team management routes', () => {
     });
   });
 
-  it('不具合報告フォームは 401 応答でも画面を維持してエラーを表示する', async () => {
-    const ownResponses = createOwnTeamDetailResponses();
+  it.each([400, 401, 403, 409, 422])(
+    '不具合報告フォームは API %s 応答でも画面を維持してエラーを表示する',
+    async (status) => {
+      const ownResponses = createOwnTeamDetailResponses();
 
-    renderRoute(
-      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
-      ownResponses,
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        const path = url.replace('http://localhost:3000', '');
+      renderRoute(
+        `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+        ownResponses,
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const path = url.replace('http://localhost:3000', '');
 
-        if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
-          return jsonResponse({ error: { code: 'UNAUTHORIZED', message: 'unauthorized' } }, 401);
-        }
+          if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+            return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
+          }
 
-        const matched = ownResponses[path];
+          const matched = ownResponses[path];
 
-        if (!matched) {
-          throw new Error(`Unhandled fetch: ${path}`);
-        }
+          if (!matched) {
+            throw new Error(`Unhandled fetch: ${path}`);
+          }
 
-        return jsonResponse(matched.body, matched.status);
-      },
-    );
+          return jsonResponse(matched.body, matched.status);
+        },
+      );
 
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
 
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
-      fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
-      fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
-    });
+      await act(async () => {
+        fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
+        fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
+        fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+      });
 
-    expect(await screen.findByText('API request failed')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
-  });
+      expect(await screen.findByText('API request failed')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    },
+  );
 
   it('オフライン保存すると syncRecords に pending が残る', async () => {
     renderRoute(
@@ -1496,35 +1506,82 @@ describe('team management routes', () => {
     expect(await screen.findByText('4 行目: BSSID が重複しています')).toBeInTheDocument();
   });
 
-  it('operator dashboard の野良 WiFi 手入力で 400 応答時にエラー alert を表示する', async () => {
-    const responses = createOperatorDashboardResponses();
+  it.each([400, 401, 403, 409])(
+    'operator dashboard の CSV 取込は API %s 応答時に generic error を表示する',
+    async (status) => {
+      const responses = createOperatorDashboardResponses();
 
-    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
+      renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace('http://localhost:3000', '');
 
-      if (path === `/api/tournaments/${tournamentId}/observed-wifis` && init?.method === 'POST') {
-        return jsonResponse({ error: { code: 'BAD_REQUEST', message: 'bad request' } }, 400);
-      }
+        if (
+          path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
+          init?.method === 'POST'
+        ) {
+          return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
+        }
 
-      const matched = responses[path];
+        const matched = responses[path];
 
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
 
-      return jsonResponse(matched.body, matched.status);
-    });
+        return jsonResponse(matched.body, matched.status);
+      });
 
-    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
-    });
+      await act(async () => {
+        fireEvent.change(screen.getByLabelText('CSV'), {
+          target: {
+            value: [
+              'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+              'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
+            ].join('\n'),
+          },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
+      });
 
-    expect(await screen.findByText('API request failed')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-  });
+      expect(await screen.findByText('API request failed')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+    },
+  );
+
+  it.each([400, 401, 403, 409, 422])(
+    'operator dashboard の野良 WiFi 手入力は API %s 応答時にエラー alert を表示する',
+    async (status) => {
+      const responses = createOperatorDashboardResponses();
+
+      renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace('http://localhost:3000', '');
+
+        if (path === `/api/tournaments/${tournamentId}/observed-wifis` && init?.method === 'POST') {
+          return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
+        }
+
+        const matched = responses[path];
+
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
+
+        return jsonResponse(matched.body, matched.status);
+      });
+
+      expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
+      });
+
+      expect(await screen.findByText('API request failed')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+    },
+  );
 
   it('初回マウント時にオンラインなら pending を自動同期する', async () => {
     const record = await queueIssueReportSync(tournamentId, {
@@ -1904,7 +1961,9 @@ describe('team management routes', () => {
       fireEvent.click(saveButton);
     });
 
-    expect(within(form).getByText(/無効です/)).toBeInTheDocument();
+    expect(
+      await within(form).findByText('帯域 5GHz に対して無効なチャンネルです'),
+    ).toBeInTheDocument();
   });
 
   it('WiFi 構成追加フォームで最大 3 件制約エラーを表示する', async () => {
@@ -1958,7 +2017,7 @@ describe('team management routes', () => {
     expect(screen.getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
   });
 
-  it.each([403, 409])(
+  it.each([400, 401, 403, 409, 422])(
     'WiFi 構成フォームは API %s 応答でもクラッシュせずエラーを表示する',
     async (status) => {
       const responses = createOwnTeamDetailResponses();
