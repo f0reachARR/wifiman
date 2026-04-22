@@ -4,6 +4,22 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appDb, queueIssueReportSync, updateSyncRecordAfterAttempt } from '../lib/db/appDb.js';
 
+const { notificationsShow } = vi.hoisted(() => ({
+  notificationsShow: vi.fn(),
+}));
+
+vi.mock('@mantine/notifications', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mantine/notifications')>();
+
+  return {
+    ...actual,
+    notifications: {
+      ...actual.notifications,
+      show: notificationsShow,
+    },
+  };
+});
+
 vi.mock('../lib/betterAuthClient.js', () => ({
   betterAuthClient: {
     signIn: {
@@ -787,6 +803,7 @@ function renderRoute(
 describe('team management routes', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/');
+    notificationsShow.mockClear();
   });
 
   afterEach(async () => {
@@ -1608,6 +1625,158 @@ describe('team management routes', () => {
     });
 
     expect((await screen.findAllByText(/at least 1 character/i)).length).toBeGreaterThan(0);
+  });
+
+  it('operator dashboard の野良 WiFi 手入力成功時は通知を出してフォームをリセットする', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/tournaments/${tournamentId}/observed-wifis` && init?.method === 'POST') {
+        return jsonResponse(
+          {
+            id: '00000000-0000-4000-8000-000000000401',
+            tournamentId,
+            source: 'manual',
+            ssid: null,
+            bssid: null,
+            band: '5GHz',
+            channel: 36,
+            channelWidthMHz: 20,
+            rssi: null,
+            locationLabel: null,
+            observedAt: '2026-04-21T10:00:00.000Z',
+            notes: null,
+            createdAt: '2026-04-21T10:00:00.000Z',
+            updatedAt: '2026-04-21T10:00:00.000Z',
+          },
+          201,
+        );
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('BSSID'), {
+        target: { value: '00:11:22:33:44:66' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('BSSID')).toHaveValue('');
+    });
+    expect(notificationsShow).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '野良 WiFi を登録しました' }),
+    );
+  });
+
+  it('operator dashboard の CSV 取込成功時は通知を出して textarea をリセットする', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (
+        path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({ count: 1 }, 201);
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('CSV'), {
+        target: {
+          value: [
+            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+            'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
+          ].join('\n'),
+        },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('CSV')).toHaveValue('');
+    });
+    expect(notificationsShow).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'CSV を一括登録しました' }),
+    );
+  });
+
+  it('operator dashboard の notice 作成成功時は通知を出してフォームをリセットする', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/tournaments/${tournamentId}/notices` && init?.method === 'POST') {
+        return jsonResponse(
+          {
+            id: '00000000-0000-4000-8000-000000000402',
+            tournamentId,
+            title: 'Urgent Notice',
+            body: 'Bring spare radios',
+            severity: 'warning',
+            publishedAt: '2026-04-21T10:00:00.000Z',
+            expiresAt: null,
+            createdAt: '2026-04-21T10:00:00.000Z',
+            updatedAt: '2026-04-21T10:00:00.000Z',
+          },
+          201,
+        );
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('title'), { target: { value: 'Urgent Notice' } });
+      fireEvent.change(screen.getByLabelText('body'), {
+        target: { value: 'Bring spare radios' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'お知らせを作成' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('title')).toHaveValue('');
+      expect(screen.getByLabelText('body')).toHaveValue('');
+    });
+    expect(notificationsShow).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'お知らせを作成しました' }),
+    );
   });
 
   it('初回マウント時にオンラインなら pending を自動同期する', async () => {
