@@ -68,6 +68,7 @@ describe('ChannelMapEntrySchema', () => {
       band: '5GHz' as const,
       channel: 36,
       observedWifiId: '00000000-0000-0000-0000-000000000020',
+      bssid: '00:11:22:33:44:55',
       source: 'wild' as const,
       rssi: -65,
       locationLabel: 'ピット A',
@@ -79,6 +80,7 @@ describe('ChannelMapEntrySchema', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.sourceType).toBe('observed_wifi');
+        expect(result.data.bssid).toBe('00:11:22:33:44:55');
         expect(result.data.rssi).toBe(-65);
         expect(result.data.locationLabel).toBe('ピット A');
         expect(result.data.observedAt).toBe('2026-04-18T10:00:00.000Z');
@@ -90,6 +92,14 @@ describe('ChannelMapEntrySchema', () => {
         ...observedBase,
         rssi: null,
         locationLabel: null,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('bssid は null でも parse できる', () => {
+      const result = ChannelMapEntrySchema.safeParse({
+        ...observedBase,
+        bssid: null,
       });
       expect(result.success).toBe(true);
     });

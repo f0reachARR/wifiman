@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/betterAuthClient.js', () => ({
@@ -102,6 +102,56 @@ function createBaseResponses(session: typeof ownTeamSession | typeof otherTeamSe
     [`/api/tournaments/${tournamentId}/notices`]: {
       status: 200,
       body: [],
+    },
+    [`/api/tournaments/${tournamentId}/channel-map`]: {
+      status: 200,
+      body: [
+        {
+          sourceType: 'own_team',
+          band: '5GHz',
+          channel: 36,
+          channelWidthMHz: 80,
+          wifiConfigId: ownWifiId,
+          wifiConfigName: 'Control 5G',
+          teamId: ownTeamId,
+          teamName: 'Alpha',
+          purpose: 'control',
+          role: 'primary',
+          status: 'active',
+          apDeviceModel: 'AP-9000',
+          clientDeviceModel: 'Client-1',
+          reportCount: 3,
+        },
+        {
+          sourceType: 'participant_team',
+          band: '5GHz',
+          channel: 149,
+          channelWidthMHz: 80,
+          wifiConfigId: '00000000-0000-4000-8000-000000000099',
+          wifiConfigName: 'Backup 5G',
+          teamId: otherTeamId,
+          teamName: 'Beta',
+          purpose: 'debug',
+          role: 'backup',
+          status: 'standby',
+          apDeviceModel: 'AP-7000',
+          clientDeviceModel: null,
+          reportCount: 1,
+        },
+        {
+          sourceType: 'observed_wifi',
+          band: '5GHz',
+          channel: 40,
+          channelWidthMHz: 20,
+          observedWifiId: '00000000-0000-4000-8000-000000000100',
+          ssid: 'Venue WiFi',
+          bssid: '00:11:22:33:44:55',
+          source: 'wild',
+          rssi: -68,
+          locationLabel: 'North Hall',
+          observedAt: '2026-04-21T10:00:00.000Z',
+        },
+      ],
     },
     [`/api/tournaments/${tournamentId}`]: {
       status: 200,
@@ -401,6 +451,7 @@ describe('team management routes', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it('公開大会トップからチーム一覧へ遷移できる', async () => {
@@ -420,6 +471,161 @@ describe('team management routes', () => {
     expect(screen.getAllByRole('link', { name: '詳細はログイン後' })).toHaveLength(2);
   });
 
+  it('ホームの大会カードからチャンネルマップへ進むと未認証では login に遷移する', async () => {
+    renderRoute('/', createBaseResponses(null));
+
+    expect(await screen.findByText('公開中の大会')).toBeInTheDocument();
+    expect(await screen.findByText('Spring Cup')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: 'チャンネルマップ' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
+    });
+
+    expect(window.location.pathname).toBe('/login');
+    expect(window.location.search).toBe(
+      `?next=${encodeURIComponent(`/tournaments/${tournamentId}/channel-map`)}`,
+    );
+  });
+
+  it('参加者は大会トップからチャンネルマップへ遷移し、詳細導線を実態どおりに表示する', async () => {
+    renderRoute(`/tournaments/${tournamentId}`, {
+      ...createBaseResponses(ownTeamSession),
+      [`/api/tournaments/${tournamentId}/best-practices`]: {
+        status: 200,
+        body: [
+          {
+            id: '00000000-0000-4000-8000-000000000052',
+            tournamentId,
+            title: 'Band practice',
+            body: '5GHz は DFS を避ける',
+            scope: 'band',
+            targetBand: '5GHz',
+            targetModel: null,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+          },
+        ],
+      },
+    });
+
+    expect(await screen.findByText('Spring Cup')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: 'チャンネルマップを見る' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('自チーム').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('参加チーム').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('観測 WiFi').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('radio', { name: '5GHz' }));
+    fireEvent.click(screen.getByLabelText('Control 5G bar'));
+
+    expect(await screen.findByText('問題報告が集中しています')).toBeInTheDocument();
+    expect(screen.getByText('AP 型番: AP-9000')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', {
+        name: '参考ベストプラクティスへ移動',
+      }),
+    ).toHaveAttribute('href', '#channel-map-best-practices');
+    expect(screen.getByRole('link', { name: 'このチームの詳細を見る' })).toHaveAttribute(
+      'href',
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+    );
+
+    fireEvent.click(screen.getByLabelText('Venue WiFi bar'));
+
+    expect(await screen.findByText('BSSID: 00:11:22:33:44:55')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'チーム一覧から報告先を探す' })).toHaveAttribute(
+      'href',
+      `/tournaments/${tournamentId}/teams`,
+    );
+    expect(screen.queryByText(/contactEmail|displayContactName|notes/i)).not.toBeInTheDocument();
+  });
+
+  it('自チームのチャンネルマップ詳細から報告作成画面へ直接遷移できる', async () => {
+    renderRoute(`/tournaments/${tournamentId}/channel-map`, createOwnTeamDetailResponses());
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('radio', { name: '5GHz' }));
+    fireEvent.click(screen.getByLabelText('Control 5G bar'));
+    fireEvent.click(screen.getByRole('link', { name: 'この構成で報告を作成する' }));
+
+    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    expect(screen.getByLabelText('構成名')).toHaveValue('Control 5G');
+    expect(screen.getByLabelText('帯域')).toHaveValue('5GHz');
+    expect(screen.getByLabelText('チャンネル')).toHaveValue('36');
+    expect(screen.getByLabelText('帯域幅 (MHz)')).toHaveValue('80');
+    expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/issue-reports/new`);
+    expect(window.location.search).toBe(`?wifiConfigId=${ownWifiId}`);
+  });
+
+  it('チャンネルマップの band/filter state を URL search params と同期して復元する', async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
+    expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
+    expect(screen.getByLabelText('Control 5G bar')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Backup 5G bar')).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('radio', { name: '6GHz' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: '問題報告ありのみ' }));
+    });
+
+    await waitFor(() => {
+      const searchParams = new URLSearchParams(window.location.search);
+      expect(searchParams.get('band')).toBe('6GHz');
+      expect(searchParams.get('controlOnly')).toBe('1');
+      expect(searchParams.get('reportOnly')).toBe('1');
+      expect(searchParams.get('model')).toBe('AP-9000');
+    });
+
+    await act(async () => {
+      window.history.replaceState(
+        {},
+        '',
+        `/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`,
+      );
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '問題報告ありのみ' })).not.toBeChecked();
+      expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
+      expect(screen.getByLabelText('Control 5G bar')).toBeInTheDocument();
+    });
+  });
+
+  it('報告作成 route はクエリの wifiConfigId から既存構成を初期選択する', async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    expect(screen.getByLabelText('構成名')).toHaveValue('Control 5G');
+    expect(screen.getByLabelText('帯域')).toHaveValue('5GHz');
+    expect(screen.getByLabelText('チャンネル')).toHaveValue('36');
+    expect(screen.getByLabelText('帯域幅 (MHz)')).toHaveValue('80');
+    expect(screen.getByLabelText('公開範囲')).toHaveValue('team_private');
+  });
+
   it('未認証で保護されたチーム詳細に入ると元 URL を next に保持して login へ遷移する', async () => {
     renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createBaseResponses(null));
 
@@ -431,6 +637,52 @@ describe('team management routes', () => {
     expect(window.location.search).toBe(
       `?next=${encodeURIComponent(`/tournaments/${tournamentId}/teams/${ownTeamId}`)}`,
     );
+  });
+
+  it('未認証の channel map deep link は search params を保ったまま login 後に復帰する', async () => {
+    vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_ENABLE_DEV_OPERATOR_AUTH', 'true');
+
+    renderRoute(`/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`, {
+      ...createBaseResponses(null),
+      '/api/auth/dev-operator-session': {
+        status: 200,
+        body: {
+          kind: 'operator',
+          role: 'operator',
+          sessionId: 'operator-session-1',
+          displayName: 'Operator 1',
+        },
+      },
+      [`/api/tournaments/${tournamentId}/best-practices`]: {
+        status: 200,
+        body: [],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
+    });
+
+    expect(window.location.pathname).toBe('/login');
+    expect(window.location.search).toBe(
+      `?next=${encodeURIComponent(`/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`)}`,
+    );
+
+    fireEvent.change(screen.getByLabelText('表示名'), { target: { value: 'Operator 1' } });
+    fireEvent.change(screen.getByLabelText('パスフレーズ'), {
+      target: { value: 'local-dev-passphrase' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'ダッシュボードへ進む' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/channel-map`);
+    expect(window.location.search).toBe('?band=5GHz&controlOnly=1&model=AP-9000');
+    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
+    expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
   });
 
   it('自チーム詳細では報告一覧に詳細 DTO を表示し、WiFi editor で補助表示を出す', async () => {

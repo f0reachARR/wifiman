@@ -85,6 +85,19 @@ export function TournamentOverviewPage({ tournamentId }: TournamentOverviewPageP
             <Button component={Link} to={`/tournaments/${tournamentId}/teams`}>
               チーム一覧を見る
             </Button>
+            {session ? (
+              <Button
+                component={Link}
+                to={`/tournaments/${tournamentId}/channel-map`}
+                variant='light'
+              >
+                チャンネルマップを見る
+              </Button>
+            ) : (
+              <Button component={Link} to='/team-access' variant='light' color='orange'>
+                チャンネルマップはログイン後
+              </Button>
+            )}
             {session?.kind === 'team' && session.tournamentId === tournamentId ? (
               <Button
                 component={Link}

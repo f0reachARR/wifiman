@@ -1,5 +1,6 @@
 import {
   BestPracticeSchema,
+  ChannelMapEntrySchema,
   DeviceSpecSchema,
   IssueReportSchema,
   NoticeSchema,
@@ -57,8 +58,14 @@ type NoticeListContract =
   paths['/tournaments/{tournamentId}/notices']['get']['responses'][200]['content']['application/json'];
 type BestPracticeListContract =
   paths['/tournaments/{tournamentId}/best-practices']['get']['responses'][200]['content']['application/json'];
+type ChannelMapListContract =
+  paths['/tournaments/{tournamentId}/channel-map']['get']['responses'][200]['content']['application/json'];
 type IssueReportListContract =
   paths['/tournaments/{tournamentId}/issue-reports']['get']['responses'][200]['content']['application/json'];
+type CreateIssueReportInput =
+  paths['/tournaments/{tournamentId}/issue-reports']['post']['requestBody']['content']['application/json'];
+type IssueReportContract =
+  paths['/tournaments/{tournamentId}/issue-reports']['post']['responses'][201]['content']['application/json'];
 type TeamListContract =
   paths['/tournaments/{tournamentId}/teams']['get']['responses'][200]['content']['application/json'];
 type TeamContract =
@@ -88,10 +95,12 @@ export type TournamentView = z.infer<typeof TournamentSchema>;
 export type TournamentPublicOverviewView = z.infer<typeof TournamentPublicOverviewSchema>;
 export type NoticeView = z.infer<typeof NoticeSchema>;
 export type BestPracticeView = z.infer<typeof BestPracticeSchema>;
+export type ChannelMapEntryView = ChannelMapListContract[number];
 export type TeamView = TeamContract;
 export type WifiConfigView = WifiConfigListContract[number];
 export type DeviceSpecView = DeviceSpecListContract[number];
 export type IssueReportView = IssueReportListContract[number];
+export type IssueReportCreateInput = CreateIssueReportInput;
 export type TeamUpdateInput = UpdateTeamInput;
 export type WifiConfigCreateInput = CreateWifiConfigInput;
 export type WifiConfigUpdateInput = PatchWifiConfigInput;
@@ -237,11 +246,32 @@ export class ApiClient {
     return z.array(BestPracticeSchema).parse(payload);
   }
 
+  async listTournamentChannelMap(tournamentId: string): Promise<ChannelMapEntryView[]> {
+    const payload = await this.requestJson<ChannelMapListContract>(
+      `/tournaments/${tournamentId}/channel-map`,
+    );
+    return z.array(ChannelMapEntrySchema).parse(payload) as ChannelMapEntryView[];
+  }
+
   async listTournamentIssueReports(tournamentId: string): Promise<IssueReportView[]> {
     const payload = await this.requestJson<IssueReportListContract>(
       `/tournaments/${tournamentId}/issue-reports`,
     );
     return z.array(IssueReportViewSchema).parse(payload) as IssueReportView[];
+  }
+
+  async createIssueReport(
+    tournamentId: string,
+    input: IssueReportCreateInput,
+  ): Promise<z.infer<typeof IssueReportSchema>> {
+    const payload = await this.requestJson<IssueReportContract>(
+      `/tournaments/${tournamentId}/issue-reports`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    );
+    return IssueReportSchema.parse(payload);
   }
 
   async listTournamentTeams(tournamentId: string): Promise<TeamView[]> {
@@ -351,6 +381,7 @@ export const apiQueryKeys = {
   tournamentPublicOverview: (id: string) => ['api', 'tournaments', id, 'public-overview'] as const,
   tournamentNotices: (id: string) => ['api', 'tournaments', id, 'notices'] as const,
   tournamentBestPractices: (id: string) => ['api', 'tournaments', id, 'best-practices'] as const,
+  tournamentChannelMap: (id: string) => ['api', 'tournaments', id, 'channel-map'] as const,
   tournamentIssueReports: (id: string) => ['api', 'tournaments', id, 'issue-reports'] as const,
   tournamentTeams: (id: string) => ['api', 'tournaments', id, 'teams'] as const,
   team: (id: string) => ['api', 'teams', id] as const,

@@ -92,6 +92,14 @@ export function HomePage() {
                       </Button>
                       <Button
                         component={Link}
+                        to={`/tournaments/${tournament.id}/channel-map`}
+                        variant='light'
+                        color='orange'
+                      >
+                        チャンネルマップ
+                      </Button>
+                      <Button
+                        component={Link}
                         to={`/tournaments/${tournament.id}/teams`}
                         variant='light'
                       >

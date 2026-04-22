@@ -4,6 +4,7 @@ import {
   apiQueryKeys,
   type DeviceSpecCreateInput,
   type DeviceSpecUpdateInput,
+  type IssueReportCreateInput,
   type TeamUpdateInput,
   type WifiConfigCreateInput,
   type WifiConfigUpdateInput,
@@ -48,11 +49,40 @@ export function useTournamentBestPractices(tournamentId: string) {
   });
 }
 
+export function useTournamentChannelMap(tournamentId: string) {
+  return useQuery({
+    queryKey: apiQueryKeys.tournamentChannelMap(tournamentId),
+    queryFn: () => apiClient.listTournamentChannelMap(tournamentId),
+    enabled: tournamentId.length > 0,
+  });
+}
+
 export function useTournamentIssueReports(tournamentId: string) {
   return useQuery({
     queryKey: apiQueryKeys.tournamentIssueReports(tournamentId),
     queryFn: () => apiClient.listTournamentIssueReports(tournamentId),
     enabled: tournamentId.length > 0,
+  });
+}
+
+export function useCreateIssueReportMutation(tournamentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: IssueReportCreateInput) => apiClient.createIssueReport(tournamentId, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentIssueReports(tournamentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentChannelMap(tournamentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentPublicOverview(tournamentId),
+        }),
+      ]);
+    },
   });
 }
 

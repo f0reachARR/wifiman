@@ -13,12 +13,14 @@ import { getProtectedRedirectPath } from './lib/auth.js';
 import { authSessionQueryOptions } from './lib/useAuthSession.js';
 import { AppDashboardPage } from './routes/AppDashboardPage.js';
 import { HomePage } from './routes/HomePage.js';
+import { IssueReportCreatePage } from './routes/IssueReportCreatePage.js';
 import { LoginPage } from './routes/LoginPage.js';
 import { OfflinePage } from './routes/OfflinePage.js';
 import { SyncPage } from './routes/SyncPage.js';
 import { TeamAccessPage } from './routes/TeamAccessPage.js';
 import { TeamDetailPage } from './routes/TeamDetailPage.js';
 import { TeamListPage } from './routes/TeamListPage.js';
+import { TournamentChannelMapPage } from './routes/TournamentChannelMapPage.js';
 import { TournamentOverviewPage } from './routes/TournamentOverviewPage.js';
 
 type RouterContext = {
@@ -51,9 +53,13 @@ function NotFoundPage() {
   );
 }
 
-async function ensureAuthenticatedForPath(queryClient: QueryClient, pathname: string) {
+async function ensureAuthenticatedForPath(
+  queryClient: QueryClient,
+  pathname: string,
+  search: string,
+) {
   const session = await queryClient.fetchQuery(authSessionQueryOptions());
-  const destination = getProtectedRedirectPath(pathname, session);
+  const destination = getProtectedRedirectPath(pathname, session, search);
 
   if (!destination) {
     return;
@@ -63,8 +69,8 @@ async function ensureAuthenticatedForPath(queryClient: QueryClient, pathname: st
     throw redirect({ to: '/login' });
   }
 
-  const [, search = ''] = destination.split('?');
-  const next = new URLSearchParams(search).get('next');
+  const [, destinationSearch = ''] = destination.split('?');
+  const next = new URLSearchParams(destinationSearch).get('next');
 
   if (!next) {
     throw redirect({ to: '/login' });
@@ -110,7 +116,7 @@ const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: AppDashboardPage,
 });
@@ -119,7 +125,7 @@ const appSyncRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app/sync',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: SyncPage,
 });
@@ -142,11 +148,35 @@ const tournamentTeamsRoute = createRoute({
   },
 });
 
+const tournamentChannelMapRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/channel-map',
+  beforeLoad: async ({ context, location }) => {
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
+  },
+  component: function TournamentChannelMapRouteComponent() {
+    const { tournamentId } = tournamentChannelMapRoute.useParams();
+    return <TournamentChannelMapPage tournamentId={tournamentId} />;
+  },
+});
+
+const tournamentIssueReportCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/issue-reports/new',
+  beforeLoad: async ({ context, location }) => {
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
+  },
+  component: function TournamentIssueReportCreateRouteComponent() {
+    const { tournamentId } = tournamentIssueReportCreateRoute.useParams();
+    return <IssueReportCreatePage tournamentId={tournamentId} />;
+  },
+});
+
 const teamDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tournaments/$tournamentId/teams/$teamId',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname);
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: function TeamDetailRouteComponent() {
     const { tournamentId, teamId } = teamDetailRoute.useParams();
@@ -163,6 +193,8 @@ const routeTree = rootRoute.addChildren([
   appSyncRoute,
   tournamentOverviewRoute,
   tournamentTeamsRoute,
+  tournamentChannelMapRoute,
+  tournamentIssueReportCreateRoute,
   teamDetailRoute,
 ]);
 
