@@ -5,6 +5,7 @@ import {
   type DeviceSpecCreateInput,
   type DeviceSpecUpdateInput,
   type IssueReportCreateInput,
+  type IssueReportUpdateInput,
   type TeamUpdateInput,
   type WifiConfigCreateInput,
   type WifiConfigUpdateInput,
@@ -80,6 +81,35 @@ export function useCreateIssueReportMutation(tournamentId: string) {
         }),
         queryClient.invalidateQueries({
           queryKey: apiQueryKeys.tournamentPublicOverview(tournamentId),
+        }),
+      ]);
+    },
+  });
+}
+
+export function useIssueReport(issueReportId: string) {
+  return useQuery({
+    queryKey: apiQueryKeys.issueReport(issueReportId),
+    queryFn: () => apiClient.getIssueReport(issueReportId),
+    enabled: issueReportId.length > 0,
+    retry: false,
+  });
+}
+
+export function useUpdateIssueReportMutation(issueReportId: string, tournamentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: IssueReportUpdateInput) =>
+      apiClient.updateIssueReport(issueReportId, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: apiQueryKeys.issueReport(issueReportId) }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentIssueReports(tournamentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.tournamentChannelMap(tournamentId),
         }),
       ]);
     },

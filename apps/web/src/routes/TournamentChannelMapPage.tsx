@@ -154,6 +154,13 @@ export function TournamentChannelMapPage({ tournamentId }: TournamentChannelMapP
             <Button component={Link} to={`/tournaments/${tournamentId}`} variant='subtle'>
               大会トップへ戻る
             </Button>
+            <Button
+              component={Link}
+              to={`/tournaments/${tournamentId}/best-practices`}
+              variant='subtle'
+            >
+              ベストプラクティス一覧
+            </Button>
           </Group>
 
           <Group justify='space-between' align='center'>

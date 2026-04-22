@@ -66,6 +66,12 @@ type CreateIssueReportInput =
   paths['/tournaments/{tournamentId}/issue-reports']['post']['requestBody']['content']['application/json'];
 type IssueReportContract =
   paths['/tournaments/{tournamentId}/issue-reports']['post']['responses'][201]['content']['application/json'];
+type IssueReportDetailContract =
+  paths['/issue-reports/{id}']['get']['responses'][200]['content']['application/json'];
+type UpdateIssueReportInput =
+  paths['/issue-reports/{id}']['patch']['requestBody']['content']['application/json'];
+type UpdateIssueReportContract =
+  paths['/issue-reports/{id}']['patch']['responses'][200]['content']['application/json'];
 type TeamListContract =
   paths['/tournaments/{tournamentId}/teams']['get']['responses'][200]['content']['application/json'];
 type TeamContract =
@@ -101,6 +107,7 @@ export type WifiConfigView = WifiConfigListContract[number];
 export type DeviceSpecView = DeviceSpecListContract[number];
 export type IssueReportView = IssueReportListContract[number];
 export type IssueReportCreateInput = CreateIssueReportInput;
+export type IssueReportUpdateInput = UpdateIssueReportInput;
 export type TeamUpdateInput = UpdateTeamInput;
 export type WifiConfigCreateInput = CreateWifiConfigInput;
 export type WifiConfigUpdateInput = PatchWifiConfigInput;
@@ -274,6 +281,22 @@ export class ApiClient {
     return IssueReportSchema.parse(payload);
   }
 
+  async getIssueReport(id: string): Promise<IssueReportView> {
+    const payload = await this.requestJson<IssueReportDetailContract>(`/issue-reports/${id}`);
+    return IssueReportViewSchema.parse(payload) as IssueReportView;
+  }
+
+  async updateIssueReport(
+    id: string,
+    input: IssueReportUpdateInput,
+  ): Promise<z.infer<typeof IssueReportSchema>> {
+    const payload = await this.requestJson<UpdateIssueReportContract>(`/issue-reports/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input as UpdateIssueReportInput),
+    });
+    return IssueReportSchema.parse(payload);
+  }
+
   async listTournamentTeams(tournamentId: string): Promise<TeamView[]> {
     const payload = await this.requestJson<TeamListContract>(`/tournaments/${tournamentId}/teams`);
     return z.array(TeamViewSchema).parse(payload) as TeamView[];
@@ -383,6 +406,7 @@ export const apiQueryKeys = {
   tournamentBestPractices: (id: string) => ['api', 'tournaments', id, 'best-practices'] as const,
   tournamentChannelMap: (id: string) => ['api', 'tournaments', id, 'channel-map'] as const,
   tournamentIssueReports: (id: string) => ['api', 'tournaments', id, 'issue-reports'] as const,
+  issueReport: (id: string) => ['api', 'issue-reports', id] as const,
   tournamentTeams: (id: string) => ['api', 'tournaments', id, 'teams'] as const,
   team: (id: string) => ['api', 'teams', id] as const,
   teamWifiConfigs: (id: string) => ['api', 'teams', id, 'wifi-configs'] as const,

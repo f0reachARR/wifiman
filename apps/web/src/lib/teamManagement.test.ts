@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildWifiConfigFormValues,
+  filterBestPractices,
   parseDeviceSpecFormValues,
   parseTeamFormValues,
   parseWifiConfigFormValues,
@@ -66,5 +67,37 @@ describe('team management validation', () => {
 
     expect(parsed.data).toBeUndefined();
     expect(parsed.errors.supportedBands).toBeTruthy();
+  });
+
+  it('ベストプラクティスは帯域・用途・型番で絞り込める', () => {
+    const filtered = filterBestPractices(
+      [
+        {
+          id: '00000000-0000-4000-8000-000000000051',
+          tournamentId: '00000000-0000-4000-8000-000000000001',
+          title: '5GHz control guidance',
+          body: 'Control link では AP-9000 を 5GHz で優先する',
+          scope: 'band',
+          targetBand: '5GHz',
+          targetModel: 'AP-9000',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000052',
+          tournamentId: '00000000-0000-4000-8000-000000000001',
+          title: '2.4GHz fallback',
+          body: 'Fallback guidance',
+          scope: 'band',
+          targetBand: '2.4GHz',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+      { band: '5GHz', purpose: 'control', model: 'AP-9000' },
+    );
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.title).toBe('5GHz control guidance');
   });
 });

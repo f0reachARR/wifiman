@@ -12,8 +12,10 @@ import { AppShellLayout } from './components/AppShellLayout.js';
 import { getProtectedRedirectPath } from './lib/auth.js';
 import { authSessionQueryOptions } from './lib/useAuthSession.js';
 import { AppDashboardPage } from './routes/AppDashboardPage.js';
+import { BestPracticesPage } from './routes/BestPracticesPage.js';
 import { HomePage } from './routes/HomePage.js';
 import { IssueReportCreatePage } from './routes/IssueReportCreatePage.js';
+import { IssueReportDetailPage } from './routes/IssueReportDetailPage.js';
 import { LoginPage } from './routes/LoginPage.js';
 import { OfflinePage } from './routes/OfflinePage.js';
 import { SyncPage } from './routes/SyncPage.js';
@@ -172,6 +174,27 @@ const tournamentIssueReportCreateRoute = createRoute({
   },
 });
 
+const tournamentIssueReportDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/issue-reports/$issueReportId',
+  beforeLoad: async ({ context, location }) => {
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
+  },
+  component: function TournamentIssueReportDetailRouteComponent() {
+    const { tournamentId, issueReportId } = tournamentIssueReportDetailRoute.useParams();
+    return <IssueReportDetailPage tournamentId={tournamentId} issueReportId={issueReportId} />;
+  },
+});
+
+const tournamentBestPracticesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/best-practices',
+  component: function TournamentBestPracticesRouteComponent() {
+    const { tournamentId } = tournamentBestPracticesRoute.useParams();
+    return <BestPracticesPage tournamentId={tournamentId} />;
+  },
+});
+
 const teamDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tournaments/$tournamentId/teams/$teamId',
@@ -195,6 +218,8 @@ const routeTree = rootRoute.addChildren([
   tournamentTeamsRoute,
   tournamentChannelMapRoute,
   tournamentIssueReportCreateRoute,
+  tournamentIssueReportDetailRoute,
+  tournamentBestPracticesRoute,
   teamDetailRoute,
 ]);
 

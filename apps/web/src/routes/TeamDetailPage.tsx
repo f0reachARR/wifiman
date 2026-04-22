@@ -1002,6 +1002,16 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
               {ownTeam && isDetailedIssueReport(report) && report.description ? (
                 <Text size='sm'>詳細: {report.description}</Text>
               ) : null}
+              <Group justify='flex-end'>
+                <Button
+                  component={Link}
+                  size='xs'
+                  variant='light'
+                  to={`/tournaments/${tournamentId}/issue-reports/${report.id}`}
+                >
+                  詳細を見る
+                </Button>
+              </Group>
             </Stack>
           </Card>
         ))}

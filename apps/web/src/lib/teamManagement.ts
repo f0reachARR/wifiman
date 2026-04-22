@@ -287,3 +287,38 @@ export function findRelevantBestPractices(
     return practice.targetModel != null && modelSet.has(practice.targetModel.trim().toLowerCase());
   });
 }
+
+type BestPracticeFilterOptions = {
+  band?: string;
+  purpose?: string;
+  model?: string;
+};
+
+export function filterBestPractices(
+  bestPractices: ReadonlyArray<BestPractice>,
+  filters: BestPracticeFilterOptions,
+): BestPractice[] {
+  const band = filters.band?.trim();
+  const purpose = filters.purpose?.trim().toLowerCase() ?? '';
+  const model = filters.model?.trim().toLowerCase() ?? '';
+
+  return bestPractices.filter((practice) => {
+    if (band && practice.scope === 'band' && practice.targetBand !== band) {
+      return false;
+    }
+
+    const searchable = [practice.title, practice.body, practice.targetModel ?? '']
+      .join(' ')
+      .toLowerCase();
+
+    if (purpose && !searchable.includes(purpose)) {
+      return false;
+    }
+
+    if (model && !searchable.includes(model)) {
+      return false;
+    }
+
+    return true;
+  });
+}
