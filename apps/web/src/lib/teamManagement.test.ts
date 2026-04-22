@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildWifiConfigFormValues,
+  filterBestPractices,
   parseDeviceSpecFormValues,
+  parseObservedWifiCsv,
   parseTeamFormValues,
   parseWifiConfigFormValues,
 } from './teamManagement.js';
@@ -66,5 +68,95 @@ describe('team management validation', () => {
 
     expect(parsed.data).toBeUndefined();
     expect(parsed.errors.supportedBands).toBeTruthy();
+  });
+
+  it('ベストプラクティスは帯域・用途・型番で絞り込める', () => {
+    const filtered = filterBestPractices(
+      [
+        {
+          id: '00000000-0000-4000-8000-000000000051',
+          tournamentId: '00000000-0000-4000-8000-000000000001',
+          title: '5GHz control guidance',
+          body: 'Control link では AP-9000 を 5GHz で優先する',
+          scope: 'band',
+          targetBand: '5GHz',
+          targetModel: 'AP-9000',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000052',
+          tournamentId: '00000000-0000-4000-8000-000000000001',
+          title: '2.4GHz fallback',
+          body: 'Fallback guidance',
+          scope: 'band',
+          targetBand: '2.4GHz',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+      { band: '5GHz', purpose: 'control', model: 'AP-9000' },
+    );
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.title).toBe('5GHz control guidance');
+  });
+
+  it('用途フィルタは用途候補分類に基づいて厳密に絞り込む', () => {
+    const filtered = filterBestPractices(
+      [
+        {
+          id: '00000000-0000-4000-8000-000000000061',
+          tournamentId: '00000000-0000-4000-8000-000000000001',
+          title: 'Controller uplink tuning',
+          body: 'Control link 用の AP-9000 設定を優先する',
+          scope: 'band',
+          targetBand: '5GHz',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000062',
+          tournamentId: '00000000-0000-4000-8000-000000000001',
+          title: 'Video relay tuning',
+          body: 'Video stream 用のチャネル幅を維持する',
+          scope: 'band',
+          targetBand: '5GHz',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+      { band: '5GHz', purpose: 'control' },
+    );
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.title).toBe('Controller uplink tuning');
+  });
+
+  it('野良 WiFi CSV を行番号付きで検証し、有効行だけを正規化する', () => {
+    const result = parseObservedWifiCsv(
+      [
+        'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+        'analyzer_import,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
+        'manual,Bad Row,00:11:22:33:44:56,2.4GHz,149,80,-50,South Hall,2026-04-21T10:05:00.000Z,invalid channel',
+      ].join('\n'),
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      source: 'analyzer_import',
+      ssid: 'Venue WiFi',
+      band: '5GHz',
+      channel: 40,
+      channelWidthMHz: 20,
+      rssi: -68,
+      locationLabel: 'North Hall',
+    });
+    expect(result.errors).toEqual([
+      {
+        row: 3,
+        message: '3 行目: 帯域 2.4GHz に対してチャンネル 149 は無効です',
+      },
+    ]);
   });
 });

@@ -1102,6 +1102,10 @@
                           "ssid": {
                             "type": ["string", "null"]
                           },
+                          "bssid": {
+                            "type": ["string", "null"],
+                            "pattern": "^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$"
+                          },
                           "source": {
                             "type": "string",
                             "enum": ["wild", "analyzer_import", "manual"]
@@ -5544,6 +5548,34 @@
                           "improved": {
                             "type": ["boolean", "null"]
                           },
+                          "attachments": {
+                            "type": ["array", "null"],
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "url": {
+                                  "type": "string",
+                                  "maxLength": 2000,
+                                  "format": "uri"
+                                },
+                                "mimeType": {
+                                  "type": "string",
+                                  "maxLength": 200
+                                },
+                                "sizeBytes": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["name"]
+                            },
+                            "maxItems": 10
+                          },
                           "apDeviceModel": {
                             "type": ["string", "null"],
                             "maxLength": 200
@@ -5648,20 +5680,6 @@
                           "reproducibility": {
                             "type": ["string", "null"],
                             "enum": ["always", "sometimes", "once"]
-                          },
-                          "mitigationTried": {
-                            "type": ["array", "null"],
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "change_channel",
-                                "change_width",
-                                "change_band",
-                                "change_device",
-                                "move_position",
-                                "none"
-                              ]
-                            }
                           },
                           "improved": {
                             "type": ["boolean", "null"]
@@ -5869,6 +5887,34 @@
                   "improved": {
                     "type": "boolean"
                   },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 2000,
+                          "format": "uri"
+                        },
+                        "mimeType": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "sizeBytes": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["name"]
+                    },
+                    "maxItems": 10
+                  },
                   "apDeviceModel": {
                     "type": "string",
                     "maxLength": 200
@@ -5992,6 +6038,34 @@
                     },
                     "improved": {
                       "type": ["boolean", "null"]
+                    },
+                    "attachments": {
+                      "type": ["array", "null"],
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000,
+                            "format": "uri"
+                          },
+                          "mimeType": {
+                            "type": "string",
+                            "maxLength": 200
+                          },
+                          "sizeBytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": ["name"]
+                      },
+                      "maxItems": 10
                     },
                     "apDeviceModel": {
                       "type": ["string", "null"],
@@ -6393,6 +6467,34 @@
                         "improved": {
                           "type": ["boolean", "null"]
                         },
+                        "attachments": {
+                          "type": ["array", "null"],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "url": {
+                                "type": "string",
+                                "maxLength": 2000,
+                                "format": "uri"
+                              },
+                              "mimeType": {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              "sizeBytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": ["name"]
+                          },
+                          "maxItems": 10
+                        },
                         "apDeviceModel": {
                           "type": ["string", "null"],
                           "maxLength": 200
@@ -6497,20 +6599,6 @@
                         "reproducibility": {
                           "type": ["string", "null"],
                           "enum": ["always", "sometimes", "once"]
-                        },
-                        "mitigationTried": {
-                          "type": ["array", "null"],
-                          "items": {
-                            "type": "string",
-                            "enum": [
-                              "change_channel",
-                              "change_width",
-                              "change_band",
-                              "change_device",
-                              "move_position",
-                              "none"
-                            ]
-                          }
                         },
                         "improved": {
                           "type": ["boolean", "null"]
@@ -6657,13 +6745,12 @@
                     "format": "uuid"
                   },
                   "reporterName": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 200
                   },
                   "visibility": {
                     "type": "string",
-                    "enum": ["team_private", "team_public"],
-                    "default": "team_private"
+                    "enum": ["team_private", "team_public"]
                   },
                   "band": {
                     "type": "string",
@@ -6694,40 +6781,40 @@
                     "enum": ["low", "medium", "high", "critical"]
                   },
                   "avgPingMs": {
-                    "type": "number",
+                    "type": ["number", "null"],
                     "minimum": 0
                   },
                   "maxPingMs": {
-                    "type": "number",
+                    "type": ["number", "null"],
                     "minimum": 0
                   },
                   "packetLossPercent": {
-                    "type": "number",
+                    "type": ["number", "null"],
                     "minimum": 0,
                     "maximum": 100
                   },
                   "distanceCategory": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "enum": ["near", "mid", "far", "obstacle"]
                   },
                   "estimatedDistanceMeters": {
-                    "type": "number",
+                    "type": ["number", "null"],
                     "minimum": 0
                   },
                   "locationLabel": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 200
                   },
                   "reproducibility": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "enum": ["always", "sometimes", "once"]
                   },
                   "description": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 5000
                   },
                   "mitigationTried": {
-                    "type": "array",
+                    "type": ["array", "null"],
                     "items": {
                       "type": "string",
                       "enum": [
@@ -6741,14 +6828,42 @@
                     }
                   },
                   "improved": {
-                    "type": "boolean"
+                    "type": ["boolean", "null"]
+                  },
+                  "attachments": {
+                    "type": ["array", "null"],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 2000,
+                          "format": "uri"
+                        },
+                        "mimeType": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "sizeBytes": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["name"]
+                    },
+                    "maxItems": 10
                   },
                   "apDeviceModel": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 200
                   },
                   "clientDeviceModel": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 200
                   }
                 }
@@ -6865,6 +6980,34 @@
                     },
                     "improved": {
                       "type": ["boolean", "null"]
+                    },
+                    "attachments": {
+                      "type": ["array", "null"],
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000,
+                            "format": "uri"
+                          },
+                          "mimeType": {
+                            "type": "string",
+                            "maxLength": 200
+                          },
+                          "sizeBytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": ["name"]
+                      },
+                      "maxItems": 10
                     },
                     "apDeviceModel": {
                       "type": ["string", "null"],

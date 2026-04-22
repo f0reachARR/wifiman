@@ -43,6 +43,13 @@
       "when": 1776499500000,
       "tag": "0005_eager_hemingway",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776829304172,
+      "tag": "0006_legal_polaris",
+      "breakpoints": true
     }
   ]
 }

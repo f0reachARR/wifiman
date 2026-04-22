@@ -10,6 +10,13 @@ import {
 } from '../enums.js';
 import { DateTimeStringSchema, optionalFromNullable } from './common.js';
 
+export const IssueReportAttachmentSchema = z.object({
+  name: z.string().min(1).max(200),
+  url: z.string().url().max(2000).optional(),
+  mimeType: z.string().max(200).optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
+});
+
 export const IssueReportSchema = z.object({
   id: z.string().uuid(),
   tournamentId: z.string().uuid(),
@@ -32,6 +39,7 @@ export const IssueReportSchema = z.object({
   description: optionalFromNullable(z.string().max(5000)),
   mitigationTried: optionalFromNullable(z.array(z.enum(MITIGATIONS))),
   improved: optionalFromNullable(z.boolean()),
+  attachments: optionalFromNullable(z.array(IssueReportAttachmentSchema).max(10)),
   apDeviceModel: optionalFromNullable(z.string().max(200)),
   clientDeviceModel: optionalFromNullable(z.string().max(200)),
   createdAt: DateTimeStringSchema,
@@ -55,7 +63,6 @@ export const PublicIssueReportSummarySchema = IssueReportSchema.pick({
   distanceCategory: true,
   estimatedDistanceMeters: true,
   reproducibility: true,
-  mitigationTried: true,
   improved: true,
   apDeviceModel: true,
   clientDeviceModel: true,
@@ -84,6 +91,7 @@ export const CreateIssueReportBaseSchema = z.object({
   description: z.string().max(5000).optional(),
   mitigationTried: z.array(z.enum(MITIGATIONS)).optional(),
   improved: z.boolean().optional(),
+  attachments: z.array(IssueReportAttachmentSchema).max(10).optional(),
   apDeviceModel: z.string().max(200).optional(),
   clientDeviceModel: z.string().max(200).optional(),
 });
@@ -107,10 +115,32 @@ export const CreateIssueReportSchema = CreateIssueReportBaseSchema.superRefine((
   }
 });
 
-export const UpdateIssueReportSchema = CreateIssueReportBaseSchema.omit({
-  tournamentId: true,
-}).partial();
+export const UpdateIssueReportSchema = z.object({
+  teamId: z.string().uuid().optional(),
+  wifiConfigId: z.string().uuid().optional(),
+  reporterName: z.string().max(200).nullable().optional(),
+  visibility: z.enum(ISSUE_REPORT_VISIBILITIES).optional(),
+  band: z.enum(BANDS).optional(),
+  channel: z.number().int().positive().optional(),
+  channelWidthMHz: z.number().int().positive().optional(),
+  symptom: z.enum(SYMPTOMS).optional(),
+  severity: z.enum(SEVERITIES).optional(),
+  avgPingMs: z.number().nonnegative().nullable().optional(),
+  maxPingMs: z.number().nonnegative().nullable().optional(),
+  packetLossPercent: z.number().min(0).max(100).nullable().optional(),
+  distanceCategory: z.enum(DISTANCE_CATEGORIES).nullable().optional(),
+  estimatedDistanceMeters: z.number().nonnegative().nullable().optional(),
+  locationLabel: z.string().max(200).nullable().optional(),
+  reproducibility: z.enum(REPRODUCIBILITIES).nullable().optional(),
+  description: z.string().max(5000).nullable().optional(),
+  mitigationTried: z.array(z.enum(MITIGATIONS)).nullable().optional(),
+  improved: z.boolean().nullable().optional(),
+  attachments: z.array(IssueReportAttachmentSchema).max(10).nullable().optional(),
+  apDeviceModel: z.string().max(200).nullable().optional(),
+  clientDeviceModel: z.string().max(200).nullable().optional(),
+});
 
+export type IssueReportAttachment = z.infer<typeof IssueReportAttachmentSchema>;
 export type IssueReport = z.infer<typeof IssueReportSchema>;
 export type PublicIssueReportSummary = z.infer<typeof PublicIssueReportSummarySchema>;
 export type CreateIssueReport = z.infer<typeof CreateIssueReportSchema>;

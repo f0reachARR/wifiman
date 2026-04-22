@@ -420,6 +420,7 @@ describe('security boundaries integration', () => {
         reporterName: 'hidden reporter',
         description: 'hidden description',
         locationLabel: 'hidden location',
+        mitigationTried: ['change_channel'],
       }),
     ]);
 
@@ -436,6 +437,7 @@ describe('security boundaries integration', () => {
     expect(body[1]).not.toHaveProperty('reporterName');
     expect(body[1]).not.toHaveProperty('description');
     expect(body[1]).not.toHaveProperty('locationLabel');
+    expect(body[1]).not.toHaveProperty('mitigationTried');
   });
 
   it('issueReport 作成で大会スコープ外の teamId を拒否する', async () => {

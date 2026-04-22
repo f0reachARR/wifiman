@@ -88,12 +88,31 @@ describe('channelMap utilities', () => {
       ...DEFAULT_CHANNEL_MAP_FILTERS,
       sourceTypes: ['own_team'],
       controlOnly: true,
+      reportOnly: true,
       widths: [80],
       modelQuery: 'ap-9000',
     });
 
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.sourceType).toBe('own_team');
+  });
+
+  it('does not match model query against labels or subtitles', () => {
+    const displayEntries = createChannelMapDisplayEntries(entries);
+
+    expect(
+      filterChannelMapEntries(displayEntries, {
+        ...DEFAULT_CHANNEL_MAP_FILTERS,
+        modelQuery: 'Control 5G',
+      }),
+    ).toHaveLength(0);
+
+    expect(
+      filterChannelMapEntries(displayEntries, {
+        ...DEFAULT_CHANNEL_MAP_FILTERS,
+        modelQuery: 'Alpha',
+      }),
+    ).toHaveLength(0);
   });
 
   it('stacks overlapping entries into separate lanes', () => {
@@ -151,6 +170,29 @@ describe('channelMap utilities', () => {
         reportOnly: true,
         widths: [20, 80],
         modelQuery: 'AP-9000',
+      },
+    });
+  });
+
+  it('serializes and restores an explicit empty source filter selection', () => {
+    const searchParams = createChannelMapSearchParams({
+      band: '5GHz',
+      filters: {
+        ...DEFAULT_CHANNEL_MAP_FILTERS,
+        sourceTypes: [],
+      },
+    });
+
+    expect(searchParams.get('band')).toBe('5GHz');
+    expect(searchParams.get('sourceState')).toBe('none');
+    expect(searchParams.getAll('source')).toEqual([]);
+
+    expect(parseChannelMapSearchParams(searchParams)).toEqual({
+      band: '5GHz',
+      filters: {
+        ...DEFAULT_CHANNEL_MAP_FILTERS,
+        sourceTypes: [],
+        widths: [],
       },
     });
   });

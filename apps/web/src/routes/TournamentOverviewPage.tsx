@@ -108,6 +108,13 @@ export function TournamentOverviewPage({ tournamentId }: TournamentOverviewPageP
                 自チームを開く
               </Button>
             ) : null}
+            <Button
+              component={Link}
+              to={`/tournaments/${tournamentId}/best-practices`}
+              variant='subtle'
+            >
+              ベストプラクティス
+            </Button>
             {!session ? (
               <Button component={Link} to='/team-access' variant='subtle' color='dark'>
                 チームアクセスを開始

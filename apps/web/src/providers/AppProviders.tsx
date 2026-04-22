@@ -2,6 +2,7 @@ import { createTheme, MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { type QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { useAutoSyncPendingIssueReports } from '../lib/syncEngine.js';
 import { AppRouterProvider } from '../router.js';
 import { PwaLifecycle } from '../ui/PwaLifecycle.js';
 
@@ -20,11 +21,17 @@ type AppProvidersProps = {
   router: Parameters<typeof AppRouterProvider>[0]['router'];
 };
 
+function AutoSyncBridge() {
+  useAutoSyncPendingIssueReports();
+  return null;
+}
+
 export function AppProviders({ children, queryClient, router }: AppProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <MantineProvider theme={theme}>
         <Notifications position='top-right' />
+        <AutoSyncBridge />
         <PwaLifecycle />
         {children ?? <AppRouterProvider router={router} />}
       </MantineProvider>

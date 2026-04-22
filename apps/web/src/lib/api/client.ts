@@ -4,7 +4,9 @@ import {
   DeviceSpecSchema,
   IssueReportSchema,
   NoticeSchema,
+  ObservedWifiSchema,
   PublicIssueReportSummarySchema,
+  TeamAccessSchema,
   TeamSchema,
   TournamentPublicOverviewSchema,
   TournamentSchema,
@@ -37,6 +39,9 @@ const PublicDeviceSpecSchema = DeviceSpecSchema.omit({
 });
 const DeviceSpecViewSchema = z.union([DeviceSpecSchema, PublicDeviceSpecSchema]);
 const IssueReportViewSchema = z.union([IssueReportSchema, PublicIssueReportSummarySchema]);
+const PublicObservedWifiSchema = ObservedWifiSchema.omit({ notes: true });
+const ObservedWifiViewSchema = z.union([ObservedWifiSchema, PublicObservedWifiSchema]);
+const TeamAccessViewSchema = TeamAccessSchema.omit({ accessTokenHash: true });
 
 type AuthSessionContract =
   paths['/auth/session']['get']['responses'][200]['content']['application/json'];
@@ -56,16 +61,40 @@ type TournamentPublicOverviewContract =
   paths['/tournaments/{id}/public-overview']['get']['responses'][200]['content']['application/json'];
 type NoticeListContract =
   paths['/tournaments/{tournamentId}/notices']['get']['responses'][200]['content']['application/json'];
+type CreateNoticeInput =
+  paths['/tournaments/{tournamentId}/notices']['post']['requestBody']['content']['application/json'];
+type CreateNoticeContract =
+  paths['/tournaments/{tournamentId}/notices']['post']['responses'][201]['content']['application/json'];
+type UpdateNoticeInput =
+  paths['/notices/{id}']['patch']['requestBody']['content']['application/json'];
+type UpdateNoticeContract =
+  paths['/notices/{id}']['patch']['responses'][200]['content']['application/json'];
 type BestPracticeListContract =
   paths['/tournaments/{tournamentId}/best-practices']['get']['responses'][200]['content']['application/json'];
 type ChannelMapListContract =
   paths['/tournaments/{tournamentId}/channel-map']['get']['responses'][200]['content']['application/json'];
+type ObservedWifiListContract =
+  paths['/tournaments/{tournamentId}/observed-wifis']['get']['responses'][200]['content']['application/json'];
+type CreateObservedWifiInput =
+  paths['/tournaments/{tournamentId}/observed-wifis']['post']['requestBody']['content']['application/json'];
+type ObservedWifiContract =
+  paths['/tournaments/{tournamentId}/observed-wifis']['post']['responses'][201]['content']['application/json'];
+type BulkCreateObservedWifiInput =
+  paths['/tournaments/{tournamentId}/observed-wifis/bulk']['post']['requestBody']['content']['application/json'];
+type BulkCreateObservedWifiContract =
+  paths['/tournaments/{tournamentId}/observed-wifis/bulk']['post']['responses'][201]['content']['application/json'];
 type IssueReportListContract =
   paths['/tournaments/{tournamentId}/issue-reports']['get']['responses'][200]['content']['application/json'];
 type CreateIssueReportInput =
   paths['/tournaments/{tournamentId}/issue-reports']['post']['requestBody']['content']['application/json'];
 type IssueReportContract =
   paths['/tournaments/{tournamentId}/issue-reports']['post']['responses'][201]['content']['application/json'];
+type IssueReportDetailContract =
+  paths['/issue-reports/{id}']['get']['responses'][200]['content']['application/json'];
+type UpdateIssueReportInput =
+  paths['/issue-reports/{id}']['patch']['requestBody']['content']['application/json'];
+type UpdateIssueReportContract =
+  paths['/issue-reports/{id}']['patch']['responses'][200]['content']['application/json'];
 type TeamListContract =
   paths['/tournaments/{tournamentId}/teams']['get']['responses'][200]['content']['application/json'];
 type TeamContract =
@@ -83,6 +112,10 @@ type PatchWifiConfigInput =
   paths['/wifi-configs/{id}']['patch']['requestBody']['content']['application/json'];
 type DeviceSpecListContract =
   paths['/teams/{teamId}/device-specs']['get']['responses'][200]['content']['application/json'];
+type TeamAccessListContract =
+  paths['/teams/{teamId}/team-accesses']['get']['responses'][200]['content']['application/json'];
+type ResendTeamAccessContract =
+  paths['/team-accesses/{id}/resend']['post']['responses'][200]['content']['application/json'];
 type CreateDeviceSpecInput =
   paths['/teams/{teamId}/device-specs']['post']['requestBody']['content']['application/json'];
 type DeviceSpecContract =
@@ -94,13 +127,21 @@ type PatchDeviceSpecInput =
 export type TournamentView = z.infer<typeof TournamentSchema>;
 export type TournamentPublicOverviewView = z.infer<typeof TournamentPublicOverviewSchema>;
 export type NoticeView = z.infer<typeof NoticeSchema>;
+export type NoticeCreateInput = CreateNoticeInput;
+export type NoticeUpdateInput = UpdateNoticeInput;
 export type BestPracticeView = z.infer<typeof BestPracticeSchema>;
-export type ChannelMapEntryView = ChannelMapListContract[number];
+export type ChannelMapEntryView = z.infer<typeof ChannelMapEntrySchema>;
+export type ObservedWifiView = z.infer<typeof ObservedWifiViewSchema>;
+export type ObservedWifiCreateInput = CreateObservedWifiInput;
+export type ObservedWifiBulkCreateInput = BulkCreateObservedWifiInput;
 export type TeamView = TeamContract;
+export type TeamAccessView = z.infer<typeof TeamAccessViewSchema>;
+export type ResendTeamAccessResult = ResendTeamAccessContract;
 export type WifiConfigView = WifiConfigListContract[number];
 export type DeviceSpecView = DeviceSpecListContract[number];
 export type IssueReportView = IssueReportListContract[number];
 export type IssueReportCreateInput = CreateIssueReportInput;
+export type IssueReportUpdateInput = UpdateIssueReportInput;
 export type TeamUpdateInput = UpdateTeamInput;
 export type WifiConfigCreateInput = CreateWifiConfigInput;
 export type WifiConfigUpdateInput = PatchWifiConfigInput;
@@ -239,6 +280,30 @@ export class ApiClient {
     return z.array(NoticeSchema).parse(payload);
   }
 
+  async createTournamentNotice(
+    tournamentId: string,
+    input: NoticeCreateInput,
+  ): Promise<z.infer<typeof NoticeSchema>> {
+    const payload = await this.requestJson<CreateNoticeContract>(
+      `/tournaments/${tournamentId}/notices`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input as CreateNoticeInput),
+      },
+    );
+
+    return NoticeSchema.parse(payload);
+  }
+
+  async updateNotice(id: string, input: NoticeUpdateInput): Promise<z.infer<typeof NoticeSchema>> {
+    const payload = await this.requestJson<UpdateNoticeContract>(`/notices/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input as UpdateNoticeInput),
+    });
+
+    return NoticeSchema.parse(payload);
+  }
+
   async listTournamentBestPractices(tournamentId: string): Promise<BestPracticeView[]> {
     const payload = await this.requestJson<BestPracticeListContract>(
       `/tournaments/${tournamentId}/best-practices`,
@@ -251,6 +316,44 @@ export class ApiClient {
       `/tournaments/${tournamentId}/channel-map`,
     );
     return z.array(ChannelMapEntrySchema).parse(payload) as ChannelMapEntryView[];
+  }
+
+  async listObservedWifis(tournamentId: string): Promise<ObservedWifiView[]> {
+    const payload = await this.requestJson<ObservedWifiListContract>(
+      `/tournaments/${tournamentId}/observed-wifis`,
+    );
+
+    return z.array(ObservedWifiViewSchema).parse(payload) as ObservedWifiView[];
+  }
+
+  async createObservedWifi(
+    tournamentId: string,
+    input: ObservedWifiCreateInput,
+  ): Promise<z.infer<typeof ObservedWifiSchema>> {
+    const payload = await this.requestJson<ObservedWifiContract>(
+      `/tournaments/${tournamentId}/observed-wifis`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input as CreateObservedWifiInput),
+      },
+    );
+
+    return ObservedWifiSchema.parse(payload);
+  }
+
+  async bulkCreateObservedWifis(
+    tournamentId: string,
+    input: ObservedWifiBulkCreateInput,
+  ): Promise<BulkCreateObservedWifiContract> {
+    const payload = await this.requestJson<BulkCreateObservedWifiContract>(
+      `/tournaments/${tournamentId}/observed-wifis/bulk`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input as BulkCreateObservedWifiInput),
+      },
+    );
+
+    return payload;
   }
 
   async listTournamentIssueReports(tournamentId: string): Promise<IssueReportView[]> {
@@ -274,6 +377,22 @@ export class ApiClient {
     return IssueReportSchema.parse(payload);
   }
 
+  async getIssueReport(id: string): Promise<IssueReportView> {
+    const payload = await this.requestJson<IssueReportDetailContract>(`/issue-reports/${id}`);
+    return IssueReportViewSchema.parse(payload) as IssueReportView;
+  }
+
+  async updateIssueReport(
+    id: string,
+    input: IssueReportUpdateInput,
+  ): Promise<z.infer<typeof IssueReportSchema>> {
+    const payload = await this.requestJson<UpdateIssueReportContract>(`/issue-reports/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input as UpdateIssueReportInput),
+    });
+    return IssueReportSchema.parse(payload);
+  }
+
   async listTournamentTeams(tournamentId: string): Promise<TeamView[]> {
     const payload = await this.requestJson<TeamListContract>(`/tournaments/${tournamentId}/teams`);
     return z.array(TeamViewSchema).parse(payload) as TeamView[];
@@ -290,6 +409,20 @@ export class ApiClient {
       body: JSON.stringify(input as UpdateTeamInput),
     });
     return TeamSchema.parse(payload);
+  }
+
+  async listTeamAccesses(teamId: string): Promise<TeamAccessView[]> {
+    const payload = await this.requestJson<TeamAccessListContract>(
+      `/teams/${teamId}/team-accesses`,
+    );
+
+    return z.array(TeamAccessViewSchema).parse(payload) as TeamAccessView[];
+  }
+
+  async resendTeamAccess(id: string): Promise<ResendTeamAccessResult> {
+    return this.requestJson<ResendTeamAccessContract>(`/team-accesses/${id}/resend`, {
+      method: 'POST',
+    });
   }
 
   async listWifiConfigs(teamId: string): Promise<WifiConfigView[]> {
@@ -380,11 +513,14 @@ export const apiQueryKeys = {
   tournament: (id: string) => ['api', 'tournaments', id] as const,
   tournamentPublicOverview: (id: string) => ['api', 'tournaments', id, 'public-overview'] as const,
   tournamentNotices: (id: string) => ['api', 'tournaments', id, 'notices'] as const,
+  tournamentObservedWifis: (id: string) => ['api', 'tournaments', id, 'observed-wifis'] as const,
   tournamentBestPractices: (id: string) => ['api', 'tournaments', id, 'best-practices'] as const,
   tournamentChannelMap: (id: string) => ['api', 'tournaments', id, 'channel-map'] as const,
   tournamentIssueReports: (id: string) => ['api', 'tournaments', id, 'issue-reports'] as const,
+  issueReport: (id: string) => ['api', 'issue-reports', id] as const,
   tournamentTeams: (id: string) => ['api', 'tournaments', id, 'teams'] as const,
   team: (id: string) => ['api', 'teams', id] as const,
+  teamAccesses: (id: string) => ['api', 'teams', id, 'team-accesses'] as const,
   teamWifiConfigs: (id: string) => ['api', 'teams', id, 'wifi-configs'] as const,
   teamDeviceSpecs: (id: string, includeArchived: boolean) =>
     ['api', 'teams', id, 'device-specs', includeArchived] as const,

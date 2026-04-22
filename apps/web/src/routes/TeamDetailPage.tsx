@@ -17,6 +17,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
   CHANNEL_WIDTHS,
@@ -39,6 +40,7 @@ import type {
   WifiConfigView,
 } from '../lib/api/client.js';
 import { canEditTeamResources, canViewTeamPrivateFields, isOwnTeam } from '../lib/authz.js';
+import { listIssueReportSyncRecords } from '../lib/db/appDb.js';
 import {
   buildDeviceSpecFormValues,
   buildTeamFormValues,
@@ -412,9 +414,10 @@ function WifiConfigEditorSection({
       findRelevantBestPractices(
         bestPractices,
         values.band,
+        values.purpose,
         selectedDeviceSpecs.map((spec) => spec.model),
       ).map((practice) => practice.body),
-    [bestPractices, selectedDeviceSpecs, values.band],
+    [bestPractices, selectedDeviceSpecs, values.band, values.purpose],
   );
 
   const knownIssueSummaries = useMemo(
@@ -875,6 +878,16 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
       ),
     [issueReportsQuery.data, ownTeam, teamId],
   );
+  const localIssueReportSyncQuery = useQuery({
+    queryKey: ['local-sync', 'issue-report', tournamentId, teamId],
+    queryFn: () =>
+      listIssueReportSyncRecords({
+        tournamentId,
+        teamId,
+        statuses: ['pending', 'processing', 'failed'],
+      }),
+    enabled: ownTeam,
+  });
 
   if (
     teamQuery.isLoading ||
@@ -964,6 +977,52 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
         </Alert>
       ) : null}
 
+      {ownTeam && (localIssueReportSyncQuery.data?.length ?? 0) > 0 ? (
+        <Card className='feature-card' padding='lg' radius='xl'>
+          <Stack gap='md'>
+            <div>
+              <Title order={4}>未同期のローカル報告</Title>
+              <Text c='dimmed'>
+                オフライン保存された pending / failed 報告をここから再確認できます。
+              </Text>
+            </div>
+
+            {localIssueReportSyncQuery.data?.map((record) => (
+              <Card key={record.id} withBorder>
+                <Stack gap='xs'>
+                  <Group justify='space-between'>
+                    <div>
+                      <Text fw={700}>
+                        {record.payload.symptom} / {record.payload.severity}
+                      </Text>
+                      <Text size='sm' c='dimmed'>
+                        {record.payload.band} / CH {record.payload.channel}
+                      </Text>
+                    </div>
+                    <Badge color={record.status === 'failed' ? 'red' : 'orange'} variant='light'>
+                      {record.status}
+                    </Badge>
+                  </Group>
+                  {record.payload.description ? (
+                    <Text size='sm'>{record.payload.description}</Text>
+                  ) : null}
+                  <Group justify='flex-end'>
+                    <Button
+                      component={Link}
+                      size='xs'
+                      variant='light'
+                      to={`/tournaments/${tournamentId}/issue-reports/${record.entityId}`}
+                    >
+                      未同期報告を開く
+                    </Button>
+                  </Group>
+                </Stack>
+              </Card>
+            ))}
+          </Stack>
+        </Card>
+      ) : null}
+
       <Stack gap='md'>
         {issueReports.map((report) => (
           <Card key={report.id} className='feature-card' padding='lg' radius='xl'>
@@ -1002,6 +1061,16 @@ export function TeamDetailPage({ tournamentId, teamId }: TeamDetailPageProps) {
               {ownTeam && isDetailedIssueReport(report) && report.description ? (
                 <Text size='sm'>詳細: {report.description}</Text>
               ) : null}
+              <Group justify='flex-end'>
+                <Button
+                  component={Link}
+                  size='xs'
+                  variant='light'
+                  to={`/tournaments/${tournamentId}/issue-reports/${report.id}`}
+                >
+                  詳細を見る
+                </Button>
+              </Group>
             </Stack>
           </Card>
         ))}

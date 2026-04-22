@@ -1,6 +1,14 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { appDb, getSyncOverview } from './appDb.js';
+import {
+  appDb,
+  findIssueReportSyncRecord,
+  getSyncOverview,
+  listIssueReportSyncRecords,
+  queueIssueReportSync,
+  updateIssueReportSyncPayload,
+  updateSyncRecordAfterAttempt,
+} from './appDb.js';
 
 describe('AppDatabase', () => {
   beforeEach(async () => {
@@ -41,13 +49,197 @@ describe('AppDatabase', () => {
         updatedAt: '2026-04-21T11:00:00.000Z',
         queuedAt: '2026-04-21T10:10:00.000Z',
       },
+      {
+        id: crypto.randomUUID(),
+        entityType: 'issue-report',
+        entityId: crypto.randomUUID(),
+        action: 'update',
+        status: 'conflict',
+        errorMessage: 'server conflict',
+        createdAt: '2026-04-21T10:20:00.000Z',
+        updatedAt: '2026-04-21T12:00:00.000Z',
+        queuedAt: '2026-04-21T10:20:00.000Z',
+      },
     ]);
 
     await expect(getSyncOverview()).resolves.toEqual({
-      total: 2,
+      total: 3,
       pending: 1,
       failed: 1,
-      lastUpdatedAt: '2026-04-21T11:00:00.000Z',
+      conflict: 1,
+      lastUpdatedAt: '2026-04-21T12:00:00.000Z',
     });
+  });
+
+  it('不具合報告の pending 同期レコードを payload 付きで保存する', async () => {
+    const now = '2026-04-22T12:00:00.000Z';
+    const record = await queueIssueReportSync(
+      '00000000-0000-4000-8000-000000000001',
+      {
+        teamId: '00000000-0000-4000-8000-000000000011',
+        wifiConfigId: '00000000-0000-4000-8000-000000000021',
+        visibility: 'team_private',
+        symptom: 'high_latency',
+        severity: 'high',
+        band: '5GHz',
+        channel: 36,
+        description: 'offline note',
+      },
+      now,
+    );
+
+    expect(record.status).toBe('pending');
+    expect(record.entityType).toBe('issue-report');
+    expect(record.payload.description).toBe('offline note');
+
+    await expect(appDb.syncRecords.get(record.id)).resolves.toMatchObject({
+      id: record.id,
+      entityType: 'issue-report',
+      tournamentId: '00000000-0000-4000-8000-000000000001',
+      status: 'pending',
+      queuedAt: now,
+      payload: {
+        teamId: '00000000-0000-4000-8000-000000000011',
+        wifiConfigId: '00000000-0000-4000-8000-000000000021',
+        visibility: 'team_private',
+        symptom: 'high_latency',
+        severity: 'high',
+        band: '5GHz',
+        channel: 36,
+        description: 'offline note',
+      },
+    });
+  });
+
+  it('再送結果に応じて同期レコード状態を更新する', async () => {
+    const record = await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_public',
+      symptom: 'unstable',
+      severity: 'medium',
+      band: '5GHz',
+      channel: 149,
+    });
+
+    await updateSyncRecordAfterAttempt(record.id, {
+      status: 'failed',
+      errorMessage: 'network error',
+      attemptedAt: '2026-04-22T12:05:00.000Z',
+    });
+
+    await expect(appDb.syncRecords.get(record.id)).resolves.toMatchObject({
+      id: record.id,
+      status: 'failed',
+      errorMessage: 'network error',
+      lastAttemptAt: '2026-04-22T12:05:00.000Z',
+    });
+
+    await updateSyncRecordAfterAttempt(record.id, {
+      status: 'done',
+      attemptedAt: '2026-04-22T12:06:00.000Z',
+    });
+
+    await expect(appDb.syncRecords.get(record.id)).resolves.toMatchObject({
+      id: record.id,
+      status: 'done',
+      errorMessage: undefined,
+      lastAttemptAt: '2026-04-22T12:06:00.000Z',
+    });
+  });
+
+  it('不具合報告の同期レコードを teamId と status で一覧取得できる', async () => {
+    await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+    });
+    const otherRecord = await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000099',
+      wifiConfigId: '00000000-0000-4000-8000-000000000098',
+      visibility: 'team_public',
+      symptom: 'unstable',
+      severity: 'medium',
+      band: '5GHz',
+      channel: 149,
+    });
+
+    await updateSyncRecordAfterAttempt(otherRecord.id, {
+      status: 'failed',
+      errorMessage: 'network error',
+    });
+
+    await expect(
+      listIssueReportSyncRecords({
+        tournamentId: '00000000-0000-4000-8000-000000000001',
+        teamId: '00000000-0000-4000-8000-000000000011',
+        statuses: ['pending', 'processing', 'failed'],
+      }),
+    ).resolves.toHaveLength(1);
+  });
+
+  it('不具合報告の同期レコードを entityId または recordId で取得できる', async () => {
+    const record = await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+    });
+
+    await expect(findIssueReportSyncRecord(record.entityId)).resolves.toMatchObject({
+      id: record.id,
+    });
+    await expect(findIssueReportSyncRecord(record.id)).resolves.toMatchObject({
+      entityId: record.entityId,
+    });
+  });
+
+  it('不具合報告の同期 payload 更新では null をキー削除として扱う', async () => {
+    const record = await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+      avgPingMs: 28,
+      packetLossPercent: 4,
+      description: 'stale note',
+      mitigationTried: ['change_channel'],
+      attachments: [
+        {
+          name: 'before.txt',
+          mimeType: 'text/plain',
+        },
+      ],
+    });
+
+    const updated = await updateIssueReportSyncPayload(record.id, {
+      avgPingMs: null,
+      packetLossPercent: null,
+      description: null,
+      mitigationTried: null,
+      attachments: null,
+      visibility: 'team_public',
+    });
+
+    expect(updated?.payload).toMatchObject({
+      visibility: 'team_public',
+      symptom: 'high_latency',
+      severity: 'high',
+    });
+    expect(updated?.payload).not.toHaveProperty('avgPingMs');
+    expect(updated?.payload).not.toHaveProperty('packetLossPercent');
+    expect(updated?.payload).not.toHaveProperty('description');
+    expect(updated?.payload).not.toHaveProperty('mitigationTried');
+    expect(updated?.payload).not.toHaveProperty('attachments');
   });
 });

@@ -10,10 +10,13 @@ import {
 } from '@tanstack/react-router';
 import { AppShellLayout } from './components/AppShellLayout.js';
 import { getProtectedRedirectPath } from './lib/auth.js';
+import { isOperatorSession } from './lib/authz.js';
 import { authSessionQueryOptions } from './lib/useAuthSession.js';
 import { AppDashboardPage } from './routes/AppDashboardPage.js';
+import { BestPracticesPage } from './routes/BestPracticesPage.js';
 import { HomePage } from './routes/HomePage.js';
 import { IssueReportCreatePage } from './routes/IssueReportCreatePage.js';
+import { IssueReportDetailPage } from './routes/IssueReportDetailPage.js';
 import { LoginPage } from './routes/LoginPage.js';
 import { OfflinePage } from './routes/OfflinePage.js';
 import { SyncPage } from './routes/SyncPage.js';
@@ -82,6 +85,33 @@ async function ensureAuthenticatedForPath(
   });
 }
 
+async function ensureOperatorForPath(queryClient: QueryClient, pathname: string, search: string) {
+  const session = await queryClient.fetchQuery(authSessionQueryOptions());
+  const destination = getProtectedRedirectPath(pathname, session, search);
+
+  if (destination) {
+    if (destination === '/login') {
+      throw redirect({ to: '/login' });
+    }
+
+    const [, destinationSearch = ''] = destination.split('?');
+    const next = new URLSearchParams(destinationSearch).get('next');
+
+    if (!next) {
+      throw redirect({ to: '/login' });
+    }
+
+    throw redirect({
+      to: '/login',
+      search: { next },
+    });
+  }
+
+  if (!isOperatorSession(session)) {
+    throw redirect({ to: '/' });
+  }
+}
+
 const rootRoute = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
   notFoundComponent: NotFoundPage,
@@ -116,7 +146,7 @@ const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
+    await ensureOperatorForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: AppDashboardPage,
 });
@@ -125,7 +155,7 @@ const appSyncRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app/sync',
   beforeLoad: async ({ context, location }) => {
-    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
+    await ensureOperatorForPath(context.queryClient, location.pathname, location.searchStr);
   },
   component: SyncPage,
 });
@@ -172,6 +202,27 @@ const tournamentIssueReportCreateRoute = createRoute({
   },
 });
 
+const tournamentIssueReportDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/issue-reports/$issueReportId',
+  beforeLoad: async ({ context, location }) => {
+    await ensureAuthenticatedForPath(context.queryClient, location.pathname, location.searchStr);
+  },
+  component: function TournamentIssueReportDetailRouteComponent() {
+    const { tournamentId, issueReportId } = tournamentIssueReportDetailRoute.useParams();
+    return <IssueReportDetailPage tournamentId={tournamentId} issueReportId={issueReportId} />;
+  },
+});
+
+const tournamentBestPracticesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tournaments/$tournamentId/best-practices',
+  component: function TournamentBestPracticesRouteComponent() {
+    const { tournamentId } = tournamentBestPracticesRoute.useParams();
+    return <BestPracticesPage tournamentId={tournamentId} />;
+  },
+});
+
 const teamDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tournaments/$tournamentId/teams/$teamId',
@@ -195,6 +246,8 @@ const routeTree = rootRoute.addChildren([
   tournamentTeamsRoute,
   tournamentChannelMapRoute,
   tournamentIssueReportCreateRoute,
+  tournamentIssueReportDetailRoute,
+  tournamentBestPracticesRoute,
   teamDetailRoute,
 ]);
 

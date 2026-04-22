@@ -28,6 +28,7 @@ export const CHANNEL_MAP_SOURCE_META = {
 } as const;
 
 const CHANNEL_MAP_SOURCE_TYPES = ['own_team', 'participant_team', 'observed_wifi'] as const;
+const EMPTY_SOURCE_TYPES_PARAM = 'none';
 
 export type ChannelMapFilters = {
   sourceTypes: ChannelMapEntry['sourceType'][];
@@ -234,12 +235,7 @@ function matchesModelQuery(entry: ChannelMapDisplayEntry, query: string): boolea
     return true;
   }
 
-  const haystacks = [
-    entry.apDeviceModel ?? '',
-    entry.clientDeviceModel ?? '',
-    entry.label,
-    entry.subtitle,
-  ]
+  const haystacks = [entry.apDeviceModel ?? '', entry.clientDeviceModel ?? '']
     .join(' ')
     .toLowerCase();
 
@@ -431,6 +427,7 @@ export function parseChannelMapSearchParams(searchParams: URLSearchParams): Chan
   const sourceTypes = Array.from(
     new Set(searchParams.getAll('source').filter(isChannelMapSourceType)),
   );
+  const hasExplicitEmptySourceTypes = searchParams.get('sourceState') === EMPTY_SOURCE_TYPES_PARAM;
   const widths = Array.from(
     new Set(
       searchParams
@@ -441,7 +438,9 @@ export function parseChannelMapSearchParams(searchParams: URLSearchParams): Chan
   );
   const modelQuery = searchParams.get('model')?.trim() ?? '';
 
-  if (sourceTypes.length > 0) {
+  if (hasExplicitEmptySourceTypes) {
+    filters.sourceTypes = [];
+  } else if (sourceTypes.length > 0) {
     filters.sourceTypes = sourceTypes;
   }
 
@@ -469,7 +468,9 @@ export function createChannelMapSearchParams(input: ChannelMapSearchState): URLS
   const sourceTypes = CHANNEL_MAP_SOURCE_TYPES.filter((sourceType) =>
     input.filters.sourceTypes.includes(sourceType),
   );
-  if (sourceTypes.length !== CHANNEL_MAP_SOURCE_TYPES.length) {
+  if (sourceTypes.length === 0) {
+    searchParams.set('sourceState', EMPTY_SOURCE_TYPES_PARAM);
+  } else if (sourceTypes.length !== CHANNEL_MAP_SOURCE_TYPES.length) {
     sourceTypes.forEach((sourceType) => {
       searchParams.append('source', sourceType);
     });
