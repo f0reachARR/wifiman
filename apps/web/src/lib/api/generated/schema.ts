@@ -3184,16 +3184,6 @@ export interface paths {
                   estimatedDistanceMeters?: number | null;
                   /** @enum {string|null} */
                   reproducibility?: 'always' | 'sometimes' | 'once' | null;
-                  mitigationTried?:
-                    | (
-                        | 'change_channel'
-                        | 'change_width'
-                        | 'change_band'
-                        | 'change_device'
-                        | 'move_position'
-                        | 'none'
-                      )[]
-                    | null;
                   improved?: boolean | null;
                   apDeviceModel?: string | null;
                   clientDeviceModel?: string | null;
@@ -3654,16 +3644,6 @@ export interface paths {
                   estimatedDistanceMeters?: number | null;
                   /** @enum {string|null} */
                   reproducibility?: 'always' | 'sometimes' | 'once' | null;
-                  mitigationTried?:
-                    | (
-                        | 'change_channel'
-                        | 'change_width'
-                        | 'change_band'
-                        | 'change_device'
-                        | 'move_position'
-                        | 'none'
-                      )[]
-                    | null;
                   improved?: boolean | null;
                   apDeviceModel?: string | null;
                   clientDeviceModel?: string | null;

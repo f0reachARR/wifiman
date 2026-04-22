@@ -63,7 +63,6 @@ export const PublicIssueReportSummarySchema = IssueReportSchema.pick({
   distanceCategory: true,
   estimatedDistanceMeters: true,
   reproducibility: true,
-  mitigationTried: true,
   improved: true,
   apDeviceModel: true,
   clientDeviceModel: true,

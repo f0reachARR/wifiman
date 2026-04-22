@@ -5681,20 +5681,6 @@
                             "type": ["string", "null"],
                             "enum": ["always", "sometimes", "once"]
                           },
-                          "mitigationTried": {
-                            "type": ["array", "null"],
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "change_channel",
-                                "change_width",
-                                "change_band",
-                                "change_device",
-                                "move_position",
-                                "none"
-                              ]
-                            }
-                          },
                           "improved": {
                             "type": ["boolean", "null"]
                           },
@@ -6613,20 +6599,6 @@
                         "reproducibility": {
                           "type": ["string", "null"],
                           "enum": ["always", "sometimes", "once"]
-                        },
-                        "mitigationTried": {
-                          "type": ["array", "null"],
-                          "items": {
-                            "type": "string",
-                            "enum": [
-                              "change_channel",
-                              "change_width",
-                              "change_band",
-                              "change_device",
-                              "move_position",
-                              "none"
-                            ]
-                          }
                         },
                         "improved": {
                           "type": ["boolean", "null"]
