@@ -634,6 +634,58 @@ describe('team management routes', () => {
     });
   });
 
+  it('チャンネルマップは source 全解除状態を URL search params と往復復元する', async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/channel-map?band=5GHz&sourceState=none`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '自チーム' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '参加チーム' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '観測 WiFi' })).not.toBeChecked();
+    expect(screen.queryByLabelText('Venue WiFi bar')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Control 5G bar')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Backup 5G bar')).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      const searchParams = new URLSearchParams(window.location.search);
+      expect(searchParams.get('band')).toBe('5GHz');
+      expect(searchParams.get('sourceState')).toBe('none');
+      expect(searchParams.getAll('source')).toEqual([]);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('checkbox', { name: '自チーム' }));
+    });
+
+    await waitFor(() => {
+      const searchParams = new URLSearchParams(window.location.search);
+      expect(searchParams.get('sourceState')).toBeNull();
+      expect(searchParams.getAll('source')).toEqual(['own_team']);
+      expect(screen.getByLabelText('Control 5G bar')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      window.history.replaceState(
+        {},
+        '',
+        `/tournaments/${tournamentId}/channel-map?band=5GHz&sourceState=none`,
+      );
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: '自チーム' })).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '参加チーム' })).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '観測 WiFi' })).not.toBeChecked();
+      expect(screen.queryByLabelText('Control 5G bar')).not.toBeInTheDocument();
+    });
+  });
+
   it('報告作成 route はクエリの wifiConfigId から既存構成を初期選択する', async () => {
     renderRoute(
       `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
