@@ -469,23 +469,34 @@ function WifiConfigEditorSection({
   onSubmit,
   submitting,
 }: WifiEditorProps) {
-  const zodForm = createTanStackFormZodHelpers(WifiConfigEditorSchema);
-  const [errors, setErrors] = useState<Partial<Record<keyof WifiConfigFormValues, string>>>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  const existingConfigs = useMemo(
+    () => configs.map((config) => ({ id: config.id, status: config.status })),
+    [configs],
+  );
+  const validateWifiConfigForm = (values: WifiConfigFormValues) => {
+    const parsed = parseWifiConfigFormValues(values, existingConfigs, editingId);
+
+    return toGlobalFormValidationError<WifiConfigFormValues>(parsed.errors, parsed.formError);
+  };
   const form = useForm({
     defaultValues: initialValues,
+    validators: {
+      onChange: ({ value }) => validateWifiConfigForm(value),
+      onSubmit: ({ value }) => validateWifiConfigForm(value),
+    },
+    onSubmit: async ({ value }) => {
+      const parsed = parseWifiConfigFormValues(value, existingConfigs, editingId);
+      if (!parsed.data) {
+        return;
+      }
+
+      await onSubmit(value);
+    },
   });
 
   useEffect(() => {
     form.reset(initialValues);
-    setErrors({});
-    setFormError(null);
   }, [form, initialValues]);
-
-  const clearValidationState = () => {
-    setErrors({});
-    setFormError(null);
-  };
 
   return (
     <Card className='feature-card' padding='lg' radius='xl'>
@@ -498,27 +509,20 @@ function WifiConfigEditorSection({
         </Group>
 
         <form
-          onSubmit={async (event) => {
+          onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            const values = form.state.values;
-            const parsed = parseWifiConfigFormValues(
-              values,
-              configs.map((config) => ({ id: config.id, status: config.status })),
-              editingId,
-            );
-
-            setErrors(parsed.errors);
-            setFormError(parsed.formError ?? null);
-            if (!parsed.data) {
-              return;
-            }
-
-            await onSubmit(values);
+            void form.handleSubmit();
           }}
         >
-          <form.Subscribe selector={(state) => state.values}>
-            {(values) => {
+          <form.Subscribe
+            selector={(state) => ({
+              values: state.values,
+              changeFormError: state.errorMap.onChange,
+              submitFormError: state.errorMap.onSubmit,
+            })}
+          >
+            {({ values, changeFormError, submitFormError }) => {
               const sameBandConfigs = configs.filter(
                 (config) => config.band === values.band && config.id !== editingId,
               );
@@ -534,6 +538,7 @@ function WifiConfigEditorSection({
               const knownIssueSummaries = selectedDeviceSpecs
                 .filter((spec) => Boolean(spec.knownIssues))
                 .map((spec) => `${spec.model}: ${spec.knownIssues}`);
+              const formError = changeFormError ?? submitFormError;
 
               return (
                 <Stack gap='md'>
@@ -545,25 +550,14 @@ function WifiConfigEditorSection({
 
                   <Grid>
                     <Grid.Col span={{ base: 12, md: 6 }}>
-                      <form.Field
-                        name='name'
-                        validators={{
-                          onChange: zodForm.getFieldValidator('name'),
-                          onSubmit: zodForm.getFieldValidator('name'),
-                        }}
-                      >
+                      <form.Field name='name'>
                         {(field) => (
                           <TextInput
                             label='構成名'
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(event) => {
-                              clearValidationState();
-                              zodForm.getChangeHandler(field.handleChange)(
-                                event.currentTarget.value,
-                              );
-                            }}
-                            error={field.state.meta.errors[0] ?? errors.name}
+                            onChange={(event) => field.handleChange(event.currentTarget.value)}
+                            error={field.state.meta.errors[0]}
                             disabled={!canEdit}
                           />
                         )}
@@ -577,12 +571,11 @@ function WifiConfigEditorSection({
                             data={PURPOSES.map((value) => ({ value, label: value }))}
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(value) => {
-                              clearValidationState();
-                              zodForm.getChangeHandler(field.handleChange)(
+                            onChange={(value) =>
+                              field.handleChange(
                                 (value ?? 'control') as WifiConfigFormValues['purpose'],
-                              );
-                            }}
+                              )
+                            }
                             allowDeselect={false}
                             disabled={!canEdit}
                           />
@@ -600,12 +593,9 @@ function WifiConfigEditorSection({
                             data={getBandOptions().map((value) => ({ value, label: value }))}
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(value) => {
-                              clearValidationState();
-                              zodForm.getChangeHandler(field.handleChange)(
-                                (value ?? '5GHz') as WifiConfigFormValues['band'],
-                              );
-                            }}
+                            onChange={(value) =>
+                              field.handleChange((value ?? '5GHz') as WifiConfigFormValues['band'])
+                            }
                             allowDeselect={false}
                             disabled={!canEdit}
                           />
@@ -619,11 +609,8 @@ function WifiConfigEditorSection({
                             label='チャンネル'
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(event) => {
-                              clearValidationState();
-                              field.handleChange(event.currentTarget.value);
-                            }}
-                            error={errors.channel}
+                            onChange={(event) => field.handleChange(event.currentTarget.value)}
+                            error={field.state.meta.errors[0]}
                             disabled={!canEdit}
                           />
                         )}
@@ -640,11 +627,8 @@ function WifiConfigEditorSection({
                             }))}
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(value) => {
-                              clearValidationState();
-                              field.handleChange(value ?? String(CHANNEL_WIDTHS[0]));
-                            }}
-                            error={errors.channelWidthMHz}
+                            onChange={(value) => field.handleChange(value ?? String(CHANNEL_WIDTHS[0]))}
+                            error={field.state.meta.errors[0]}
                             allowDeselect={false}
                             disabled={!canEdit}
                           />
@@ -662,12 +646,11 @@ function WifiConfigEditorSection({
                             data={WIFI_CONFIG_ROLES.map((value) => ({ value, label: value }))}
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(value) => {
-                              clearValidationState();
-                              zodForm.getChangeHandler(field.handleChange)(
+                            onChange={(value) =>
+                              field.handleChange(
                                 (value ?? 'primary') as WifiConfigFormValues['role'],
-                              );
-                            }}
+                              )
+                            }
                             allowDeselect={false}
                             disabled={!canEdit}
                           />
@@ -682,12 +665,11 @@ function WifiConfigEditorSection({
                             data={WIFI_CONFIG_STATUSES.map((value) => ({ value, label: value }))}
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(value) => {
-                              clearValidationState();
-                              zodForm.getChangeHandler(field.handleChange)(
+                            onChange={(value) =>
+                              field.handleChange(
                                 (value ?? 'active') as WifiConfigFormValues['status'],
-                              );
-                            }}
+                              )
+                            }
                             allowDeselect={false}
                             disabled={!canEdit}
                           />
@@ -707,14 +689,13 @@ function WifiConfigEditorSection({
                             ]}
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(value) => {
-                              clearValidationState();
-                              zodForm.getChangeHandler(field.handleChange)(
+                            onChange={(value) =>
+                              field.handleChange(
                                 value === null
                                   ? ''
                                   : (value as WifiConfigFormValues['expectedDistanceCategory']),
-                              );
-                            }}
+                              )
+                            }
                             allowDeselect={false}
                             disabled={!canEdit}
                           />
@@ -738,10 +719,7 @@ function WifiConfigEditorSection({
                             ]}
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(value) => {
-                              clearValidationState();
-                              zodForm.getChangeHandler(field.handleChange)(value ?? '');
-                            }}
+                            onChange={(value) => field.handleChange(value ?? '')}
                             allowDeselect={false}
                             disabled={!canEdit}
                           />
@@ -762,10 +740,7 @@ function WifiConfigEditorSection({
                             ]}
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(value) => {
-                              clearValidationState();
-                              zodForm.getChangeHandler(field.handleChange)(value ?? '');
-                            }}
+                            onChange={(value) => field.handleChange(value ?? '')}
                             allowDeselect={false}
                             disabled={!canEdit}
                           />
@@ -774,45 +749,27 @@ function WifiConfigEditorSection({
                     </Grid.Col>
                   </Grid>
 
-                  <form.Field
-                    name='pingTargetIp'
-                    validators={{
-                      onChange: zodForm.getFieldValidator('pingTargetIp'),
-                      onSubmit: zodForm.getFieldValidator('pingTargetIp'),
-                    }}
-                  >
+                  <form.Field name='pingTargetIp'>
                     {(field) => (
                       <TextInput
                         label='Ping 監視先 IP'
                         value={field.state.value}
                         onBlur={field.handleBlur}
-                        onChange={(event) => {
-                          clearValidationState();
-                          zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value);
-                        }}
-                        error={field.state.meta.errors[0] ?? errors.pingTargetIp}
+                        onChange={(event) => field.handleChange(event.currentTarget.value)}
+                        error={field.state.meta.errors[0]}
                         disabled={!canEdit}
                       />
                     )}
                   </form.Field>
 
-                  <form.Field
-                    name='notes'
-                    validators={{
-                      onChange: zodForm.getFieldValidator('notes'),
-                      onSubmit: zodForm.getFieldValidator('notes'),
-                    }}
-                  >
+                  <form.Field name='notes'>
                     {(field) => (
                       <Textarea
                         label='メモ'
                         value={field.state.value}
                         onBlur={field.handleBlur}
-                        onChange={(event) => {
-                          clearValidationState();
-                          zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value);
-                        }}
-                        error={field.state.meta.errors[0] ?? errors.notes}
+                        onChange={(event) => field.handleChange(event.currentTarget.value)}
+                        error={field.state.meta.errors[0]}
                         minRows={3}
                         disabled={!canEdit}
                       />

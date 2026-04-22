@@ -2260,6 +2260,20 @@ describe('team management routes', () => {
     expect(
       await within(form).findByText('帯域 5GHz に対して無効なチャンネルです'),
     ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: 'Still Invalid Config' } });
+    });
+
+    expect(within(form).getByText('帯域 5GHz に対して無効なチャンネルです')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(channelInput, { target: { value: '36' } });
+    });
+
+    expect(
+      within(form).queryByText('帯域 5GHz に対して無効なチャンネルです'),
+    ).not.toBeInTheDocument();
   });
 
   it('WiFi 構成追加フォームで最大 3 件制約エラーを表示する', async () => {
@@ -2302,8 +2316,14 @@ describe('team management routes', () => {
     const form = nameInput.closest('form');
     const saveButton = form?.querySelector('button[type="submit"]');
 
-    if (!(saveButton instanceof HTMLButtonElement)) {
-      throw new Error('wifi config save button not found');
+    if (!(form instanceof HTMLFormElement) || !(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('wifi config form not found');
+    }
+
+    const statusInput = within(form).getAllByDisplayValue('active')[0];
+
+    if (!(statusInput instanceof HTMLInputElement)) {
+      throw new Error('wifi config status input not found');
     }
 
     await act(async () => {
@@ -2311,7 +2331,20 @@ describe('team management routes', () => {
       fireEvent.click(saveButton);
     });
 
-    expect(screen.getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
+    expect(within(form).getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: 'Fourth Config Updated' } });
+    });
+
+    expect(within(form).getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.mouseDown(statusInput);
+      fireEvent.click(await screen.findByText('disabled'));
+    });
+
+    expect(within(form).queryByText('WiFi 構成は最大 3 件までです')).not.toBeInTheDocument();
   });
 
   it.each([
