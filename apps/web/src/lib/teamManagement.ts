@@ -19,9 +19,9 @@ import {
 } from '@wifiman/shared';
 import type { z } from 'zod';
 
-const TeamEditorSchema = CreateTeamSchema.omit({ tournamentId: true });
-const WifiConfigEditorSchema = CreateWifiConfigSchema.omit({ teamId: true });
-const DeviceSpecEditorSchema = CreateDeviceSpecSchema.omit({ teamId: true });
+export const TeamEditorSchema = CreateTeamSchema.omit({ tournamentId: true });
+export const WifiConfigEditorSchema = CreateWifiConfigSchema.omit({ teamId: true });
+export const DeviceSpecEditorSchema = CreateDeviceSpecSchema.omit({ teamId: true });
 
 export type TeamFormValues = {
   name: string;

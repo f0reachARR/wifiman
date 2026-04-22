@@ -1585,6 +1585,31 @@ describe('team management routes', () => {
     expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
   });
 
+  it('operator dashboard の野良 WiFi 手入力は field error を表示する', async () => {
+    renderRoute('/app', createOperatorDashboardResponses());
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('BSSID'), { target: { value: 'invalid-bssid' } });
+      fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
+    });
+
+    expect(await screen.findByText(/invalid/i)).toBeInTheDocument();
+  });
+
+  it('operator dashboard の notice 作成は field error を表示する', async () => {
+    renderRoute('/app', createOperatorDashboardResponses());
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'お知らせを作成' }));
+    });
+
+    expect((await screen.findAllByText(/at least 1 character/i)).length).toBeGreaterThan(0);
+  });
+
   it('初回マウント時にオンラインなら pending を自動同期する', async () => {
     const record = await queueIssueReportSync(tournamentId, {
       teamId: ownTeamId,
@@ -1899,6 +1924,53 @@ describe('team management routes', () => {
       screen.getByText('5GHz の control link は AP-9000 を優先し混雑を避ける'),
     ).toBeInTheDocument();
     expect(screen.getByText('AP-9000: DFS 切替で瞬断しやすい')).toBeInTheDocument();
+  });
+
+  it('team editor は submit 時に field error を表示する', async () => {
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText('チーム名');
+    const form = nameInput.closest('form');
+    const saveButton = screen.getByRole('button', { name: 'チーム情報を保存' });
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('team form not found');
+    }
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: '' } });
+      fireEvent.click(saveButton);
+    });
+
+    expect(await within(form).findByText(/at least 1 character/i)).toBeInTheDocument();
+  });
+
+  it('機材仕様フォームは supportedBands の field error を表示する', async () => {
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '新しい機材仕様を追加' }));
+    });
+
+    const modelInput = await screen.findByLabelText('型番');
+    const form = modelInput.closest('form');
+    const saveButton = form?.querySelector('button[type="submit"]');
+
+    if (!(form instanceof HTMLFormElement) || !(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('device spec form not found');
+    }
+
+    await act(async () => {
+      fireEvent.change(modelInput, { target: { value: 'AP-01' } });
+      fireEvent.click(screen.getByRole('checkbox', { name: '5GHz' }));
+      fireEvent.click(saveButton);
+    });
+
+    expect(await within(form).findByText(/at least 1 element/i)).toBeInTheDocument();
   });
 
   it('team viewer は閲覧専用 UI となり private 情報と編集導線を表示しない', async () => {

@@ -17,6 +17,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { useForm } from '@tanstack/react-form';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
@@ -42,17 +43,24 @@ import type {
 import { canEditTeamResources, canViewTeamPrivateFields, isOwnTeam } from '../lib/authz.js';
 import { listIssueReportSyncRecords } from '../lib/db/appDb.js';
 import {
+  createTanStackFormZodHelpers,
+  toGlobalFormValidationError,
+} from '../lib/tanstackFormZod.js';
+import {
   buildDeviceSpecFormValues,
   buildTeamFormValues,
   buildWifiConfigFormValues,
   countActiveWifiConfigs,
+  DeviceSpecEditorSchema,
   type DeviceSpecFormValues,
   findRelevantBestPractices,
   getBandOptions,
   parseDeviceSpecFormValues,
   parseTeamFormValues,
   parseWifiConfigFormValues,
+  TeamEditorSchema,
   type TeamFormValues,
+  WifiConfigEditorSchema,
   type WifiConfigFormValues,
 } from '../lib/teamManagement.js';
 import { useAuthSession } from '../lib/useAuthSession.js';
@@ -245,12 +253,26 @@ function TeamEditorSection({
   onSubmit,
   saving,
 }: TeamEditorProps) {
-  const [values, setValues] = useState<TeamFormValues>(() => buildTeamFormValues(team));
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const zodForm = createTanStackFormZodHelpers(TeamEditorSchema);
+  const form = useForm({
+    defaultValues: buildTeamFormValues(team),
+    validators: {
+      onSubmit: ({ value }) =>
+        toGlobalFormValidationError<TeamFormValues>(parseTeamFormValues(value).errors),
+    },
+    onSubmit: async ({ value }) => {
+      const parsed = parseTeamFormValues(value);
+      if (!parsed.data) {
+        return;
+      }
+
+      await onSubmit(value);
+    },
+  });
 
   useEffect(() => {
-    setValues(buildTeamFormValues(team));
-  }, [team]);
+    form.reset(buildTeamFormValues(team));
+  }, [form, team]);
 
   return (
     <Card className='feature-card' padding='lg' radius='xl'>
@@ -265,49 +287,75 @@ function TeamEditorSection({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            const parsed = parseTeamFormValues(values);
-            setErrors(parsed.errors);
-            if (!parsed.data) {
-              return;
-            }
-            void onSubmit(values);
+            event.stopPropagation();
+            void form.handleSubmit();
           }}
         >
           <Stack gap='md'>
-            <TextInput
-              label='チーム名'
-              value={values.name}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, name: event.currentTarget.value }))
-              }
-              error={errors.name}
-              disabled={!canEdit}
-            />
+            <form.Field
+              name='name'
+              validators={{
+                onChange: zodForm.getFieldValidator('name'),
+                onSubmit: zodForm.getFieldValidator('name'),
+              }}
+            >
+              {(field) => (
+                <TextInput
+                  label='チーム名'
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) =>
+                    zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                  }
+                  error={field.state.meta.errors[0]}
+                  disabled={!canEdit}
+                />
+              )}
+            </form.Field>
             <Grid>
               <Grid.Col span={{ base: 12, md: 6 }}>
-                <TextInput
-                  label='学校・団体名'
-                  value={values.organization}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      organization: event.currentTarget.value,
-                    }))
-                  }
-                  error={errors.organization}
-                  disabled={!canEdit}
-                />
+                <form.Field
+                  name='organization'
+                  validators={{
+                    onChange: zodForm.getFieldValidator('organization'),
+                    onSubmit: zodForm.getFieldValidator('organization'),
+                  }}
+                >
+                  {(field) => (
+                    <TextInput
+                      label='学校・団体名'
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) =>
+                        zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                      }
+                      error={field.state.meta.errors[0]}
+                      disabled={!canEdit}
+                    />
+                  )}
+                </form.Field>
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 6 }}>
-                <TextInput
-                  label='ピット番号'
-                  value={values.pitId}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, pitId: event.currentTarget.value }))
-                  }
-                  error={errors.pitId}
-                  disabled={!canEdit}
-                />
+                <form.Field
+                  name='pitId'
+                  validators={{
+                    onChange: zodForm.getFieldValidator('pitId'),
+                    onSubmit: zodForm.getFieldValidator('pitId'),
+                  }}
+                >
+                  {(field) => (
+                    <TextInput
+                      label='ピット番号'
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) =>
+                        zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                      }
+                      error={field.state.meta.errors[0]}
+                      disabled={!canEdit}
+                    />
+                  )}
+                </form.Field>
               </Grid.Col>
             </Grid>
 
@@ -315,45 +363,72 @@ function TeamEditorSection({
               <>
                 <Grid>
                   <Grid.Col span={{ base: 12, md: 6 }}>
-                    <TextInput
-                      label='代表メールアドレス'
-                      value={values.contactEmail}
-                      onChange={(event) =>
-                        setValues((current) => ({
-                          ...current,
-                          contactEmail: event.currentTarget.value,
-                        }))
-                      }
-                      error={errors.contactEmail}
-                      disabled={!canEdit}
-                    />
+                    <form.Field
+                      name='contactEmail'
+                      validators={{
+                        onChange: zodForm.getFieldValidator('contactEmail'),
+                        onSubmit: zodForm.getFieldValidator('contactEmail'),
+                      }}
+                    >
+                      {(field) => (
+                        <TextInput
+                          label='代表メールアドレス'
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(event) =>
+                            zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                          }
+                          error={field.state.meta.errors[0]}
+                          disabled={!canEdit}
+                        />
+                      )}
+                    </form.Field>
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, md: 6 }}>
-                    <TextInput
-                      label='表示用連絡先名'
-                      value={values.displayContactName}
-                      onChange={(event) =>
-                        setValues((current) => ({
-                          ...current,
-                          displayContactName: event.currentTarget.value,
-                        }))
-                      }
-                      error={errors.displayContactName}
-                      disabled={!canEdit}
-                    />
+                    <form.Field
+                      name='displayContactName'
+                      validators={{
+                        onChange: zodForm.getFieldValidator('displayContactName'),
+                        onSubmit: zodForm.getFieldValidator('displayContactName'),
+                      }}
+                    >
+                      {(field) => (
+                        <TextInput
+                          label='表示用連絡先名'
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(event) =>
+                            zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                          }
+                          error={field.state.meta.errors[0]}
+                          disabled={!canEdit}
+                        />
+                      )}
+                    </form.Field>
                   </Grid.Col>
                 </Grid>
 
-                <Textarea
-                  label='メモ'
-                  value={values.notes}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, notes: event.currentTarget.value }))
-                  }
-                  error={errors.notes}
-                  minRows={4}
-                  disabled={!canEdit}
-                />
+                <form.Field
+                  name='notes'
+                  validators={{
+                    onChange: zodForm.getFieldValidator('notes'),
+                    onSubmit: zodForm.getFieldValidator('notes'),
+                  }}
+                >
+                  {(field) => (
+                    <Textarea
+                      label='メモ'
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) =>
+                        zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                      }
+                      error={field.state.meta.errors[0]}
+                      minRows={4}
+                      disabled={!canEdit}
+                    />
+                  )}
+                </form.Field>
               </>
             ) : (
               <Alert color='gray' variant='light'>
@@ -362,11 +437,19 @@ function TeamEditorSection({
             )}
 
             {canEdit ? (
-              <Group justify='flex-end'>
-                <Button type='submit' loading={saving}>
-                  チーム情報を保存
-                </Button>
-              </Group>
+              <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+                {([canSubmit, isSubmitting]) => (
+                  <Group justify='flex-end'>
+                    <Button
+                      type='submit'
+                      disabled={!canSubmit}
+                      loading={saving || Boolean(isSubmitting)}
+                    >
+                      チーム情報を保存
+                    </Button>
+                  </Group>
+                )}
+              </form.Subscribe>
             ) : null}
           </Stack>
         </form>
@@ -386,47 +469,23 @@ function WifiConfigEditorSection({
   onSubmit,
   submitting,
 }: WifiEditorProps) {
-  const [values, setValues] = useState<WifiConfigFormValues>(initialValues);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const zodForm = createTanStackFormZodHelpers(WifiConfigEditorSchema);
+  const [errors, setErrors] = useState<Partial<Record<keyof WifiConfigFormValues, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const form = useForm({
+    defaultValues: initialValues,
+  });
 
   useEffect(() => {
-    setValues(initialValues);
+    form.reset(initialValues);
     setErrors({});
     setFormError(null);
-  }, [initialValues]);
+  }, [form, initialValues]);
 
-  const sameBandConfigs = useMemo(
-    () => configs.filter((config) => config.band === values.band && config.id !== editingId),
-    [configs, editingId, values.band],
-  );
-
-  const selectedDeviceSpecs = useMemo(
-    () =>
-      [values.apDeviceId, values.clientDeviceId]
-        .map((id) => deviceSpecs.find((spec) => spec.id === id))
-        .filter((spec): spec is DeviceSpecView => spec != null),
-    [deviceSpecs, values.apDeviceId, values.clientDeviceId],
-  );
-
-  const bestPracticeBodies = useMemo(
-    () =>
-      findRelevantBestPractices(
-        bestPractices,
-        values.band,
-        values.purpose,
-        selectedDeviceSpecs.map((spec) => spec.model),
-      ).map((practice) => practice.body),
-    [bestPractices, selectedDeviceSpecs, values.band, values.purpose],
-  );
-
-  const knownIssueSummaries = useMemo(
-    () =>
-      selectedDeviceSpecs
-        .filter((spec) => Boolean(spec.knownIssues))
-        .map((spec) => `${spec.model}: ${spec.knownIssues}`),
-    [selectedDeviceSpecs],
-  );
+  const clearValidationState = () => {
+    setErrors({});
+    setFormError(null);
+  };
 
   return (
     <Card className='feature-card' padding='lg' radius='xl'>
@@ -438,261 +497,372 @@ function WifiConfigEditorSection({
           </Button>
         </Group>
 
-        {formError ? (
-          <Alert color='red' variant='light'>
-            {formError}
-          </Alert>
-        ) : null}
-
         <form
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
+            event.stopPropagation();
+            const values = form.state.values;
             const parsed = parseWifiConfigFormValues(
               values,
               configs.map((config) => ({ id: config.id, status: config.status })),
               editingId,
             );
+
             setErrors(parsed.errors);
             setFormError(parsed.formError ?? null);
             if (!parsed.data) {
               return;
             }
-            void onSubmit(values);
+
+            await onSubmit(values);
           }}
         >
-          <Stack gap='md'>
-            <Grid>
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <TextInput
-                  label='構成名'
-                  value={values.name}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, name: event.currentTarget.value }))
-                  }
-                  error={errors.name}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <Select
-                  label='用途'
-                  data={PURPOSES.map((value) => ({ value, label: value }))}
-                  value={values.purpose}
-                  onChange={(value) =>
-                    setValues((current) => ({
-                      ...current,
-                      purpose: (value ?? 'control') as WifiConfigFormValues['purpose'],
-                    }))
-                  }
-                  allowDeselect={false}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-            </Grid>
+          <form.Subscribe selector={(state) => state.values}>
+            {(values) => {
+              const sameBandConfigs = configs.filter(
+                (config) => config.band === values.band && config.id !== editingId,
+              );
+              const selectedDeviceSpecs = [values.apDeviceId, values.clientDeviceId]
+                .map((id) => deviceSpecs.find((spec) => spec.id === id))
+                .filter((spec): spec is DeviceSpecView => spec != null);
+              const bestPracticeBodies = findRelevantBestPractices(
+                bestPractices,
+                values.band,
+                values.purpose,
+                selectedDeviceSpecs.map((spec) => spec.model),
+              ).map((practice) => practice.body);
+              const knownIssueSummaries = selectedDeviceSpecs
+                .filter((spec) => Boolean(spec.knownIssues))
+                .map((spec) => `${spec.model}: ${spec.knownIssues}`);
 
-            <Grid>
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <Select
-                  label='帯域'
-                  data={getBandOptions().map((value) => ({ value, label: value }))}
-                  value={values.band}
-                  onChange={(value) =>
-                    setValues((current) => ({
-                      ...current,
-                      band: (value ?? '5GHz') as WifiConfigFormValues['band'],
-                    }))
-                  }
-                  allowDeselect={false}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <TextInput
-                  label='チャンネル'
-                  value={values.channel}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, channel: event.currentTarget.value }))
-                  }
-                  error={errors.channel}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <Select
-                  label='幅 (MHz)'
-                  data={CHANNEL_WIDTHS.map((value) => ({
-                    value: String(value),
-                    label: `${value} MHz`,
-                  }))}
-                  value={values.channelWidthMHz}
-                  onChange={(value) =>
-                    setValues((current) => ({
-                      ...current,
-                      channelWidthMHz: value ?? String(CHANNEL_WIDTHS[0]),
-                    }))
-                  }
-                  error={errors.channelWidthMHz}
-                  allowDeselect={false}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-            </Grid>
+              return (
+                <Stack gap='md'>
+                  {formError ? (
+                    <Alert color='red' variant='light'>
+                      {formError}
+                    </Alert>
+                  ) : null}
 
-            <Grid>
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <Select
-                  label='役割'
-                  data={WIFI_CONFIG_ROLES.map((value) => ({ value, label: value }))}
-                  value={values.role}
-                  onChange={(value) =>
-                    setValues((current) => ({
-                      ...current,
-                      role: (value ?? 'primary') as WifiConfigFormValues['role'],
-                    }))
-                  }
-                  allowDeselect={false}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <Select
-                  label='状態'
-                  data={WIFI_CONFIG_STATUSES.map((value) => ({ value, label: value }))}
-                  value={values.status}
-                  onChange={(value) =>
-                    setValues((current) => ({
-                      ...current,
-                      status: (value ?? 'active') as WifiConfigFormValues['status'],
-                    }))
-                  }
-                  allowDeselect={false}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <Select
-                  label='想定距離'
-                  data={[
-                    { value: '', label: '未設定' },
-                    { value: 'near', label: 'near' },
-                    { value: 'mid', label: 'mid' },
-                    { value: 'far', label: 'far' },
-                  ]}
-                  value={values.expectedDistanceCategory}
-                  onChange={(value) =>
-                    setValues((current) => ({
-                      ...current,
-                      expectedDistanceCategory:
-                        value === null
-                          ? ''
-                          : (value as WifiConfigFormValues['expectedDistanceCategory']),
-                    }))
-                  }
-                  allowDeselect={false}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-            </Grid>
+                  <Grid>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <form.Field
+                        name='name'
+                        validators={{
+                          onChange: zodForm.getFieldValidator('name'),
+                          onSubmit: zodForm.getFieldValidator('name'),
+                        }}
+                      >
+                        {(field) => (
+                          <TextInput
+                            label='構成名'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              clearValidationState();
+                              zodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0] ?? errors.name}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <form.Field name='purpose'>
+                        {(field) => (
+                          <Select
+                            label='用途'
+                            data={PURPOSES.map((value) => ({ value, label: value }))}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(value) => {
+                              clearValidationState();
+                              zodForm.getChangeHandler(field.handleChange)(
+                                (value ?? 'control') as WifiConfigFormValues['purpose'],
+                              );
+                            }}
+                            allowDeselect={false}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                  </Grid>
 
-            <Grid>
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <Select
-                  label='AP 機材'
-                  data={[
-                    { value: '', label: '未選択' },
-                    ...deviceSpecs.map((spec) => ({
-                      value: spec.id,
-                      label: `${spec.vendor ?? 'Unknown'} ${spec.model}`,
-                    })),
-                  ]}
-                  value={values.apDeviceId}
-                  onChange={(value) =>
-                    setValues((current) => ({ ...current, apDeviceId: value ?? '' }))
-                  }
-                  allowDeselect={false}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <Select
-                  label='クライアント機材'
-                  data={[
-                    { value: '', label: '未選択' },
-                    ...deviceSpecs.map((spec) => ({
-                      value: spec.id,
-                      label: `${spec.vendor ?? 'Unknown'} ${spec.model}`,
-                    })),
-                  ]}
-                  value={values.clientDeviceId}
-                  onChange={(value) =>
-                    setValues((current) => ({ ...current, clientDeviceId: value ?? '' }))
-                  }
-                  allowDeselect={false}
-                  disabled={!canEdit}
-                />
-              </Grid.Col>
-            </Grid>
+                  <Grid>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <form.Field name='band'>
+                        {(field) => (
+                          <Select
+                            label='帯域'
+                            data={getBandOptions().map((value) => ({ value, label: value }))}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(value) => {
+                              clearValidationState();
+                              zodForm.getChangeHandler(field.handleChange)(
+                                (value ?? '5GHz') as WifiConfigFormValues['band'],
+                              );
+                            }}
+                            allowDeselect={false}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <form.Field name='channel'>
+                        {(field) => (
+                          <TextInput
+                            label='チャンネル'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              clearValidationState();
+                              field.handleChange(event.currentTarget.value);
+                            }}
+                            error={errors.channel}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <form.Field name='channelWidthMHz'>
+                        {(field) => (
+                          <Select
+                            label='幅 (MHz)'
+                            data={CHANNEL_WIDTHS.map((value) => ({
+                              value: String(value),
+                              label: `${value} MHz`,
+                            }))}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(value) => {
+                              clearValidationState();
+                              field.handleChange(value ?? String(CHANNEL_WIDTHS[0]));
+                            }}
+                            error={errors.channelWidthMHz}
+                            allowDeselect={false}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                  </Grid>
 
-            <TextInput
-              label='Ping 監視先 IP'
-              value={values.pingTargetIp}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, pingTargetIp: event.currentTarget.value }))
-              }
-              error={errors.pingTargetIp}
-              disabled={!canEdit}
-            />
+                  <Grid>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <form.Field name='role'>
+                        {(field) => (
+                          <Select
+                            label='役割'
+                            data={WIFI_CONFIG_ROLES.map((value) => ({ value, label: value }))}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(value) => {
+                              clearValidationState();
+                              zodForm.getChangeHandler(field.handleChange)(
+                                (value ?? 'primary') as WifiConfigFormValues['role'],
+                              );
+                            }}
+                            allowDeselect={false}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <form.Field name='status'>
+                        {(field) => (
+                          <Select
+                            label='状態'
+                            data={WIFI_CONFIG_STATUSES.map((value) => ({ value, label: value }))}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(value) => {
+                              clearValidationState();
+                              zodForm.getChangeHandler(field.handleChange)(
+                                (value ?? 'active') as WifiConfigFormValues['status'],
+                              );
+                            }}
+                            allowDeselect={false}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <form.Field name='expectedDistanceCategory'>
+                        {(field) => (
+                          <Select
+                            label='想定距離'
+                            data={[
+                              { value: '', label: '未設定' },
+                              { value: 'near', label: 'near' },
+                              { value: 'mid', label: 'mid' },
+                              { value: 'far', label: 'far' },
+                            ]}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(value) => {
+                              clearValidationState();
+                              zodForm.getChangeHandler(field.handleChange)(
+                                value === null
+                                  ? ''
+                                  : (value as WifiConfigFormValues['expectedDistanceCategory']),
+                              );
+                            }}
+                            allowDeselect={false}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                  </Grid>
 
-            <Textarea
-              label='メモ'
-              value={values.notes}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, notes: event.currentTarget.value }))
-              }
-              error={errors.notes}
-              minRows={3}
-              disabled={!canEdit}
-            />
+                  <Grid>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <form.Field name='apDeviceId'>
+                        {(field) => (
+                          <Select
+                            label='AP 機材'
+                            data={[
+                              { value: '', label: '未選択' },
+                              ...deviceSpecs.map((spec) => ({
+                                value: spec.id,
+                                label: `${spec.vendor ?? 'Unknown'} ${spec.model}`,
+                              })),
+                            ]}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(value) => {
+                              clearValidationState();
+                              zodForm.getChangeHandler(field.handleChange)(value ?? '');
+                            }}
+                            allowDeselect={false}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <form.Field name='clientDeviceId'>
+                        {(field) => (
+                          <Select
+                            label='クライアント機材'
+                            data={[
+                              { value: '', label: '未選択' },
+                              ...deviceSpecs.map((spec) => ({
+                                value: spec.id,
+                                label: `${spec.vendor ?? 'Unknown'} ${spec.model}`,
+                              })),
+                            ]}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(value) => {
+                              clearValidationState();
+                              zodForm.getChangeHandler(field.handleChange)(value ?? '');
+                            }}
+                            allowDeselect={false}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </form.Field>
+                    </Grid.Col>
+                  </Grid>
 
-            <Alert color='blue' variant='light'>
-              同帯域の既存構成:{' '}
-              {sameBandConfigs.length === 0
-                ? 'なし'
-                : sameBandConfigs.map((config) => `${config.name} (${config.status})`).join(' / ')}
-            </Alert>
+                  <form.Field
+                    name='pingTargetIp'
+                    validators={{
+                      onChange: zodForm.getFieldValidator('pingTargetIp'),
+                      onSubmit: zodForm.getFieldValidator('pingTargetIp'),
+                    }}
+                  >
+                    {(field) => (
+                      <TextInput
+                        label='Ping 監視先 IP'
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => {
+                          clearValidationState();
+                          zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value);
+                        }}
+                        error={field.state.meta.errors[0] ?? errors.pingTargetIp}
+                        disabled={!canEdit}
+                      />
+                    )}
+                  </form.Field>
 
-            {bestPracticeBodies.length > 0 ? (
-              <Alert color='teal' variant='light' title='関連ベストプラクティス'>
-                <Stack gap='xs'>
-                  {bestPracticeBodies.map((body) => (
-                    <Text key={body} size='sm'>
-                      {body}
-                    </Text>
-                  ))}
+                  <form.Field
+                    name='notes'
+                    validators={{
+                      onChange: zodForm.getFieldValidator('notes'),
+                      onSubmit: zodForm.getFieldValidator('notes'),
+                    }}
+                  >
+                    {(field) => (
+                      <Textarea
+                        label='メモ'
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => {
+                          clearValidationState();
+                          zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value);
+                        }}
+                        error={field.state.meta.errors[0] ?? errors.notes}
+                        minRows={3}
+                        disabled={!canEdit}
+                      />
+                    )}
+                  </form.Field>
+
+                  <Alert color='blue' variant='light'>
+                    同帯域の既存構成:{' '}
+                    {sameBandConfigs.length === 0
+                      ? 'なし'
+                      : sameBandConfigs
+                          .map((config) => `${config.name} (${config.status})`)
+                          .join(' / ')}
+                  </Alert>
+
+                  {bestPracticeBodies.length > 0 ? (
+                    <Alert color='teal' variant='light' title='関連ベストプラクティス'>
+                      <Stack gap='xs'>
+                        {bestPracticeBodies.map((body) => (
+                          <Text key={body} size='sm'>
+                            {body}
+                          </Text>
+                        ))}
+                      </Stack>
+                    </Alert>
+                  ) : null}
+
+                  {knownIssueSummaries.length > 0 ? (
+                    <Alert color='orange' variant='light' title='関連機材の既知の注意点'>
+                      <Stack gap='xs'>
+                        {knownIssueSummaries.map((issue) => (
+                          <Text key={issue} size='sm'>
+                            {issue}
+                          </Text>
+                        ))}
+                      </Stack>
+                    </Alert>
+                  ) : null}
+
+                  {canEdit ? (
+                    <Group justify='flex-end'>
+                      <Button type='submit' loading={submitting}>
+                        保存
+                      </Button>
+                    </Group>
+                  ) : null}
                 </Stack>
-              </Alert>
-            ) : null}
-
-            {knownIssueSummaries.length > 0 ? (
-              <Alert color='orange' variant='light' title='関連機材の既知の注意点'>
-                <Stack gap='xs'>
-                  {knownIssueSummaries.map((issue) => (
-                    <Text key={issue} size='sm'>
-                      {issue}
-                    </Text>
-                  ))}
-                </Stack>
-              </Alert>
-            ) : null}
-
-            {canEdit ? (
-              <Group justify='flex-end'>
-                <Button type='submit' loading={submitting}>
-                  保存
-                </Button>
-              </Group>
-            ) : null}
-          </Stack>
+              );
+            }}
+          </form.Subscribe>
         </form>
       </Stack>
     </Card>
@@ -714,13 +884,26 @@ function DeviceSpecEditorSection({
   onSubmit,
   submitting,
 }: DeviceEditorProps) {
-  const [values, setValues] = useState<DeviceSpecFormValues>(initialValues);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const zodForm = createTanStackFormZodHelpers(DeviceSpecEditorSchema);
+  const form = useForm({
+    defaultValues: initialValues,
+    validators: {
+      onSubmit: ({ value }) =>
+        toGlobalFormValidationError<DeviceSpecFormValues>(parseDeviceSpecFormValues(value).errors),
+    },
+    onSubmit: async ({ value }) => {
+      const parsed = parseDeviceSpecFormValues(value);
+      if (!parsed.data) {
+        return;
+      }
+
+      await onSubmit(value);
+    },
+  });
 
   useEffect(() => {
-    setValues(initialValues);
-    setErrors({});
-  }, [initialValues]);
+    form.reset(initialValues);
+  }, [form, initialValues]);
 
   return (
     <Card className='feature-card' padding='lg' radius='xl'>
@@ -735,100 +918,164 @@ function DeviceSpecEditorSection({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            const parsed = parseDeviceSpecFormValues(values);
-            setErrors(parsed.errors);
-            if (!parsed.data) {
-              return;
-            }
-            void onSubmit(values);
+            event.stopPropagation();
+            void form.handleSubmit();
           }}
         >
           <Stack gap='md'>
             <Grid>
               <Grid.Col span={{ base: 12, md: 6 }}>
-                <TextInput
-                  label='メーカー'
-                  value={values.vendor}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, vendor: event.currentTarget.value }))
-                  }
-                  error={errors.vendor}
-                  disabled={!canEdit}
-                />
+                <form.Field
+                  name='vendor'
+                  validators={{
+                    onChange: zodForm.getFieldValidator('vendor'),
+                    onSubmit: zodForm.getFieldValidator('vendor'),
+                  }}
+                >
+                  {(field) => (
+                    <TextInput
+                      label='メーカー'
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) =>
+                        zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                      }
+                      error={field.state.meta.errors[0]}
+                      disabled={!canEdit}
+                    />
+                  )}
+                </form.Field>
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 6 }}>
-                <TextInput
-                  label='型番'
-                  value={values.model}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, model: event.currentTarget.value }))
-                  }
-                  error={errors.model}
-                  disabled={!canEdit}
-                />
+                <form.Field
+                  name='model'
+                  validators={{
+                    onChange: zodForm.getFieldValidator('model'),
+                    onSubmit: zodForm.getFieldValidator('model'),
+                  }}
+                >
+                  {(field) => (
+                    <TextInput
+                      label='型番'
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) =>
+                        zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                      }
+                      error={field.state.meta.errors[0]}
+                      disabled={!canEdit}
+                    />
+                  )}
+                </form.Field>
               </Grid.Col>
             </Grid>
 
-            <Select
-              label='種別'
-              data={DEVICE_KINDS.map((value) => ({ value, label: value }))}
-              value={values.kind}
-              onChange={(value) =>
-                setValues((current) => ({
-                  ...current,
-                  kind: (value ?? 'ap') as DeviceSpecFormValues['kind'],
-                }))
-              }
-              allowDeselect={false}
-              disabled={!canEdit}
-            />
+            <form.Field name='kind'>
+              {(field) => (
+                <Select
+                  label='種別'
+                  data={DEVICE_KINDS.map((value) => ({ value, label: value }))}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(value) =>
+                    zodForm.getChangeHandler(field.handleChange)(
+                      (value ?? 'ap') as DeviceSpecFormValues['kind'],
+                    )
+                  }
+                  allowDeselect={false}
+                  disabled={!canEdit}
+                />
+              )}
+            </form.Field>
 
-            <Checkbox.Group
-              label='対応帯域'
-              value={values.supportedBands}
-              onChange={(next) =>
-                setValues((current) => ({
-                  ...current,
-                  supportedBands: next as DeviceSpecFormValues['supportedBands'],
-                }))
-              }
+            <form.Field
+              name='supportedBands'
+              validators={{
+                onSubmit: zodForm.getFieldValidator('supportedBands'),
+              }}
             >
-              <Group mt='xs'>
-                {getBandOptions().map((band) => (
-                  <Checkbox key={band} value={band} label={band} disabled={!canEdit} />
-                ))}
-              </Group>
-            </Checkbox.Group>
-            {errors.supportedBands ? <Text c='red'>{errors.supportedBands}</Text> : null}
+              {(field) => (
+                <>
+                  <Checkbox.Group
+                    label='対応帯域'
+                    value={field.state.value}
+                    onChange={(next) =>
+                      zodForm.getChangeHandler(field.handleChange)(
+                        next as DeviceSpecFormValues['supportedBands'],
+                      )
+                    }
+                  >
+                    <Group mt='xs'>
+                      {getBandOptions().map((band) => (
+                        <Checkbox key={band} value={band} label={band} disabled={!canEdit} />
+                      ))}
+                    </Group>
+                  </Checkbox.Group>
+                  {field.state.meta.errors[0] ? (
+                    <Text c='red'>{field.state.meta.errors[0]}</Text>
+                  ) : null}
+                </>
+              )}
+            </form.Field>
 
-            <Textarea
-              label='既知の注意点'
-              value={values.knownIssues}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, knownIssues: event.currentTarget.value }))
-              }
-              error={errors.knownIssues}
-              minRows={3}
-              disabled={!canEdit}
-            />
+            <form.Field
+              name='knownIssues'
+              validators={{
+                onChange: zodForm.getFieldValidator('knownIssues'),
+                onSubmit: zodForm.getFieldValidator('knownIssues'),
+              }}
+            >
+              {(field) => (
+                <Textarea
+                  label='既知の注意点'
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) =>
+                    zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                  }
+                  error={field.state.meta.errors[0]}
+                  minRows={3}
+                  disabled={!canEdit}
+                />
+              )}
+            </form.Field>
 
-            <Textarea
-              label='メモ'
-              value={values.notes}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, notes: event.currentTarget.value }))
-              }
-              error={errors.notes}
-              minRows={3}
-              disabled={!canEdit}
-            />
+            <form.Field
+              name='notes'
+              validators={{
+                onChange: zodForm.getFieldValidator('notes'),
+                onSubmit: zodForm.getFieldValidator('notes'),
+              }}
+            >
+              {(field) => (
+                <Textarea
+                  label='メモ'
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) =>
+                    zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                  }
+                  error={field.state.meta.errors[0]}
+                  minRows={3}
+                  disabled={!canEdit}
+                />
+              )}
+            </form.Field>
 
             {canEdit ? (
-              <Group justify='flex-end'>
-                <Button type='submit' loading={submitting}>
-                  保存
-                </Button>
-              </Group>
+              <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+                {([canSubmit, isSubmitting]) => (
+                  <Group justify='flex-end'>
+                    <Button
+                      type='submit'
+                      disabled={!canSubmit}
+                      loading={submitting || Boolean(isSubmitting)}
+                    >
+                      保存
+                    </Button>
+                  </Group>
+                )}
+              </form.Subscribe>
             ) : null}
           </Stack>
         </form>
