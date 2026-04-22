@@ -1,5 +1,15 @@
+import type { IssueReportAttachment } from '@wifiman/shared';
 import { sql } from 'drizzle-orm';
-import { boolean, check, integer, pgTable, real, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  integer,
+  jsonb,
+  pgTable,
+  real,
+  text,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { teams } from './teams.js';
 import { tournaments } from './tournaments.js';
 import { wifiConfigs } from './wifiConfigs.js';
@@ -47,6 +57,7 @@ export const issueReports = pgTable(
     description: text('description'),
     mitigationTried: text('mitigation_tried').array(),
     improved: boolean('improved'),
+    attachments: jsonb('attachments').$type<IssueReportAttachment[]>(),
     apDeviceModel: text('ap_device_model'),
     clientDeviceModel: text('client_device_model'),
     createdAt: timestamp('created_at').notNull().defaultNow(),

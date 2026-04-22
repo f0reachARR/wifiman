@@ -199,12 +199,23 @@ describe('AppDatabase', () => {
       band: '5GHz',
       channel: 36,
       avgPingMs: 28,
+      packetLossPercent: 4,
       description: 'stale note',
+      mitigationTried: ['change_channel'],
+      attachments: [
+        {
+          name: 'before.txt',
+          mimeType: 'text/plain',
+        },
+      ],
     });
 
     const updated = await updateIssueReportSyncPayload(record.id, {
       avgPingMs: null,
+      packetLossPercent: null,
       description: null,
+      mitigationTried: null,
+      attachments: null,
       visibility: 'team_public',
     });
 
@@ -214,6 +225,9 @@ describe('AppDatabase', () => {
       severity: 'high',
     });
     expect(updated?.payload).not.toHaveProperty('avgPingMs');
+    expect(updated?.payload).not.toHaveProperty('packetLossPercent');
     expect(updated?.payload).not.toHaveProperty('description');
+    expect(updated?.payload).not.toHaveProperty('mitigationTried');
+    expect(updated?.payload).not.toHaveProperty('attachments');
   });
 });

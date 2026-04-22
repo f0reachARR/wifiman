@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Group,
   Loader,
   NativeSelect,
@@ -17,6 +18,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import {
   DISTANCE_CATEGORIES,
   ISSUE_REPORT_VISIBILITIES,
+  MITIGATIONS,
   REPRODUCIBILITIES,
   SEVERITIES,
   SYMPTOMS,
@@ -37,6 +39,10 @@ type IssueReportCreatePageProps = {
   tournamentId: string;
 };
 
+type IssueReportCreateAttachment = NonNullable<
+  NonNullable<IssueReportCreateInput['attachments']>[number]
+>;
+
 type FormValues = {
   wifiConfigId: string;
   reporterName: string;
@@ -44,11 +50,65 @@ type FormValues = {
   symptom: '' | IssueReportCreateInput['symptom'];
   severity: '' | IssueReportCreateInput['severity'];
   avgPingMs: number | '';
+  packetLossPercent: number | '';
   distanceCategory: '' | NonNullable<IssueReportCreateInput['distanceCategory']>;
+  maxPingMs: number | '';
+  estimatedDistanceMeters: number | '';
   reproducibility: '' | NonNullable<IssueReportCreateInput['reproducibility']>;
   locationLabel: string;
+  mitigationTried: NonNullable<IssueReportCreateInput['mitigationTried']>;
+  improved: '' | 'true' | 'false';
   description: string;
+  attachments: Array<{
+    id: string;
+    name: string;
+    url: string;
+    mimeType: string;
+    sizeBytes: number | '';
+  }>;
 };
+
+type AttachmentDraft = FormValues['attachments'][number];
+
+function createEmptyAttachment(): AttachmentDraft {
+  return {
+    id: crypto.randomUUID(),
+    name: '',
+    url: '',
+    mimeType: '',
+    sizeBytes: '',
+  };
+}
+
+function sanitizeAttachments(drafts: AttachmentDraft[]): IssueReportCreateAttachment[] {
+  return drafts.flatMap((draft) => {
+    const name = draft.name.trim();
+    const url = draft.url.trim();
+    const mimeType = draft.mimeType.trim();
+
+    if (name.length === 0 && url.length === 0 && mimeType.length === 0 && draft.sizeBytes === '') {
+      return [];
+    }
+
+    if (name.length === 0) {
+      return [];
+    }
+
+    const attachment: IssueReportCreateAttachment = { name };
+
+    if (url.length > 0) {
+      attachment.url = url;
+    }
+    if (mimeType.length > 0) {
+      attachment.mimeType = mimeType;
+    }
+    if (draft.sizeBytes !== '') {
+      attachment.sizeBytes = draft.sizeBytes;
+    }
+
+    return [attachment];
+  });
+}
 
 function getInitialWifiConfigId() {
   if (typeof window === 'undefined') {
@@ -77,10 +137,16 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
     symptom: '',
     severity: '',
     avgPingMs: '',
+    packetLossPercent: '',
     distanceCategory: '',
+    maxPingMs: '',
+    estimatedDistanceMeters: '',
     reproducibility: '',
     locationLabel: '',
+    mitigationTried: [],
+    improved: '',
     description: '',
+    attachments: [],
   });
 
   const canCreate = Boolean(teamId && canEditTeamResources(session, teamId));
@@ -222,12 +288,23 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
         ? { reporterName: values.reporterName.trim() }
         : {}),
       ...(values.avgPingMs !== '' ? { avgPingMs: values.avgPingMs } : {}),
+      ...(values.packetLossPercent !== '' ? { packetLossPercent: values.packetLossPercent } : {}),
       ...(values.distanceCategory ? { distanceCategory: values.distanceCategory } : {}),
+      ...(values.maxPingMs !== '' ? { maxPingMs: values.maxPingMs } : {}),
+      ...(values.estimatedDistanceMeters !== ''
+        ? { estimatedDistanceMeters: values.estimatedDistanceMeters }
+        : {}),
       ...(values.reproducibility ? { reproducibility: values.reproducibility } : {}),
       ...(values.locationLabel.trim().length > 0
         ? { locationLabel: values.locationLabel.trim() }
         : {}),
+      ...(values.mitigationTried.length > 0 ? { mitigationTried: values.mitigationTried } : {}),
+      ...(values.improved === 'true' ? { improved: true } : {}),
+      ...(values.improved === 'false' ? { improved: false } : {}),
       ...(values.description.trim().length > 0 ? { description: values.description.trim() } : {}),
+      ...(sanitizeAttachments(values.attachments).length > 0
+        ? { attachments: sanitizeAttachments(values.attachments) }
+        : {}),
       ...(selectedApModel ? { apDeviceModel: selectedApModel } : {}),
       ...(selectedClientModel ? { clientDeviceModel: selectedClientModel } : {}),
     };
@@ -392,6 +469,19 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                 }));
               }}
             />
+            <NumberInput
+              label='パケットロス率 (%)'
+              placeholder='任意'
+              min={0}
+              max={100}
+              value={values.packetLossPercent}
+              onChange={(value) => {
+                setValues((current) => ({
+                  ...current,
+                  packetLossPercent: typeof value === 'number' ? value : '',
+                }));
+              }}
+            />
             <NativeSelect
               label='距離カテゴリ'
               data={[
@@ -411,9 +501,9 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
           </Group>
 
           <Textarea
-            label='一言メモ'
+            label={isDetailedMode ? '自由記述' : '一言メモ'}
             placeholder='任意'
-            minRows={3}
+            minRows={isDetailedMode ? 5 : 3}
             value={values.description}
             onChange={(event) => {
               const description = event.currentTarget.value;
@@ -437,25 +527,71 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
           </Group>
 
           {isDetailedMode ? (
-            <Group grow align='flex-start'>
-              <NativeSelect
-                label='再現性'
-                data={[
-                  { value: '', label: '未選択' },
-                  ...REPRODUCIBILITIES.map((value) => ({ value, label: value })),
-                ]}
-                value={values.reproducibility}
-                onChange={(event) => {
-                  const reproducibility = event.currentTarget
-                    .value as FormValues['reproducibility'];
-                  setValues((current) => ({
-                    ...current,
-                    reproducibility,
-                  }));
-                }}
-              />
+            <Stack gap='md'>
+              <Group grow align='flex-start'>
+                <NumberInput
+                  label='最大 Ping (ms)'
+                  placeholder='任意'
+                  min={0}
+                  value={values.maxPingMs}
+                  onChange={(value) => {
+                    setValues((current) => ({
+                      ...current,
+                      maxPingMs: typeof value === 'number' ? value : '',
+                    }));
+                  }}
+                />
+                <NumberInput
+                  label='推定距離[m]'
+                  placeholder='任意'
+                  min={0}
+                  value={values.estimatedDistanceMeters}
+                  onChange={(value) => {
+                    setValues((current) => ({
+                      ...current,
+                      estimatedDistanceMeters: typeof value === 'number' ? value : '',
+                    }));
+                  }}
+                />
+              </Group>
+
+              <Group grow align='flex-start'>
+                <NativeSelect
+                  label='再現性'
+                  data={[
+                    { value: '', label: '未選択' },
+                    ...REPRODUCIBILITIES.map((value) => ({ value, label: value })),
+                  ]}
+                  value={values.reproducibility}
+                  onChange={(event) => {
+                    const reproducibility = event.currentTarget
+                      .value as FormValues['reproducibility'];
+                    setValues((current) => ({
+                      ...current,
+                      reproducibility,
+                    }));
+                  }}
+                />
+                <NativeSelect
+                  label='改善有無'
+                  data={[
+                    { value: '', label: '未選択' },
+                    { value: 'true', label: '改善した' },
+                    { value: 'false', label: '改善しない' },
+                  ]}
+                  value={values.improved}
+                  onChange={(event) => {
+                    const improved = event.currentTarget.value as FormValues['improved'];
+                    setValues((current) => ({
+                      ...current,
+                      improved,
+                    }));
+                  }}
+                />
+              </Group>
+
               <TextInput
-                label='場所ラベル'
+                label='観測位置'
                 placeholder='任意'
                 value={values.locationLabel}
                 onChange={(event) => {
@@ -466,7 +602,124 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
                   }));
                 }}
               />
-            </Group>
+
+              <Checkbox.Group
+                label='対処内容'
+                value={values.mitigationTried}
+                onChange={(mitigationTried) => {
+                  setValues((current) => ({
+                    ...current,
+                    mitigationTried: mitigationTried as FormValues['mitigationTried'],
+                  }));
+                }}
+              >
+                <Group mt='xs'>
+                  {MITIGATIONS.map((value) => (
+                    <Checkbox key={value} value={value} label={value} />
+                  ))}
+                </Group>
+              </Checkbox.Group>
+
+              <Stack gap='sm'>
+                <Group justify='space-between'>
+                  <Text fw={600}>添付ファイル</Text>
+                  <Button
+                    variant='light'
+                    size='xs'
+                    onClick={() => {
+                      setValues((current) => ({
+                        ...current,
+                        attachments: [...current.attachments, createEmptyAttachment()],
+                      }));
+                    }}
+                  >
+                    添付を追加
+                  </Button>
+                </Group>
+
+                {values.attachments.map((attachment, index) => (
+                  <Card key={attachment.id} withBorder radius='md' padding='md'>
+                    <Stack gap='sm'>
+                      <Group grow align='flex-start'>
+                        <TextInput
+                          label={`添付ファイル名 ${index + 1}`}
+                          value={attachment.name}
+                          onChange={(event) => {
+                            const name = event.currentTarget.value;
+                            setValues((current) => ({
+                              ...current,
+                              attachments: current.attachments.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, name } : entry,
+                              ),
+                            }));
+                          }}
+                        />
+                        <TextInput
+                          label={`参照 URL ${index + 1}`}
+                          value={attachment.url}
+                          onChange={(event) => {
+                            const url = event.currentTarget.value;
+                            setValues((current) => ({
+                              ...current,
+                              attachments: current.attachments.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, url } : entry,
+                              ),
+                            }));
+                          }}
+                        />
+                      </Group>
+                      <Group grow align='flex-start'>
+                        <TextInput
+                          label={`MIME type ${index + 1}`}
+                          value={attachment.mimeType}
+                          onChange={(event) => {
+                            const mimeType = event.currentTarget.value;
+                            setValues((current) => ({
+                              ...current,
+                              attachments: current.attachments.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, mimeType } : entry,
+                              ),
+                            }));
+                          }}
+                        />
+                        <NumberInput
+                          label={`サイズ (bytes) ${index + 1}`}
+                          min={0}
+                          value={attachment.sizeBytes}
+                          onChange={(value) => {
+                            setValues((current) => ({
+                              ...current,
+                              attachments: current.attachments.map((entry, entryIndex) =>
+                                entryIndex === index
+                                  ? { ...entry, sizeBytes: typeof value === 'number' ? value : '' }
+                                  : entry,
+                              ),
+                            }));
+                          }}
+                        />
+                      </Group>
+                      <Group justify='flex-end'>
+                        <Button
+                          color='red'
+                          variant='subtle'
+                          size='xs'
+                          onClick={() => {
+                            setValues((current) => ({
+                              ...current,
+                              attachments: current.attachments.filter(
+                                (_, entryIndex) => entryIndex !== index,
+                              ),
+                            }));
+                          }}
+                        >
+                          添付を削除
+                        </Button>
+                      </Group>
+                    </Stack>
+                  </Card>
+                ))}
+              </Stack>
+            </Stack>
           ) : null}
         </Stack>
 

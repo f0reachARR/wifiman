@@ -335,6 +335,14 @@ function createOwnTeamDetailResponses(): Record<string, MockResponse> {
           description: 'AP の近くで遅延増加',
           mitigationTried: ['change_channel'],
           improved: true,
+          attachments: [
+            {
+              name: 'ping-log.csv',
+              url: 'https://example.com/ping-log.csv',
+              mimeType: 'text/csv',
+              sizeBytes: 2048,
+            },
+          ],
           apDeviceModel: 'AP-9000',
           clientDeviceModel: 'Client-1',
           createdAt: '2026-04-01T00:00:00.000Z',
@@ -724,17 +732,25 @@ describe('team management routes', () => {
     expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '詳細モードを開く' })).toBeInTheDocument();
     expect(screen.getByLabelText('平均 Ping (ms)')).toBeInTheDocument();
+    expect(screen.getByLabelText('パケットロス率 (%)')).toBeInTheDocument();
     expect(screen.getByLabelText('公開範囲')).toHaveValue('team_private');
     expect(screen.getByLabelText('距離カテゴリ')).toBeInTheDocument();
     expect(screen.getByLabelText('一言メモ')).toBeInTheDocument();
     expect(screen.queryByLabelText('再現性')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('場所ラベル')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('最大 Ping (ms)')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('観測位置')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '詳細モードを開く' }));
 
     expect(await screen.findByLabelText('平均 Ping (ms)')).toBeInTheDocument();
+    expect(screen.getByLabelText('最大 Ping (ms)')).toBeInTheDocument();
+    expect(screen.getByLabelText('推定距離[m]')).toBeInTheDocument();
     expect(screen.getByLabelText('再現性')).toBeInTheDocument();
-    expect(screen.getByLabelText('場所ラベル')).toBeInTheDocument();
+    expect(screen.getByLabelText('観測位置')).toBeInTheDocument();
+    expect(screen.getByText('対処内容')).toBeInTheDocument();
+    expect(screen.getByLabelText('改善有無')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '添付を追加' })).toBeInTheDocument();
+    expect(screen.getByLabelText('自由記述')).toBeInTheDocument();
   });
 
   it('簡易モードでは必須項目だけで短時間入力保存できる', async () => {
@@ -804,6 +820,7 @@ describe('team management routes', () => {
     fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
     fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
     fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '3' } });
     fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: 'mid' } });
     fireEvent.change(screen.getByLabelText('公開範囲'), { target: { value: 'team_public' } });
     fireEvent.change(screen.getByLabelText('一言メモ'), { target: { value: 'quick note' } });
@@ -819,10 +836,137 @@ describe('team management routes', () => {
       symptom: 'high_latency',
       severity: 'high',
       avgPingMs: 42,
+      packetLossPercent: 3,
       distanceCategory: 'mid',
       description: 'quick note',
     });
     expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/teams/${ownTeamId}`);
+  });
+
+  it('詳細モードでは追加項目を入力して保存できる', async () => {
+    const ownResponses = createOwnTeamDetailResponses();
+    const issueReportsResponse = getRequiredResponse(
+      ownResponses,
+      `/api/tournaments/${tournamentId}/issue-reports`,
+    );
+    let capturedBody: Record<string, unknown> | undefined;
+
+    renderRoute(`/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`, {
+      ...ownResponses,
+      [`/api/tournaments/${tournamentId}/issue-reports`]: {
+        status: 200,
+        body: issueReportsResponse.body,
+      },
+    });
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+        capturedBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return jsonResponse(
+          {
+            id: '00000000-0000-4000-8000-000000000082',
+            tournamentId,
+            teamId: ownTeamId,
+            wifiConfigId: ownWifiId,
+            reporterName: 'Driver A',
+            visibility: 'team_private',
+            band: '5GHz',
+            channel: 36,
+            channelWidthMHz: 80,
+            symptom: 'unstable',
+            severity: 'critical',
+            avgPingMs: 42,
+            maxPingMs: 90,
+            packetLossPercent: 12,
+            distanceCategory: 'far',
+            estimatedDistanceMeters: 24,
+            locationLabel: 'North pit',
+            reproducibility: 'always',
+            description: 'long form note',
+            mitigationTried: ['change_channel', 'move_position'],
+            improved: false,
+            attachments: [
+              {
+                name: 'speedtest.png',
+                url: 'https://example.com/speedtest.png',
+                mimeType: 'image/png',
+                sizeBytes: 4096,
+              },
+            ],
+            apDeviceModel: 'AP-9000',
+            clientDeviceModel: 'Client-1',
+            createdAt: '2026-04-22T12:00:00.000Z',
+            updatedAt: '2026-04-22T12:00:00.000Z',
+          },
+          201,
+        );
+      }
+
+      const matched = ownResponses[path];
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'unstable' } });
+    fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'critical' } });
+    fireEvent.click(screen.getByRole('button', { name: '詳細モードを開く' }));
+    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText('最大 Ping (ms)'), { target: { value: '90' } });
+    fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: 'far' } });
+    fireEvent.change(screen.getByLabelText('推定距離[m]'), { target: { value: '24' } });
+    fireEvent.change(screen.getByLabelText('再現性'), { target: { value: 'always' } });
+    fireEvent.change(screen.getByLabelText('改善有無'), { target: { value: 'false' } });
+    fireEvent.change(screen.getByLabelText('観測位置'), { target: { value: 'North pit' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'change_channel' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'move_position' }));
+    fireEvent.click(screen.getByRole('button', { name: '添付を追加' }));
+    fireEvent.change(screen.getByLabelText('添付ファイル名 1'), {
+      target: { value: 'speedtest.png' },
+    });
+    fireEvent.change(screen.getByLabelText('参照 URL 1'), {
+      target: { value: 'https://example.com/speedtest.png' },
+    });
+    fireEvent.change(screen.getByLabelText('MIME type 1'), {
+      target: { value: 'image/png' },
+    });
+    fireEvent.change(screen.getByLabelText('サイズ (bytes) 1'), {
+      target: { value: '4096' },
+    });
+    fireEvent.change(screen.getByLabelText('自由記述'), { target: { value: 'long form note' } });
+    fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+
+    await waitFor(() => {
+      expect(capturedBody).toMatchObject({
+        avgPingMs: 42,
+        maxPingMs: 90,
+        packetLossPercent: 12,
+        distanceCategory: 'far',
+        estimatedDistanceMeters: 24,
+        reproducibility: 'always',
+        locationLabel: 'North pit',
+        mitigationTried: ['change_channel', 'move_position'],
+        improved: false,
+        description: 'long form note',
+        attachments: [
+          {
+            name: 'speedtest.png',
+            url: 'https://example.com/speedtest.png',
+            mimeType: 'image/png',
+            sizeBytes: 4096,
+          },
+        ],
+      });
+    });
   });
 
   it('オフライン保存すると syncRecords に pending が残る', async () => {
@@ -970,9 +1114,16 @@ describe('team management routes', () => {
 
     fireEvent.change(screen.getByLabelText('報告者名'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('最大 Ping (ms)'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('推定距離[m]'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('再現性'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('場所ラベル'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('追記メモ'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('観測位置'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'change_channel' }));
+    fireEvent.change(screen.getByLabelText('改善有無'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '添付を削除' }));
+    fireEvent.change(screen.getByLabelText('自由記述'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '追記を保存' }));
 
     await waitFor(() => {
@@ -980,9 +1131,16 @@ describe('team management routes', () => {
         visibility: 'team_private',
         reporterName: null,
         avgPingMs: null,
+        maxPingMs: null,
+        packetLossPercent: null,
+        distanceCategory: null,
+        estimatedDistanceMeters: null,
         reproducibility: null,
         locationLabel: null,
         description: null,
+        mitigationTried: null,
+        improved: null,
+        attachments: null,
       });
     });
   });

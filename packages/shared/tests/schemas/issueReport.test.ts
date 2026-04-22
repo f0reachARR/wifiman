@@ -8,6 +8,13 @@ describe('CreateIssueReportSchema', () => {
       wifiConfigId: '00000000-0000-4000-8000-000000000031',
       symptom: 'high_latency',
       severity: 'medium',
+      attachments: [
+        {
+          name: 'ping-log.csv',
+          mimeType: 'text/csv',
+          sizeBytes: 2048,
+        },
+      ],
     });
 
     expect(result.success).toBe(true);
@@ -37,10 +44,16 @@ describe('UpdateIssueReportSchema', () => {
     const result = UpdateIssueReportSchema.safeParse({
       reporterName: null,
       avgPingMs: null,
+      maxPingMs: null,
+      packetLossPercent: null,
       distanceCategory: null,
+      estimatedDistanceMeters: null,
       reproducibility: null,
       locationLabel: null,
       description: null,
+      mitigationTried: null,
+      improved: null,
+      attachments: null,
     });
 
     expect(result.success).toBe(true);
@@ -48,10 +61,16 @@ describe('UpdateIssueReportSchema', () => {
       expect(result.data).toEqual({
         reporterName: null,
         avgPingMs: null,
+        maxPingMs: null,
+        packetLossPercent: null,
         distanceCategory: null,
+        estimatedDistanceMeters: null,
         reproducibility: null,
         locationLabel: null,
         description: null,
+        mitigationTried: null,
+        improved: null,
+        attachments: null,
       });
     }
   });

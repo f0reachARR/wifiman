@@ -92,6 +92,7 @@ function toPublicIssueReportSummary(row: Record<string, unknown>) {
     reporterName: _reporterName,
     locationLabel: _locationLabel,
     description: _description,
+    attachments: _attachments,
     ...summary
   } = row;
   return summary;

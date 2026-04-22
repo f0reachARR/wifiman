@@ -3134,6 +3134,15 @@ export interface paths {
                       )[]
                     | null;
                   improved?: boolean | null;
+                  attachments?:
+                    | {
+                        name: string;
+                        /** Format: uri */
+                        url?: string;
+                        mimeType?: string;
+                        sizeBytes?: number;
+                      }[]
+                    | null;
                   apDeviceModel?: string | null;
                   clientDeviceModel?: string | null;
                   /** Format: date-time */
@@ -3285,6 +3294,13 @@ export interface paths {
               | 'none'
             )[];
             improved?: boolean;
+            attachments?: {
+              name: string;
+              /** Format: uri */
+              url?: string;
+              mimeType?: string;
+              sizeBytes?: number;
+            }[];
             apDeviceModel?: string;
             clientDeviceModel?: string;
           };
@@ -3345,6 +3361,15 @@ export interface paths {
                   )[]
                 | null;
               improved?: boolean | null;
+              attachments?:
+                | {
+                    name: string;
+                    /** Format: uri */
+                    url?: string;
+                    mimeType?: string;
+                    sizeBytes?: number;
+                  }[]
+                | null;
               apDeviceModel?: string | null;
               clientDeviceModel?: string | null;
               /** Format: date-time */
@@ -3579,6 +3604,15 @@ export interface paths {
                       )[]
                     | null;
                   improved?: boolean | null;
+                  attachments?:
+                    | {
+                        name: string;
+                        /** Format: uri */
+                        url?: string;
+                        mimeType?: string;
+                        sizeBytes?: number;
+                      }[]
+                    | null;
                   apDeviceModel?: string | null;
                   clientDeviceModel?: string | null;
                   /** Format: date-time */
@@ -3815,6 +3849,15 @@ export interface paths {
                 )[]
               | null;
             improved?: boolean | null;
+            attachments?:
+              | {
+                  name: string;
+                  /** Format: uri */
+                  url?: string;
+                  mimeType?: string;
+                  sizeBytes?: number;
+                }[]
+              | null;
             apDeviceModel?: string | null;
             clientDeviceModel?: string | null;
           };
@@ -3875,6 +3918,15 @@ export interface paths {
                   )[]
                 | null;
               improved?: boolean | null;
+              attachments?:
+                | {
+                    name: string;
+                    /** Format: uri */
+                    url?: string;
+                    mimeType?: string;
+                    sizeBytes?: number;
+                  }[]
+                | null;
               apDeviceModel?: string | null;
               clientDeviceModel?: string | null;
               /** Format: date-time */

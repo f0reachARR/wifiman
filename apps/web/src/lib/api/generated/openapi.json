@@ -5548,6 +5548,34 @@
                           "improved": {
                             "type": ["boolean", "null"]
                           },
+                          "attachments": {
+                            "type": ["array", "null"],
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "url": {
+                                  "type": "string",
+                                  "maxLength": 2000,
+                                  "format": "uri"
+                                },
+                                "mimeType": {
+                                  "type": "string",
+                                  "maxLength": 200
+                                },
+                                "sizeBytes": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["name"]
+                            },
+                            "maxItems": 10
+                          },
                           "apDeviceModel": {
                             "type": ["string", "null"],
                             "maxLength": 200
@@ -5873,6 +5901,34 @@
                   "improved": {
                     "type": "boolean"
                   },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 2000,
+                          "format": "uri"
+                        },
+                        "mimeType": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "sizeBytes": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["name"]
+                    },
+                    "maxItems": 10
+                  },
                   "apDeviceModel": {
                     "type": "string",
                     "maxLength": 200
@@ -5996,6 +6052,34 @@
                     },
                     "improved": {
                       "type": ["boolean", "null"]
+                    },
+                    "attachments": {
+                      "type": ["array", "null"],
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000,
+                            "format": "uri"
+                          },
+                          "mimeType": {
+                            "type": "string",
+                            "maxLength": 200
+                          },
+                          "sizeBytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": ["name"]
+                      },
+                      "maxItems": 10
                     },
                     "apDeviceModel": {
                       "type": ["string", "null"],
@@ -6397,6 +6481,34 @@
                         "improved": {
                           "type": ["boolean", "null"]
                         },
+                        "attachments": {
+                          "type": ["array", "null"],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "url": {
+                                "type": "string",
+                                "maxLength": 2000,
+                                "format": "uri"
+                              },
+                              "mimeType": {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              "sizeBytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": ["name"]
+                          },
+                          "maxItems": 10
+                        },
                         "apDeviceModel": {
                           "type": ["string", "null"],
                           "maxLength": 200
@@ -6746,6 +6858,34 @@
                   "improved": {
                     "type": ["boolean", "null"]
                   },
+                  "attachments": {
+                    "type": ["array", "null"],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 2000,
+                          "format": "uri"
+                        },
+                        "mimeType": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "sizeBytes": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["name"]
+                    },
+                    "maxItems": 10
+                  },
                   "apDeviceModel": {
                     "type": ["string", "null"],
                     "maxLength": 200
@@ -6868,6 +7008,34 @@
                     },
                     "improved": {
                       "type": ["boolean", "null"]
+                    },
+                    "attachments": {
+                      "type": ["array", "null"],
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000,
+                            "format": "uri"
+                          },
+                          "mimeType": {
+                            "type": "string",
+                            "maxLength": 200
+                          },
+                          "sizeBytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": ["name"]
+                      },
+                      "maxItems": 10
                     },
                     "apDeviceModel": {
                       "type": ["string", "null"],
