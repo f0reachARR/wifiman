@@ -318,6 +318,7 @@ export function AppDashboardPage() {
   const [selectedTournamentId, setSelectedTournamentId] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [csvErrors, setCsvErrors] = useState<Array<{ row: number; message: string }>>([]);
+  const [csvSubmitError, setCsvSubmitError] = useState<string | null>(null);
   const [observedWifiError, setObservedWifiError] = useState<string | null>(null);
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
   const [noticeError, setNoticeError] = useState<string | null>(null);
@@ -332,7 +333,7 @@ export function AppDashboardPage() {
   );
   const csvZodForm = createTanStackFormZodHelpers(
     CsvImportFormSchema,
-    setObservedWifiError,
+    setCsvSubmitError,
     'CSV 取込に失敗しました',
   );
   const noticeZodForm = createTanStackFormZodHelpers(
@@ -395,16 +396,18 @@ export function AppDashboardPage() {
       csvZodForm.clearSubmitError();
 
       if (!selectedTournamentId) {
-        setObservedWifiError('大会を選択してください');
+        setCsvSubmitError('大会を選択してください');
         return;
       }
 
       const parsed = parseObservedWifiCsv(value.csvInput);
       if (parsed.errors.length > 0) {
+        setCsvSubmitError(null);
         setCsvErrors(parsed.errors);
         return;
       }
 
+      setCsvSubmitError(null);
       setCsvErrors([]);
 
       try {
@@ -955,6 +958,8 @@ export function AppDashboardPage() {
                 }}
               >
                 <Stack gap='md'>
+                  {csvSubmitError ? <Alert color='red'>{csvSubmitError}</Alert> : null}
+
                   <csvForm.Field
                     name='csvInput'
                     validators={{

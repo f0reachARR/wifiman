@@ -1570,6 +1570,54 @@ describe('team management routes', () => {
     expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
   });
 
+  it('operator dashboard の CSV 取込 submit error は CSV カード直下に表示する', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (
+        path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({ error: { code: 'API_ERROR', message: 'status 400' } }, 400);
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('CSV'), {
+        target: {
+          value: [
+            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+            'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
+          ].join('\n'),
+        },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
+    });
+
+    const csvCard = screen.getByRole('heading', { name: 'CSV 取込' }).closest('.feature-card');
+    const observedWifiCard = screen
+      .getByRole('heading', { name: '野良 WiFi 手入力登録' })
+      .closest('.feature-card');
+
+    expect(csvCard).not.toBeNull();
+    expect(observedWifiCard).not.toBeNull();
+    expect(await within(csvCard as HTMLElement).findByText('API request failed')).toBeInTheDocument();
+    expect(within(observedWifiCard as HTMLElement).queryByText('API request failed')).not.toBeInTheDocument();
+  });
+
   it.each([
     400, 401, 403, 409, 422,
   ])('operator dashboard の野良 WiFi 手入力は API %s 応答時にエラー alert を表示する', async (status) => {
