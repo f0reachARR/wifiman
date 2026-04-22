@@ -1289,6 +1289,42 @@ describe('team management routes', () => {
     });
   });
 
+  it('不具合報告フォームは 401 応答でも画面を維持してエラーを表示する', async () => {
+    const ownResponses = createOwnTeamDetailResponses();
+
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+      ownResponses,
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace('http://localhost:3000', '');
+
+        if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+          return jsonResponse({ error: { code: 'UNAUTHORIZED', message: 'unauthorized' } }, 401);
+        }
+
+        const matched = ownResponses[path];
+
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
+
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
+
+    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
+      fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
+      fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+    });
+
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+  });
+
   it('オフライン保存すると syncRecords に pending が残る', async () => {
     renderRoute(
       `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
@@ -1387,6 +1423,107 @@ describe('team management routes', () => {
     expect(screen.getByText('total reports 3')).toBeInTheDocument();
     expect(await screen.findByText('gamma-access@example.com')).toBeInTheDocument();
     expect(screen.queryByText('alpha-access@example.com')).not.toBeInTheDocument();
+  });
+
+  it('operator dashboard の CSV 取込で行番号付きクライアント検証エラーを表示する', async () => {
+    renderRoute('/app', createOperatorDashboardResponses());
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('CSV'), {
+        target: {
+          value: [
+            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+            'manual,Bad Row,00:11:22:33:44:56,2.4GHz,149,80,-50,South Hall,2026-04-21T10:05:00.000Z,invalid channel',
+          ].join('\n'),
+        },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
+    });
+
+    expect(await screen.findByText('2 行目: 帯域 2.4GHz に対してチャンネル 149 は無効です')).toBeInTheDocument();
+  });
+
+  it('operator dashboard の CSV 取込で 422 応答の行番号付きエラーを表示する', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (
+        path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'validation failed',
+              details: {
+                errors: [{ row: 4, message: '4 行目: BSSID が重複しています' }],
+              },
+            },
+          },
+          422,
+        );
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('CSV'), {
+        target: {
+          value: [
+            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+            'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
+          ].join('\n'),
+        },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
+    });
+
+    expect(await screen.findByText('4 行目: BSSID が重複しています')).toBeInTheDocument();
+  });
+
+  it('operator dashboard の野良 WiFi 手入力で 400 応答時にエラー alert を表示する', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/tournaments/${tournamentId}/observed-wifis` && init?.method === 'POST') {
+        return jsonResponse({ error: { code: 'BAD_REQUEST', message: 'bad request' } }, 400);
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
+    });
+
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
   });
 
   it('初回マウント時にオンラインなら pending を自動同期する', async () => {
@@ -1704,6 +1841,175 @@ describe('team management routes', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('AP-9000: DFS 切替で瞬断しやすい')).toBeInTheDocument();
   });
+
+  it('team viewer は閲覧専用 UI となり private 情報と編集導線を表示しない', async () => {
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOtherTeamDetailResponses());
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'この画面は閲覧専用です。編集 UI は自チーム editor または運営者にのみ表示されます。',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '新しい WiFi 構成を追加' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Ping 監視先: 192.168.10.1')).not.toBeInTheDocument();
+    expect(screen.queryByText('private wifi note')).not.toBeInTheDocument();
+  });
+
+  it('WiFi 構成追加フォームで必須入力エラーを表示する', async () => {
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
+    });
+
+    const nameInput = await screen.findByLabelText('構成名');
+    const form = nameInput.closest('form');
+    const saveButton = form?.querySelector('button[type="submit"]');
+
+    if (!(form instanceof HTMLFormElement) || !(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('wifi config form not found');
+    }
+
+    await act(async () => {
+      fireEvent.click(saveButton);
+    });
+
+    expect(within(form).getByText(/at least 1 character/i)).toBeInTheDocument();
+  });
+
+  it('WiFi 構成追加フォームで帯域とチャンネル整合性エラーを表示する', async () => {
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
+    });
+
+    const nameInput = await screen.findByLabelText('構成名');
+    const channelInput = screen.getByLabelText('チャンネル');
+    const form = nameInput.closest('form');
+    const saveButton = form?.querySelector('button[type="submit"]');
+
+    if (!(form instanceof HTMLFormElement) || !(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('wifi config form not found');
+    }
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: 'Invalid Config' } });
+      fireEvent.change(channelInput, { target: { value: '999' } });
+      fireEvent.click(saveButton);
+    });
+
+    expect(within(form).getByText(/無効です/)).toBeInTheDocument();
+  });
+
+  it('WiFi 構成追加フォームで最大 3 件制約エラーを表示する', async () => {
+    const responses = createOwnTeamDetailResponses();
+    responses[`/api/teams/${ownTeamId}/wifi-configs`] = {
+      status: 200,
+      body: [
+        ...(getRequiredResponse(responses, `/api/teams/${ownTeamId}/wifi-configs`).body as Array<unknown>),
+        {
+          id: '00000000-0000-4000-8000-000000000023',
+          teamId: ownTeamId,
+          name: 'Driver Station 6G',
+          purpose: 'video',
+          band: '6GHz',
+          channel: 37,
+          channelWidthMHz: 80,
+          role: 'primary',
+          status: 'active',
+          apDeviceId: ownApId,
+          clientDeviceId: ownClientId,
+          expectedDistanceCategory: 'far',
+          pingTargetIp: null,
+          notes: null,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, responses);
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
+    });
+
+    const nameInput = await screen.findByLabelText('構成名');
+    const form = nameInput.closest('form');
+    const saveButton = form?.querySelector('button[type="submit"]');
+
+    if (!(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('wifi config save button not found');
+    }
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: 'Fourth Config' } });
+      fireEvent.click(saveButton);
+    });
+
+    expect(screen.getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
+  });
+
+  it.each([403, 409])(
+    'WiFi 構成フォームは API %s 応答でもクラッシュせずエラーを表示する',
+    async (status) => {
+      const responses = createOwnTeamDetailResponses();
+
+      renderRoute(
+        `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+        responses,
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const path = url.replace('http://localhost:3000', '');
+
+          if (path === `/api/teams/${ownTeamId}/wifi-configs` && init?.method === 'POST') {
+            return jsonResponse(
+              { error: { code: 'API_ERROR', message: `status ${status}` } },
+              status,
+            );
+          }
+
+          const matched = responses[path];
+
+          if (!matched) {
+            throw new Error(`Unhandled fetch: ${path}`);
+          }
+
+          return jsonResponse(matched.body, matched.status);
+        },
+      );
+
+      expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
+      });
+
+      const nameInput = await screen.findByLabelText('構成名');
+      const form = nameInput.closest('form');
+      const saveButton = form?.querySelector('button[type="submit"]');
+
+      if (!(saveButton instanceof HTMLButtonElement)) {
+        throw new Error('wifi config save button not found');
+      }
+
+      await act(async () => {
+        fireEvent.change(nameInput, { target: { value: `Status ${status} Config` } });
+        fireEvent.click(saveButton);
+      });
+
+      expect(await screen.findByText('API request failed')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+    },
+  );
 
   it('自チーム詳細から local pending 報告詳細へ遷移できる', async () => {
     const record = await queueIssueReportSync(tournamentId, {
