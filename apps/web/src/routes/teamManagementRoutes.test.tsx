@@ -1,10 +1,21 @@
-import 'fake-indexeddb/auto';
-import { QueryClient } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { appDb, queueIssueReportSync, updateSyncRecordAfterAttempt } from '../lib/db/appDb.js';
+import "fake-indexeddb/auto";
+import { QueryClient } from "@tanstack/react-query";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  appDb,
+  queueIssueReportSync,
+  updateSyncRecordAfterAttempt,
+} from "../lib/db/appDb.js";
 
-vi.mock('../lib/betterAuthClient.js', () => ({
+vi.mock("../lib/betterAuthClient.js", () => ({
   betterAuthClient: {
     signIn: {
       email: vi.fn(),
@@ -12,36 +23,39 @@ vi.mock('../lib/betterAuthClient.js', () => ({
   },
 }));
 
-vi.mock('../ui/PwaLifecycle.js', () => ({
+vi.mock("../ui/PwaLifecycle.js", () => ({
   PwaLifecycle: () => null,
 }));
 
-import { AppProviders } from '../providers/AppProviders.js';
-import { createAppRouter } from '../router.js';
+import { AppProviders } from "../providers/AppProviders.js";
+import { createAppRouter } from "../router.js";
 
 type MockResponse = {
   status: number;
   body?: unknown;
 };
 
-const tournamentId = '00000000-0000-4000-8000-000000000001';
-const secondTournamentId = '00000000-0000-4000-8000-000000000002';
-const ownTeamId = '00000000-0000-4000-8000-000000000011';
-const otherTeamId = '00000000-0000-4000-8000-000000000012';
-const secondTournamentTeamId = '00000000-0000-4000-8000-000000000013';
-const ownWifiId = '00000000-0000-4000-8000-000000000021';
-const ownApId = '00000000-0000-4000-8000-000000000031';
-const ownClientId = '00000000-0000-4000-8000-000000000032';
+const tournamentId = "00000000-0000-4000-8000-000000000001";
+const secondTournamentId = "00000000-0000-4000-8000-000000000002";
+const ownTeamId = "00000000-0000-4000-8000-000000000011";
+const otherTeamId = "00000000-0000-4000-8000-000000000012";
+const secondTournamentTeamId = "00000000-0000-4000-8000-000000000013";
+const ownWifiId = "00000000-0000-4000-8000-000000000021";
+const ownApId = "00000000-0000-4000-8000-000000000031";
+const ownClientId = "00000000-0000-4000-8000-000000000032";
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: {
-      'content-type': 'application/json',
+      "content-type": "application/json",
     },
   });
 
-function getRequiredResponse(responses: Record<string, MockResponse>, path: string): MockResponse {
+function getRequiredResponse(
+  responses: Record<string, MockResponse>,
+  path: string,
+): MockResponse {
   const response = responses[path];
 
   if (!response) {
@@ -52,50 +66,54 @@ function getRequiredResponse(responses: Record<string, MockResponse>, path: stri
 }
 
 const ownTeamSession = {
-  kind: 'team' as const,
-  role: 'editor' as const,
+  kind: "team" as const,
+  role: "editor" as const,
   teamId: ownTeamId,
   tournamentId,
-  teamAccessId: '00000000-0000-4000-8000-000000000041',
+  teamAccessId: "00000000-0000-4000-8000-000000000041",
 };
 
 const otherTeamSession = {
-  kind: 'team' as const,
-  role: 'viewer' as const,
+  kind: "team" as const,
+  role: "viewer" as const,
   teamId: otherTeamId,
   tournamentId,
-  teamAccessId: '00000000-0000-4000-8000-000000000042',
+  teamAccessId: "00000000-0000-4000-8000-000000000042",
 };
 
 const operatorSession = {
-  kind: 'operator' as const,
-  role: 'operator' as const,
-  sessionId: 'operator-session-1',
-  displayName: 'Operator 1',
+  kind: "operator" as const,
+  role: "operator" as const,
+  sessionId: "operator-session-1",
+  displayName: "Operator 1",
 };
 
 function createBaseResponses(
-  session: typeof ownTeamSession | typeof otherTeamSession | typeof operatorSession | null,
+  session:
+    | typeof ownTeamSession
+    | typeof otherTeamSession
+    | typeof operatorSession
+    | null,
 ) {
   return {
-    '/api/auth/session': session
+    "/api/auth/session": session
       ? ({ status: 200, body: session } satisfies MockResponse)
       : ({
           status: 401,
-          body: { error: { code: 'UNAUTHORIZED', message: 'unauthorized' } },
+          body: { error: { code: "UNAUTHORIZED", message: "unauthorized" } },
         } satisfies MockResponse),
-    '/api/tournaments': {
+    "/api/tournaments": {
       status: 200,
       body: [
         {
           id: tournamentId,
-          name: 'Spring Cup',
-          venueName: 'Main Hall',
-          startDate: '2026-04-21',
-          endDate: '2026-04-22',
-          description: 'Tournament for testing',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          name: "Spring Cup",
+          venueName: "Main Hall",
+          startDate: "2026-04-21",
+          endDate: "2026-04-22",
+          description: "Tournament for testing",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
       ],
     },
@@ -104,19 +122,19 @@ function createBaseResponses(
       body: {
         tournament: {
           id: tournamentId,
-          name: 'Spring Cup',
-          venueName: 'Main Hall',
-          startDate: '2026-04-21',
-          endDate: '2026-04-22',
-          description: 'Tournament for testing',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          name: "Spring Cup",
+          venueName: "Main Hall",
+          startDate: "2026-04-21",
+          endDate: "2026-04-22",
+          description: "Tournament for testing",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
         teamCount: 2,
         wifiConfigSummary: {
-          '2.4GHz': 1,
-          '5GHz': 2,
-          '6GHz': 0,
+          "2.4GHz": 1,
+          "5GHz": 2,
+          "6GHz": 0,
         },
         publicIssueReportCount: 3,
         noticeCount: 1,
@@ -130,49 +148,49 @@ function createBaseResponses(
       status: 200,
       body: [
         {
-          sourceType: 'own_team',
-          band: '5GHz',
+          sourceType: "own_team",
+          band: "5GHz",
           channel: 36,
           channelWidthMHz: 80,
           wifiConfigId: ownWifiId,
-          wifiConfigName: 'Control 5G',
+          wifiConfigName: "Control 5G",
           teamId: ownTeamId,
-          teamName: 'Alpha',
-          purpose: 'control',
-          role: 'primary',
-          status: 'active',
-          apDeviceModel: 'AP-9000',
-          clientDeviceModel: 'Client-1',
+          teamName: "Alpha",
+          purpose: "control",
+          role: "primary",
+          status: "active",
+          apDeviceModel: "AP-9000",
+          clientDeviceModel: "Client-1",
           reportCount: 3,
         },
         {
-          sourceType: 'participant_team',
-          band: '5GHz',
+          sourceType: "participant_team",
+          band: "5GHz",
           channel: 149,
           channelWidthMHz: 80,
-          wifiConfigId: '00000000-0000-4000-8000-000000000099',
-          wifiConfigName: 'Backup 5G',
+          wifiConfigId: "00000000-0000-4000-8000-000000000099",
+          wifiConfigName: "Backup 5G",
           teamId: otherTeamId,
-          teamName: 'Beta',
-          purpose: 'debug',
-          role: 'backup',
-          status: 'standby',
-          apDeviceModel: 'AP-7000',
+          teamName: "Beta",
+          purpose: "debug",
+          role: "backup",
+          status: "standby",
+          apDeviceModel: "AP-7000",
           clientDeviceModel: null,
           reportCount: 1,
         },
         {
-          sourceType: 'observed_wifi',
-          band: '5GHz',
+          sourceType: "observed_wifi",
+          band: "5GHz",
           channel: 40,
           channelWidthMHz: 20,
-          observedWifiId: '00000000-0000-4000-8000-000000000100',
-          ssid: 'Venue WiFi',
-          bssid: '00:11:22:33:44:55',
-          source: 'wild',
+          observedWifiId: "00000000-0000-4000-8000-000000000100",
+          ssid: "Venue WiFi",
+          bssid: "00:11:22:33:44:55",
+          source: "wild",
           rssi: -68,
-          locationLabel: 'North Hall',
-          observedAt: '2026-04-21T10:00:00.000Z',
+          locationLabel: "North Hall",
+          observedAt: "2026-04-21T10:00:00.000Z",
         },
       ],
     },
@@ -180,13 +198,13 @@ function createBaseResponses(
       status: 200,
       body: {
         id: tournamentId,
-        name: 'Spring Cup',
-        venueName: 'Main Hall',
-        startDate: '2026-04-21',
-        endDate: '2026-04-22',
-        description: 'Tournament for testing',
-        createdAt: '2026-04-01T00:00:00.000Z',
-        updatedAt: '2026-04-01T00:00:00.000Z',
+        name: "Spring Cup",
+        venueName: "Main Hall",
+        startDate: "2026-04-21",
+        endDate: "2026-04-22",
+        description: "Tournament for testing",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
       },
     },
     [`/api/tournaments/${tournamentId}/teams`]: {
@@ -195,20 +213,20 @@ function createBaseResponses(
         {
           id: ownTeamId,
           tournamentId,
-          name: 'Alpha',
-          organization: 'A School',
-          pitId: 'P-1',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          name: "Alpha",
+          organization: "A School",
+          pitId: "P-1",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
         {
           id: otherTeamId,
           tournamentId,
-          name: 'Beta',
-          organization: 'B School',
-          pitId: 'P-2',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          name: "Beta",
+          organization: "B School",
+          pitId: "P-2",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
       ],
     },
@@ -222,15 +240,15 @@ function createOwnTeamDetailResponses(): Record<string, MockResponse> {
       status: 200,
       body: [
         {
-          id: '00000000-0000-4000-8000-000000000051',
+          id: "00000000-0000-4000-8000-000000000051",
           tournamentId,
-          title: '5GHz guidance',
-          body: '5GHz の control link は AP-9000 を優先し混雑を避ける',
-          scope: 'band',
-          targetBand: '5GHz',
-          targetModel: 'AP-9000',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          title: "5GHz guidance",
+          body: "5GHz の control link は AP-9000 を優先し混雑を避ける",
+          scope: "band",
+          targetBand: "5GHz",
+          targetModel: "AP-9000",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
       ],
     },
@@ -239,14 +257,14 @@ function createOwnTeamDetailResponses(): Record<string, MockResponse> {
       body: {
         id: ownTeamId,
         tournamentId,
-        name: 'Alpha',
-        organization: 'A School',
-        pitId: 'P-1',
-        contactEmail: 'alpha@example.com',
-        displayContactName: 'Alpha Rep',
-        notes: 'internal memo',
-        createdAt: '2026-04-01T00:00:00.000Z',
-        updatedAt: '2026-04-01T00:00:00.000Z',
+        name: "Alpha",
+        organization: "A School",
+        pitId: "P-1",
+        contactEmail: "alpha@example.com",
+        displayContactName: "Alpha Rep",
+        notes: "internal memo",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
       },
     },
     [`/api/teams/${ownTeamId}/wifi-configs`]: {
@@ -255,38 +273,38 @@ function createOwnTeamDetailResponses(): Record<string, MockResponse> {
         {
           id: ownWifiId,
           teamId: ownTeamId,
-          name: 'Control 5G',
-          purpose: 'control',
-          band: '5GHz',
+          name: "Control 5G",
+          purpose: "control",
+          band: "5GHz",
           channel: 36,
           channelWidthMHz: 80,
-          role: 'primary',
-          status: 'active',
+          role: "primary",
+          status: "active",
           apDeviceId: ownApId,
           clientDeviceId: ownClientId,
-          expectedDistanceCategory: 'mid',
-          pingTargetIp: '192.168.10.1',
-          notes: 'private wifi note',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          expectedDistanceCategory: "mid",
+          pingTargetIp: "192.168.10.1",
+          notes: "private wifi note",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
         {
-          id: '00000000-0000-4000-8000-000000000022',
+          id: "00000000-0000-4000-8000-000000000022",
           teamId: ownTeamId,
-          name: 'Backup 5G',
-          purpose: 'debug',
-          band: '5GHz',
+          name: "Backup 5G",
+          purpose: "debug",
+          band: "5GHz",
           channel: 149,
           channelWidthMHz: 80,
-          role: 'backup',
-          status: 'standby',
+          role: "backup",
+          status: "standby",
           apDeviceId: ownApId,
           clientDeviceId: ownClientId,
-          expectedDistanceCategory: 'near',
+          expectedDistanceCategory: "near",
           pingTargetIp: null,
           notes: null,
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
       ],
     },
@@ -296,27 +314,27 @@ function createOwnTeamDetailResponses(): Record<string, MockResponse> {
         {
           id: ownApId,
           teamId: ownTeamId,
-          vendor: 'Acme',
-          model: 'AP-9000',
-          kind: 'ap',
-          supportedBands: ['5GHz'],
-          notes: 'private device note',
-          knownIssues: 'DFS 切替で瞬断しやすい',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          vendor: "Acme",
+          model: "AP-9000",
+          kind: "ap",
+          supportedBands: ["5GHz"],
+          notes: "private device note",
+          knownIssues: "DFS 切替で瞬断しやすい",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
           archivedAt: null,
         },
         {
           id: ownClientId,
           teamId: ownTeamId,
-          vendor: 'Acme',
-          model: 'Client-1',
-          kind: 'client',
-          supportedBands: ['5GHz'],
+          vendor: "Acme",
+          model: "Client-1",
+          kind: "client",
+          supportedBands: ["5GHz"],
           notes: null,
           knownIssues: null,
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
           archivedAt: null,
         },
       ],
@@ -325,39 +343,39 @@ function createOwnTeamDetailResponses(): Record<string, MockResponse> {
       status: 200,
       body: [
         {
-          id: '00000000-0000-4000-8000-000000000061',
+          id: "00000000-0000-4000-8000-000000000061",
           tournamentId,
           teamId: ownTeamId,
           wifiConfigId: ownWifiId,
-          reporterName: 'Driver A',
-          visibility: 'team_private',
-          band: '5GHz',
+          reporterName: "Driver A",
+          visibility: "team_private",
+          band: "5GHz",
           channel: 36,
           channelWidthMHz: 80,
-          symptom: 'high_latency',
-          severity: 'high',
+          symptom: "high_latency",
+          severity: "high",
           avgPingMs: 25,
           maxPingMs: 60,
           packetLossPercent: 2,
-          distanceCategory: 'mid',
+          distanceCategory: "mid",
           estimatedDistanceMeters: 10,
-          locationLabel: 'East Hall',
-          reproducibility: 'sometimes',
-          description: 'AP の近くで遅延増加',
-          mitigationTried: ['change_channel'],
+          locationLabel: "East Hall",
+          reproducibility: "sometimes",
+          description: "AP の近くで遅延増加",
+          mitigationTried: ["change_channel"],
           improved: true,
           attachments: [
             {
-              name: 'ping-log.csv',
-              url: 'https://example.com/ping-log.csv',
-              mimeType: 'text/csv',
+              name: "ping-log.csv",
+              url: "https://example.com/ping-log.csv",
+              mimeType: "text/csv",
               sizeBytes: 2048,
             },
           ],
-          apDeviceModel: 'AP-9000',
-          clientDeviceModel: 'Client-1',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          apDeviceModel: "AP-9000",
+          clientDeviceModel: "Client-1",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
       ],
     },
@@ -376,32 +394,32 @@ function createOperatorResponses(): Record<string, MockResponse> {
 
 function createOperatorDashboardResponses(): Record<string, MockResponse> {
   return {
-    '/api/auth/session': {
+    "/api/auth/session": {
       status: 200,
       body: operatorSession,
     },
-    '/api/tournaments': {
+    "/api/tournaments": {
       status: 200,
       body: [
         {
           id: tournamentId,
-          name: 'Spring Cup',
-          venueName: 'Main Hall',
-          startDate: '2026-04-21',
-          endDate: '2026-04-22',
-          description: 'Tournament for testing',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          name: "Spring Cup",
+          venueName: "Main Hall",
+          startDate: "2026-04-21",
+          endDate: "2026-04-22",
+          description: "Tournament for testing",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
         {
           id: secondTournamentId,
-          name: 'Autumn Cup',
-          venueName: 'Sub Hall',
-          startDate: '2026-05-01',
-          endDate: '2026-05-02',
-          description: 'Second tournament for dashboard tests',
-          createdAt: '2026-04-10T00:00:00.000Z',
-          updatedAt: '2026-04-10T00:00:00.000Z',
+          name: "Autumn Cup",
+          venueName: "Sub Hall",
+          startDate: "2026-05-01",
+          endDate: "2026-05-02",
+          description: "Second tournament for dashboard tests",
+          createdAt: "2026-04-10T00:00:00.000Z",
+          updatedAt: "2026-04-10T00:00:00.000Z",
         },
       ],
     },
@@ -410,19 +428,19 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
       body: {
         tournament: {
           id: tournamentId,
-          name: 'Spring Cup',
-          venueName: 'Main Hall',
-          startDate: '2026-04-21',
-          endDate: '2026-04-22',
-          description: 'Tournament for testing',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          name: "Spring Cup",
+          venueName: "Main Hall",
+          startDate: "2026-04-21",
+          endDate: "2026-04-22",
+          description: "Tournament for testing",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
         teamCount: 2,
         wifiConfigSummary: {
-          '2.4GHz': 1,
-          '5GHz': 2,
-          '6GHz': 0,
+          "2.4GHz": 1,
+          "5GHz": 2,
+          "6GHz": 0,
         },
         publicIssueReportCount: 1,
         noticeCount: 1,
@@ -433,19 +451,19 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
       body: {
         tournament: {
           id: secondTournamentId,
-          name: 'Autumn Cup',
-          venueName: 'Sub Hall',
-          startDate: '2026-05-01',
-          endDate: '2026-05-02',
-          description: 'Second tournament for dashboard tests',
-          createdAt: '2026-04-10T00:00:00.000Z',
-          updatedAt: '2026-04-10T00:00:00.000Z',
+          name: "Autumn Cup",
+          venueName: "Sub Hall",
+          startDate: "2026-05-01",
+          endDate: "2026-05-02",
+          description: "Second tournament for dashboard tests",
+          createdAt: "2026-04-10T00:00:00.000Z",
+          updatedAt: "2026-04-10T00:00:00.000Z",
         },
         teamCount: 1,
         wifiConfigSummary: {
-          '2.4GHz': 0,
-          '5GHz': 1,
-          '6GHz': 3,
+          "2.4GHz": 0,
+          "5GHz": 1,
+          "6GHz": 3,
         },
         publicIssueReportCount: 2,
         noticeCount: 2,
@@ -463,32 +481,32 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
       status: 200,
       body: [
         {
-          id: '00000000-0000-4000-8000-000000000081',
+          id: "00000000-0000-4000-8000-000000000081",
           tournamentId,
           teamId: ownTeamId,
           wifiConfigId: ownWifiId,
-          visibility: 'team_private',
-          band: '5GHz',
+          visibility: "team_private",
+          band: "5GHz",
           channel: 36,
           channelWidthMHz: 80,
-          symptom: 'high_latency',
-          severity: 'high',
-          createdAt: '2026-04-22T10:00:00.000Z',
-          updatedAt: '2026-04-22T10:00:00.000Z',
+          symptom: "high_latency",
+          severity: "high",
+          createdAt: "2026-04-22T10:00:00.000Z",
+          updatedAt: "2026-04-22T10:00:00.000Z",
         },
         {
-          id: '00000000-0000-4000-8000-000000000082',
+          id: "00000000-0000-4000-8000-000000000082",
           tournamentId,
           teamId: otherTeamId,
-          wifiConfigId: '00000000-0000-4000-8000-000000000099',
-          visibility: 'team_public',
-          band: '2.4GHz',
+          wifiConfigId: "00000000-0000-4000-8000-000000000099",
+          visibility: "team_public",
+          band: "2.4GHz",
           channel: 6,
           channelWidthMHz: 20,
-          symptom: 'unstable',
-          severity: 'medium',
-          createdAt: '2026-04-22T11:00:00.000Z',
-          updatedAt: '2026-04-22T11:00:00.000Z',
+          symptom: "unstable",
+          severity: "medium",
+          createdAt: "2026-04-22T11:00:00.000Z",
+          updatedAt: "2026-04-22T11:00:00.000Z",
         },
       ],
     },
@@ -496,46 +514,46 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
       status: 200,
       body: [
         {
-          id: '00000000-0000-4000-8000-000000000083',
+          id: "00000000-0000-4000-8000-000000000083",
           tournamentId: secondTournamentId,
           teamId: secondTournamentTeamId,
-          wifiConfigId: '00000000-0000-4000-8000-000000000023',
-          visibility: 'team_private',
-          band: '6GHz',
+          wifiConfigId: "00000000-0000-4000-8000-000000000023",
+          visibility: "team_private",
+          band: "6GHz",
           channel: 37,
           channelWidthMHz: 160,
-          symptom: 'disconnect',
-          severity: 'critical',
-          createdAt: '2026-04-23T10:00:00.000Z',
-          updatedAt: '2026-04-23T10:00:00.000Z',
+          symptom: "disconnect",
+          severity: "critical",
+          createdAt: "2026-04-23T10:00:00.000Z",
+          updatedAt: "2026-04-23T10:00:00.000Z",
         },
         {
-          id: '00000000-0000-4000-8000-000000000084',
+          id: "00000000-0000-4000-8000-000000000084",
           tournamentId: secondTournamentId,
           teamId: secondTournamentTeamId,
-          wifiConfigId: '00000000-0000-4000-8000-000000000024',
-          visibility: 'team_private',
-          band: '6GHz',
+          wifiConfigId: "00000000-0000-4000-8000-000000000024",
+          visibility: "team_private",
+          band: "6GHz",
           channel: 85,
           channelWidthMHz: 80,
-          symptom: 'high_latency',
-          severity: 'high',
-          createdAt: '2026-04-23T11:00:00.000Z',
-          updatedAt: '2026-04-23T11:30:00.000Z',
+          symptom: "high_latency",
+          severity: "high",
+          createdAt: "2026-04-23T11:00:00.000Z",
+          updatedAt: "2026-04-23T11:30:00.000Z",
         },
         {
-          id: '00000000-0000-4000-8000-000000000085',
+          id: "00000000-0000-4000-8000-000000000085",
           tournamentId: secondTournamentId,
           teamId: secondTournamentTeamId,
-          wifiConfigId: '00000000-0000-4000-8000-000000000025',
-          visibility: 'team_public',
-          band: '5GHz',
+          wifiConfigId: "00000000-0000-4000-8000-000000000025",
+          visibility: "team_public",
+          band: "5GHz",
           channel: 149,
           channelWidthMHz: 80,
-          symptom: 'unstable',
-          severity: 'medium',
-          createdAt: '2026-04-23T12:00:00.000Z',
-          updatedAt: '2026-04-23T12:15:00.000Z',
+          symptom: "unstable",
+          severity: "medium",
+          createdAt: "2026-04-23T12:00:00.000Z",
+          updatedAt: "2026-04-23T12:15:00.000Z",
         },
       ],
     },
@@ -545,20 +563,20 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
         {
           id: ownTeamId,
           tournamentId,
-          name: 'Alpha',
-          organization: 'A School',
-          pitId: 'P-1',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          name: "Alpha",
+          organization: "A School",
+          pitId: "P-1",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
         {
           id: otherTeamId,
           tournamentId,
-          name: 'Beta',
-          organization: 'B School',
-          pitId: 'P-2',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          name: "Beta",
+          organization: "B School",
+          pitId: "P-2",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
       ],
     },
@@ -568,11 +586,11 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
         {
           id: secondTournamentTeamId,
           tournamentId: secondTournamentId,
-          name: 'Gamma',
-          organization: 'C School',
-          pitId: 'P-9',
-          createdAt: '2026-04-10T00:00:00.000Z',
-          updatedAt: '2026-04-10T00:00:00.000Z',
+          name: "Gamma",
+          organization: "C School",
+          pitId: "P-9",
+          createdAt: "2026-04-10T00:00:00.000Z",
+          updatedAt: "2026-04-10T00:00:00.000Z",
         },
       ],
     },
@@ -580,19 +598,19 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
       status: 200,
       body: [
         {
-          id: '00000000-0000-4000-8000-000000000101',
+          id: "00000000-0000-4000-8000-000000000101",
           tournamentId,
-          source: 'wild',
-          ssid: 'Venue WiFi',
-          bssid: '00:11:22:33:44:55',
-          band: '5GHz',
+          source: "wild",
+          ssid: "Venue WiFi",
+          bssid: "00:11:22:33:44:55",
+          band: "5GHz",
           channel: 40,
           channelWidthMHz: 20,
           rssi: -68,
-          locationLabel: 'North Hall',
-          observedAt: '2026-04-21T10:00:00.000Z',
-          createdAt: '2026-04-21T10:00:00.000Z',
-          updatedAt: '2026-04-21T10:00:00.000Z',
+          locationLabel: "North Hall",
+          observedAt: "2026-04-21T10:00:00.000Z",
+          createdAt: "2026-04-21T10:00:00.000Z",
+          updatedAt: "2026-04-21T10:00:00.000Z",
         },
       ],
     },
@@ -600,34 +618,34 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
       status: 200,
       body: [
         {
-          id: '00000000-0000-4000-8000-000000000102',
+          id: "00000000-0000-4000-8000-000000000102",
           tournamentId: secondTournamentId,
-          source: 'manual',
-          ssid: 'Sub Hall Analyzer',
-          bssid: '66:77:88:99:AA:BB',
-          band: '6GHz',
+          source: "manual",
+          ssid: "Sub Hall Analyzer",
+          bssid: "66:77:88:99:AA:BB",
+          band: "6GHz",
           channel: 37,
           channelWidthMHz: 80,
           rssi: -59,
-          locationLabel: 'West Hall',
-          observedAt: '2026-05-01T09:30:00.000Z',
-          createdAt: '2026-05-01T09:30:00.000Z',
-          updatedAt: '2026-05-01T09:30:00.000Z',
+          locationLabel: "West Hall",
+          observedAt: "2026-05-01T09:30:00.000Z",
+          createdAt: "2026-05-01T09:30:00.000Z",
+          updatedAt: "2026-05-01T09:30:00.000Z",
         },
         {
-          id: '00000000-0000-4000-8000-000000000103',
+          id: "00000000-0000-4000-8000-000000000103",
           tournamentId: secondTournamentId,
-          source: 'wild',
-          ssid: 'Guest WiFi',
-          bssid: 'CC:DD:EE:FF:00:11',
-          band: '5GHz',
+          source: "wild",
+          ssid: "Guest WiFi",
+          bssid: "CC:DD:EE:FF:00:11",
+          band: "5GHz",
           channel: 157,
           channelWidthMHz: 40,
           rssi: -71,
-          locationLabel: 'Entrance',
-          observedAt: '2026-05-01T10:10:00.000Z',
-          createdAt: '2026-05-01T10:10:00.000Z',
-          updatedAt: '2026-05-01T10:10:00.000Z',
+          locationLabel: "Entrance",
+          observedAt: "2026-05-01T10:10:00.000Z",
+          createdAt: "2026-05-01T10:10:00.000Z",
+          updatedAt: "2026-05-01T10:10:00.000Z",
         },
       ],
     },
@@ -635,15 +653,15 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
       status: 200,
       body: [
         {
-          id: '00000000-0000-4000-8000-000000000201',
+          id: "00000000-0000-4000-8000-000000000201",
           teamId: ownTeamId,
-          email: 'alpha-access@example.com',
-          issuedAt: '2026-04-20T09:00:00.000Z',
-          lastUsedAt: '2026-04-22T09:30:00.000Z',
+          email: "alpha-access@example.com",
+          issuedAt: "2026-04-20T09:00:00.000Z",
+          lastUsedAt: "2026-04-22T09:30:00.000Z",
           revokedAt: null,
-          role: 'editor',
-          createdAt: '2026-04-20T09:00:00.000Z',
-          updatedAt: '2026-04-22T09:30:00.000Z',
+          role: "editor",
+          createdAt: "2026-04-20T09:00:00.000Z",
+          updatedAt: "2026-04-22T09:30:00.000Z",
         },
       ],
     },
@@ -651,15 +669,15 @@ function createOperatorDashboardResponses(): Record<string, MockResponse> {
       status: 200,
       body: [
         {
-          id: '00000000-0000-4000-8000-000000000202',
+          id: "00000000-0000-4000-8000-000000000202",
           teamId: secondTournamentTeamId,
-          email: 'gamma-access@example.com',
-          issuedAt: '2026-05-01T08:00:00.000Z',
-          lastUsedAt: '2026-05-01T08:30:00.000Z',
+          email: "gamma-access@example.com",
+          issuedAt: "2026-05-01T08:00:00.000Z",
+          lastUsedAt: "2026-05-01T08:30:00.000Z",
           revokedAt: null,
-          role: 'viewer',
-          createdAt: '2026-05-01T08:00:00.000Z',
-          updatedAt: '2026-05-01T08:30:00.000Z',
+          role: "viewer",
+          createdAt: "2026-05-01T08:00:00.000Z",
+          updatedAt: "2026-05-01T08:30:00.000Z",
         },
       ],
     },
@@ -678,11 +696,11 @@ function createOtherTeamDetailResponses(): Record<string, MockResponse> {
       body: {
         id: ownTeamId,
         tournamentId,
-        name: 'Alpha',
-        organization: 'A School',
-        pitId: 'P-1',
-        createdAt: '2026-04-01T00:00:00.000Z',
-        updatedAt: '2026-04-01T00:00:00.000Z',
+        name: "Alpha",
+        organization: "A School",
+        pitId: "P-1",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
       },
     },
     [`/api/teams/${ownTeamId}/wifi-configs`]: {
@@ -691,18 +709,18 @@ function createOtherTeamDetailResponses(): Record<string, MockResponse> {
         {
           id: ownWifiId,
           teamId: ownTeamId,
-          name: 'Control 5G',
-          purpose: 'control',
-          band: '5GHz',
+          name: "Control 5G",
+          purpose: "control",
+          band: "5GHz",
           channel: 36,
           channelWidthMHz: 80,
-          role: 'primary',
-          status: 'active',
+          role: "primary",
+          status: "active",
           apDeviceId: ownApId,
           clientDeviceId: ownClientId,
-          expectedDistanceCategory: 'mid',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          expectedDistanceCategory: "mid",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
       ],
     },
@@ -712,13 +730,13 @@ function createOtherTeamDetailResponses(): Record<string, MockResponse> {
         {
           id: ownApId,
           teamId: ownTeamId,
-          vendor: 'Acme',
-          model: 'AP-9000',
-          kind: 'ap',
-          supportedBands: ['5GHz'],
-          knownIssues: 'DFS 切替で瞬断しやすい',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          vendor: "Acme",
+          model: "AP-9000",
+          kind: "ap",
+          supportedBands: ["5GHz"],
+          knownIssues: "DFS 切替で瞬断しやすい",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
       ],
     },
@@ -726,28 +744,28 @@ function createOtherTeamDetailResponses(): Record<string, MockResponse> {
       status: 200,
       body: [
         {
-          id: '00000000-0000-4000-8000-000000000071',
+          id: "00000000-0000-4000-8000-000000000071",
           tournamentId,
           teamId: ownTeamId,
           wifiConfigId: ownWifiId,
-          visibility: 'team_public',
-          band: '5GHz',
+          visibility: "team_public",
+          band: "5GHz",
           channel: 36,
           channelWidthMHz: 80,
-          symptom: 'unstable',
-          severity: 'medium',
+          symptom: "unstable",
+          severity: "medium",
           avgPingMs: 15,
           maxPingMs: 40,
           packetLossPercent: 1,
-          distanceCategory: 'mid',
+          distanceCategory: "mid",
           estimatedDistanceMeters: 8,
-          reproducibility: 'sometimes',
-          mitigationTried: ['change_channel'],
+          reproducibility: "sometimes",
+          mitigationTried: ["change_channel"],
           improved: false,
-          apDeviceModel: 'AP-9000',
-          clientDeviceModel: 'Client-1',
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
+          apDeviceModel: "AP-9000",
+          clientDeviceModel: "Client-1",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
         },
       ],
     },
@@ -757,17 +775,20 @@ function createOtherTeamDetailResponses(): Record<string, MockResponse> {
 function renderRoute(
   pathname: string,
   responses: Record<string, MockResponse>,
-  fetchImpl?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  fetchImpl?: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
 ) {
-  window.history.pushState({}, '', pathname);
+  window.history.pushState({}, "", pathname);
 
   vi.stubGlobal(
-    'fetch',
+    "fetch",
     vi.fn(
       fetchImpl ??
         (async (input: RequestInfo | URL) => {
           const url = String(input);
-          const path = url.replace('http://localhost:3000', '');
+          const path = url.replace("http://localhost:3000", "");
           const matched = responses[path];
 
           if (!matched) {
@@ -784,9 +805,9 @@ function renderRoute(
   render(<AppProviders queryClient={queryClient} router={router} />);
 }
 
-describe('team management routes', () => {
+describe("team management routes", () => {
   beforeEach(() => {
-    window.history.replaceState({}, '', '/');
+    window.history.replaceState({}, "", "/");
   });
 
   afterEach(async () => {
@@ -796,7 +817,7 @@ describe('team management routes', () => {
     vi.unstubAllEnvs();
   });
 
-  it('公開大会トップからチーム一覧へ遷移できる', async () => {
+  it("公開大会トップからチーム一覧へ遷移できる", async () => {
     renderRoute(`/tournaments/${tournamentId}`, {
       ...createBaseResponses(null),
       [`/api/tournaments/${tournamentId}/best-practices`]: {
@@ -805,275 +826,339 @@ describe('team management routes', () => {
       },
     });
 
-    expect(await screen.findByText('Spring Cup')).toBeInTheDocument();
+    expect(await screen.findByText("Spring Cup")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('link', { name: 'チーム一覧を見る' }));
+    fireEvent.click(screen.getByRole("link", { name: "チーム一覧を見る" }));
 
-    expect(await screen.findByText('Spring Cup チーム一覧')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: '詳細はログイン後' })).toHaveLength(2);
+    expect(
+      await screen.findByText("Spring Cup チーム一覧"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "詳細はログイン後" }),
+    ).toHaveLength(2);
   });
 
-  it('ホームの大会カードからチャンネルマップへ進むと未認証では login に遷移する', async () => {
-    renderRoute('/', createBaseResponses(null));
+  it("ホームの大会カードからチャンネルマップへ進むと未認証では login に遷移する", async () => {
+    renderRoute("/", createBaseResponses(null));
 
-    expect(await screen.findByText('公開中の大会')).toBeInTheDocument();
-    expect(await screen.findByText('Spring Cup')).toBeInTheDocument();
+    expect(await screen.findByText("公開中の大会")).toBeInTheDocument();
+    expect(await screen.findByText("Spring Cup")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('link', { name: 'チャンネルマップ' }));
+    fireEvent.click(screen.getByRole("link", { name: "チャンネルマップ" }));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "運営ログイン" }),
+      ).toBeInTheDocument();
     });
 
-    expect(window.location.pathname).toBe('/login');
+    expect(window.location.pathname).toBe("/login");
     expect(window.location.search).toBe(
       `?next=${encodeURIComponent(`/tournaments/${tournamentId}/channel-map`)}`,
     );
   });
 
-  it('参加者は大会トップからチャンネルマップへ遷移し、詳細導線を実態どおりに表示する', async () => {
+  it("参加者は大会トップからチャンネルマップへ遷移し、詳細導線を実態どおりに表示する", async () => {
     renderRoute(`/tournaments/${tournamentId}`, {
       ...createBaseResponses(ownTeamSession),
       [`/api/tournaments/${tournamentId}/best-practices`]: {
         status: 200,
         body: [
           {
-            id: '00000000-0000-4000-8000-000000000052',
+            id: "00000000-0000-4000-8000-000000000052",
             tournamentId,
-            title: 'Band practice',
-            body: '5GHz は DFS を避ける',
-            scope: 'band',
-            targetBand: '5GHz',
+            title: "Band practice",
+            body: "5GHz は DFS を避ける",
+            scope: "band",
+            targetBand: "5GHz",
             targetModel: null,
-            createdAt: '2026-04-01T00:00:00.000Z',
-            updatedAt: '2026-04-01T00:00:00.000Z',
+            createdAt: "2026-04-01T00:00:00.000Z",
+            updatedAt: "2026-04-01T00:00:00.000Z",
           },
         ],
       },
     });
 
-    expect(await screen.findByText('Spring Cup')).toBeInTheDocument();
+    expect(await screen.findByText("Spring Cup")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('link', { name: 'チャンネルマップを見る' }));
+    fireEvent.click(
+      screen.getByRole("link", { name: "チャンネルマップを見る" }),
+    );
 
     expect(
-      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText('自チーム').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('参加チーム').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('観測 WiFi').length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByRole('radio', { name: '5GHz' }));
-    fireEvent.click(screen.getByLabelText('Control 5G bar'));
-
-    expect(await screen.findByText('問題報告が集中しています')).toBeInTheDocument();
-    expect(screen.getByText('AP 型番: AP-9000')).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', {
-        name: '参考ベストプラクティスへ移動',
+      await screen.findByRole("heading", {
+        name: "Spring Cup チャンネルマップ",
       }),
-    ).toHaveAttribute('href', '#channel-map-best-practices');
-    expect(screen.getByRole('link', { name: 'このチームの詳細を見る' })).toHaveAttribute(
-      'href',
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("自チーム").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("参加チーム").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("観測 WiFi").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("radio", { name: "5GHz" }));
+    fireEvent.click(screen.getByLabelText("Control 5G bar"));
+
+    expect(
+      await screen.findByText("問題報告が集中しています"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("AP 型番: AP-9000")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "参考ベストプラクティスへ移動",
+      }),
+    ).toHaveAttribute("href", "#channel-map-best-practices");
+    expect(
+      screen.getByRole("link", { name: "このチームの詳細を見る" }),
+    ).toHaveAttribute(
+      "href",
       `/tournaments/${tournamentId}/teams/${ownTeamId}`,
     );
 
-    fireEvent.click(screen.getByLabelText('Venue WiFi bar'));
-
-    expect(await screen.findByText('BSSID: 00:11:22:33:44:55')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'チーム一覧から報告先を探す' })).toHaveAttribute(
-      'href',
-      `/tournaments/${tournamentId}/teams`,
-    );
-    expect(screen.queryByText(/contactEmail|displayContactName|notes/i)).not.toBeInTheDocument();
-  });
-
-  it('自チームのチャンネルマップ詳細から報告作成画面へ直接遷移できる', async () => {
-    renderRoute(`/tournaments/${tournamentId}/channel-map`, createOwnTeamDetailResponses());
+    fireEvent.click(screen.getByLabelText("Venue WiFi bar"));
 
     expect(
-      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+      await screen.findByText("BSSID: 00:11:22:33:44:55"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "チーム一覧から報告先を探す" }),
+    ).toHaveAttribute("href", `/tournaments/${tournamentId}/teams`);
+    expect(
+      screen.queryByText(/contactEmail|displayContactName|notes/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("自チームのチャンネルマップ詳細から報告作成画面へ直接遷移できる", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/channel-map`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Spring Cup チャンネルマップ",
+      }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('radio', { name: '5GHz' }));
-    fireEvent.click(screen.getByLabelText('Control 5G bar'));
-    fireEvent.click(screen.getByRole('link', { name: 'この構成で報告を作成する' }));
+    fireEvent.click(screen.getByRole("radio", { name: "5GHz" }));
+    fireEvent.click(screen.getByLabelText("Control 5G bar"));
+    fireEvent.click(
+      screen.getByRole("link", { name: "この構成で報告を作成する" }),
+    );
 
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
-    expect(screen.getByLabelText('構成名')).toHaveValue('Control 5G');
-    expect(screen.getByLabelText('帯域')).toHaveValue('5GHz');
-    expect(screen.getByLabelText('チャンネル')).toHaveValue('36');
-    expect(screen.getByLabelText('帯域幅 (MHz)')).toHaveValue('80');
-    expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/issue-reports/new`);
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告を作成" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("構成名")).toHaveValue("Control 5G");
+    expect(screen.getByLabelText("帯域")).toHaveValue("5GHz");
+    expect(screen.getByLabelText("チャンネル")).toHaveValue("36");
+    expect(screen.getByLabelText("帯域幅 (MHz)")).toHaveValue("80");
+    expect(window.location.pathname).toBe(
+      `/tournaments/${tournamentId}/issue-reports/new`,
+    );
     expect(window.location.search).toBe(`?wifiConfigId=${ownWifiId}`);
   });
 
-  it('チャンネルマップの band/filter state を URL search params と同期して復元する', async () => {
+  it("チャンネルマップの band/filter state を URL search params と同期して復元する", async () => {
     renderRoute(
       `/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`,
       createOwnTeamDetailResponses(),
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+      await screen.findByRole("heading", {
+        name: "Spring Cup チャンネルマップ",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
-    expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
-    expect(screen.getByLabelText('Control 5G bar')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Backup 5G bar')).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "5GHz" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "制御用途のみ" }),
+    ).toBeChecked();
+    expect(screen.getByLabelText("型番フィルタ")).toHaveValue("AP-9000");
+    expect(screen.getByLabelText("Control 5G bar")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Backup 5G bar")).not.toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('radio', { name: '6GHz' }));
-      fireEvent.click(screen.getByRole('checkbox', { name: '問題報告ありのみ' }));
+      fireEvent.click(screen.getByRole("radio", { name: "6GHz" }));
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: "問題報告ありのみ" }),
+      );
     });
 
     await waitFor(() => {
       const searchParams = new URLSearchParams(window.location.search);
-      expect(searchParams.get('band')).toBe('6GHz');
-      expect(searchParams.get('controlOnly')).toBe('1');
-      expect(searchParams.get('reportOnly')).toBe('1');
-      expect(searchParams.get('model')).toBe('AP-9000');
+      expect(searchParams.get("band")).toBe("6GHz");
+      expect(searchParams.get("controlOnly")).toBe("1");
+      expect(searchParams.get("reportOnly")).toBe("1");
+      expect(searchParams.get("model")).toBe("AP-9000");
     });
 
     await act(async () => {
       window.history.replaceState(
         {},
-        '',
+        "",
         `/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`,
       );
-      window.dispatchEvent(new PopStateEvent('popstate'));
+      window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
-      expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
-      expect(screen.getByRole('checkbox', { name: '問題報告ありのみ' })).not.toBeChecked();
-      expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
-      expect(screen.getByLabelText('Control 5G bar')).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "5GHz" })).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "制御用途のみ" }),
+      ).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "問題報告ありのみ" }),
+      ).not.toBeChecked();
+      expect(screen.getByLabelText("型番フィルタ")).toHaveValue("AP-9000");
+      expect(screen.getByLabelText("Control 5G bar")).toBeInTheDocument();
     });
   });
 
-  it('チャンネルマップは source と width を含む複数フィルタを URL から復元する', async () => {
+  it("チャンネルマップは source と width を含む複数フィルタを URL から復元する", async () => {
     renderRoute(
       `/tournaments/${tournamentId}/channel-map?band=5GHz&source=observed_wifi&width=20`,
       createOwnTeamDetailResponses(),
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+      await screen.findByRole("heading", {
+        name: "Spring Cup チャンネルマップ",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
-    expect(screen.getByLabelText('Venue WiFi bar')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Control 5G bar')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Backup 5G bar')).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "5GHz" })).toBeChecked();
+    expect(screen.getByLabelText("Venue WiFi bar")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Control 5G bar")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Backup 5G bar")).not.toBeInTheDocument();
 
     await waitFor(() => {
       const searchParams = new URLSearchParams(window.location.search);
-      expect(searchParams.get('band')).toBe('5GHz');
-      expect(searchParams.getAll('source')).toEqual(['observed_wifi']);
-      expect(searchParams.getAll('width')).toEqual(['20']);
+      expect(searchParams.get("band")).toBe("5GHz");
+      expect(searchParams.getAll("source")).toEqual(["observed_wifi"]);
+      expect(searchParams.getAll("width")).toEqual(["20"]);
     });
   });
 
-  it('チャンネルマップは source 全解除状態を URL search params と往復復元する', async () => {
+  it("チャンネルマップは source 全解除状態を URL search params と往復復元する", async () => {
     renderRoute(
       `/tournaments/${tournamentId}/channel-map?band=5GHz&sourceState=none`,
       createOwnTeamDetailResponses(),
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
+      await screen.findByRole("heading", {
+        name: "Spring Cup チャンネルマップ",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '自チーム' })).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '参加チーム' })).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '観測 WiFi' })).not.toBeChecked();
-    expect(screen.queryByLabelText('Venue WiFi bar')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Control 5G bar')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Backup 5G bar')).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "5GHz" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "自チーム" }),
+    ).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "参加チーム" }),
+    ).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "観測 WiFi" }),
+    ).not.toBeChecked();
+    expect(screen.queryByLabelText("Venue WiFi bar")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Control 5G bar")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Backup 5G bar")).not.toBeInTheDocument();
 
     await waitFor(() => {
       const searchParams = new URLSearchParams(window.location.search);
-      expect(searchParams.get('band')).toBe('5GHz');
-      expect(searchParams.get('sourceState')).toBe('none');
-      expect(searchParams.getAll('source')).toEqual([]);
+      expect(searchParams.get("band")).toBe("5GHz");
+      expect(searchParams.get("sourceState")).toBe("none");
+      expect(searchParams.getAll("source")).toEqual([]);
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('checkbox', { name: '自チーム' }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "自チーム" }));
     });
 
     await waitFor(() => {
       const searchParams = new URLSearchParams(window.location.search);
-      expect(searchParams.get('sourceState')).toBeNull();
-      expect(searchParams.getAll('source')).toEqual(['own_team']);
-      expect(screen.getByLabelText('Control 5G bar')).toBeInTheDocument();
+      expect(searchParams.get("sourceState")).toBeNull();
+      expect(searchParams.getAll("source")).toEqual(["own_team"]);
+      expect(screen.getByLabelText("Control 5G bar")).toBeInTheDocument();
     });
 
     await act(async () => {
       window.history.replaceState(
         {},
-        '',
+        "",
         `/tournaments/${tournamentId}/channel-map?band=5GHz&sourceState=none`,
       );
-      window.dispatchEvent(new PopStateEvent('popstate'));
+      window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('checkbox', { name: '自チーム' })).not.toBeChecked();
-      expect(screen.getByRole('checkbox', { name: '参加チーム' })).not.toBeChecked();
-      expect(screen.getByRole('checkbox', { name: '観測 WiFi' })).not.toBeChecked();
-      expect(screen.queryByLabelText('Control 5G bar')).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("checkbox", { name: "自チーム" }),
+      ).not.toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "参加チーム" }),
+      ).not.toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "観測 WiFi" }),
+      ).not.toBeChecked();
+      expect(screen.queryByLabelText("Control 5G bar")).not.toBeInTheDocument();
     });
   });
 
-  it('報告作成 route はクエリの wifiConfigId から既存構成を初期選択する', async () => {
+  it("報告作成 route はクエリの wifiConfigId から既存構成を初期選択する", async () => {
     renderRoute(
       `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
       createOwnTeamDetailResponses(),
     );
 
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
-    expect(screen.getByLabelText('チーム')).toHaveValue('Alpha');
-    expect(screen.getByLabelText('構成名')).toHaveValue('Control 5G');
-    expect(screen.getByLabelText('帯域')).toHaveValue('5GHz');
-    expect(screen.getByLabelText('チャンネル')).toHaveValue('36');
-    expect(screen.getByLabelText('帯域幅 (MHz)')).toHaveValue('80');
-    expect(screen.getByRole('button', { name: '詳細モードを開く' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告を作成" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("チーム")).toHaveValue("Alpha");
+    expect(screen.getByLabelText("構成名")).toHaveValue("Control 5G");
+    expect(screen.getByLabelText("帯域")).toHaveValue("5GHz");
+    expect(screen.getByLabelText("チャンネル")).toHaveValue("36");
+    expect(screen.getByLabelText("帯域幅 (MHz)")).toHaveValue("80");
+    expect(
+      screen.getByRole("button", { name: "詳細モードを開く" }),
+    ).toBeInTheDocument();
   });
 
-  it('報告作成画面は簡易モードから詳細モードを展開できる', async () => {
+  it("報告作成画面は簡易モードから詳細モードを展開できる", async () => {
     renderRoute(
       `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
       createOwnTeamDetailResponses(),
     );
 
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '詳細モードを開く' })).toBeInTheDocument();
-    expect(screen.getByLabelText('平均 Ping (ms)')).toBeInTheDocument();
-    expect(screen.getByLabelText('パケットロス率 (%)')).toBeInTheDocument();
-    expect(screen.getByLabelText('公開範囲')).toHaveValue('team_private');
-    expect(screen.getByLabelText('距離カテゴリ')).toBeInTheDocument();
-    expect(screen.getByLabelText('一言メモ')).toBeInTheDocument();
-    expect(screen.queryByLabelText('再現性')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('最大 Ping (ms)')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('観測位置')).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告を作成" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "詳細モードを開く" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("平均 Ping (ms)")).toBeInTheDocument();
+    expect(screen.getByLabelText("パケットロス率 (%)")).toBeInTheDocument();
+    expect(screen.getByLabelText("公開範囲")).toHaveValue("team_private");
+    expect(screen.getByLabelText("距離カテゴリ")).toBeInTheDocument();
+    expect(screen.getByLabelText("一言メモ")).toBeInTheDocument();
+    expect(screen.queryByLabelText("再現性")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("最大 Ping (ms)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("観測位置")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '詳細モードを開く' }));
+    fireEvent.click(screen.getByRole("button", { name: "詳細モードを開く" }));
 
-    expect(await screen.findByLabelText('平均 Ping (ms)')).toBeInTheDocument();
-    expect(screen.getByLabelText('最大 Ping (ms)')).toBeInTheDocument();
-    expect(screen.getByLabelText('推定距離[m]')).toBeInTheDocument();
-    expect(screen.getByLabelText('再現性')).toBeInTheDocument();
-    expect(screen.getByLabelText('観測位置')).toBeInTheDocument();
-    expect(screen.getByText('対処内容')).toBeInTheDocument();
-    expect(screen.getByLabelText('改善有無')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '添付を追加' })).toBeInTheDocument();
-    expect(screen.getByLabelText('自由記述')).toBeInTheDocument();
+    expect(await screen.findByLabelText("平均 Ping (ms)")).toBeInTheDocument();
+    expect(screen.getByLabelText("最大 Ping (ms)")).toBeInTheDocument();
+    expect(screen.getByLabelText("推定距離[m]")).toBeInTheDocument();
+    expect(screen.getByLabelText("再現性")).toBeInTheDocument();
+    expect(screen.getByLabelText("観測位置")).toBeInTheDocument();
+    expect(screen.getByText("対処内容")).toBeInTheDocument();
+    expect(screen.getByLabelText("改善有無")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "添付を追加" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("自由記述")).toBeInTheDocument();
   });
 
-  it('簡易モードでは必須項目だけで短時間入力保存できる', async () => {
+  it("簡易モードでは必須項目だけで短時間入力保存できる", async () => {
     const ownResponses = createOwnTeamDetailResponses();
     const issueReportsResponse = getRequiredResponse(
       ownResponses,
@@ -1081,17 +1166,17 @@ describe('team management routes', () => {
     );
     let capturedBody: unknown;
     const createIssueReport = vi.fn(async () => ({
-      id: '00000000-0000-4000-8000-000000000081',
+      id: "00000000-0000-4000-8000-000000000081",
       tournamentId,
       teamId: ownTeamId,
       wifiConfigId: ownWifiId,
       reporterName: null,
-      visibility: 'team_private',
-      band: '5GHz',
+      visibility: "team_private",
+      band: "5GHz",
       channel: 36,
       channelWidthMHz: 80,
-      symptom: 'high_latency',
-      severity: 'high',
+      symptom: "high_latency",
+      severity: "high",
       avgPingMs: null,
       maxPingMs: null,
       packetLossPercent: null,
@@ -1102,50 +1187,74 @@ describe('team management routes', () => {
       description: null,
       mitigationTried: null,
       improved: null,
-      apDeviceModel: 'AP-9000',
-      clientDeviceModel: 'Client-1',
-      createdAt: '2026-04-22T12:00:00.000Z',
-      updatedAt: '2026-04-22T12:00:00.000Z',
+      apDeviceModel: "AP-9000",
+      clientDeviceModel: "Client-1",
+      createdAt: "2026-04-22T12:00:00.000Z",
+      updatedAt: "2026-04-22T12:00:00.000Z",
     }));
 
-    renderRoute(`/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`, {
-      ...ownResponses,
-      [`/api/tournaments/${tournamentId}/issue-reports`]: {
-        status: 200,
-        body: issueReportsResponse.body,
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+      {
+        ...ownResponses,
+        [`/api/tournaments/${tournamentId}/issue-reports`]: {
+          status: 200,
+          body: issueReportsResponse.body,
+        },
       },
-    });
+    );
 
     const fetchMock = vi.mocked(fetch);
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace("http://localhost:3000", "");
 
-      if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
-        capturedBody = JSON.parse(String(init.body));
-        return jsonResponse(await createIssueReport(), 201);
-      }
+        if (
+          path === `/api/tournaments/${tournamentId}/issue-reports` &&
+          init?.method === "POST"
+        ) {
+          capturedBody = JSON.parse(String(init.body));
+          return jsonResponse(await createIssueReport(), 201);
+        }
 
-      const matched = ownResponses[path];
+        const matched = ownResponses[path];
 
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
 
-      return jsonResponse(matched.body, matched.status);
-    });
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
 
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告を作成" }),
+    ).toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
-      fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
-      fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '42' } });
-      fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '3' } });
-      fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: 'mid' } });
-      fireEvent.change(screen.getByLabelText('公開範囲'), { target: { value: 'team_public' } });
-      fireEvent.change(screen.getByLabelText('一言メモ'), { target: { value: 'quick note' } });
-      fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+      fireEvent.change(screen.getByLabelText("症状"), {
+        target: { value: "high_latency" },
+      });
+      fireEvent.change(screen.getByLabelText("深刻度"), {
+        target: { value: "high" },
+      });
+      fireEvent.change(screen.getByLabelText("平均 Ping (ms)"), {
+        target: { value: "42" },
+      });
+      fireEvent.change(screen.getByLabelText("パケットロス率 (%)"), {
+        target: { value: "3" },
+      });
+      fireEvent.change(screen.getByLabelText("距離カテゴリ"), {
+        target: { value: "mid" },
+      });
+      fireEvent.change(screen.getByLabelText("公開範囲"), {
+        target: { value: "team_public" },
+      });
+      fireEvent.change(screen.getByLabelText("一言メモ"), {
+        target: { value: "quick note" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "報告を保存" }));
     });
 
     await waitFor(() => {
@@ -1154,18 +1263,20 @@ describe('team management routes', () => {
 
     expect(capturedBody).toMatchObject({
       wifiConfigId: ownWifiId,
-      visibility: 'team_public',
-      symptom: 'high_latency',
-      severity: 'high',
+      visibility: "team_public",
+      symptom: "high_latency",
+      severity: "high",
       avgPingMs: 42,
       packetLossPercent: 3,
-      distanceCategory: 'mid',
-      description: 'quick note',
+      distanceCategory: "mid",
+      description: "quick note",
     });
-    expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/teams/${ownTeamId}`);
+    expect(window.location.pathname).toBe(
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+    );
   });
 
-  it('詳細モードでは追加項目を入力して保存できる', async () => {
+  it("詳細モードでは追加項目を入力して保存できる", async () => {
     const ownResponses = createOwnTeamDetailResponses();
     const issueReportsResponse = getRequiredResponse(
       ownResponses,
@@ -1173,103 +1284,138 @@ describe('team management routes', () => {
     );
     let capturedBody: Record<string, unknown> | undefined;
 
-    renderRoute(`/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`, {
-      ...ownResponses,
-      [`/api/tournaments/${tournamentId}/issue-reports`]: {
-        status: 200,
-        body: issueReportsResponse.body,
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+      {
+        ...ownResponses,
+        [`/api/tournaments/${tournamentId}/issue-reports`]: {
+          status: 200,
+          body: issueReportsResponse.body,
+        },
       },
-    });
+    );
 
     const fetchMock = vi.mocked(fetch);
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace("http://localhost:3000", "");
 
-      if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
-        capturedBody = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return jsonResponse(
-          {
-            id: '00000000-0000-4000-8000-000000000082',
-            tournamentId,
-            teamId: ownTeamId,
-            wifiConfigId: ownWifiId,
-            reporterName: 'Driver A',
-            visibility: 'team_private',
-            band: '5GHz',
-            channel: 36,
-            channelWidthMHz: 80,
-            symptom: 'unstable',
-            severity: 'critical',
-            avgPingMs: 42,
-            maxPingMs: 90,
-            packetLossPercent: 12,
-            distanceCategory: 'far',
-            estimatedDistanceMeters: 24,
-            locationLabel: 'North pit',
-            reproducibility: 'always',
-            description: 'long form note',
-            mitigationTried: ['change_channel', 'move_position'],
-            improved: false,
-            attachments: [
-              {
-                name: 'speedtest.png',
-                url: 'https://example.com/speedtest.png',
-                mimeType: 'image/png',
-                sizeBytes: 4096,
-              },
-            ],
-            apDeviceModel: 'AP-9000',
-            clientDeviceModel: 'Client-1',
-            createdAt: '2026-04-22T12:00:00.000Z',
-            updatedAt: '2026-04-22T12:00:00.000Z',
-          },
-          201,
-        );
-      }
+        if (
+          path === `/api/tournaments/${tournamentId}/issue-reports` &&
+          init?.method === "POST"
+        ) {
+          capturedBody = JSON.parse(String(init.body)) as Record<
+            string,
+            unknown
+          >;
+          return jsonResponse(
+            {
+              id: "00000000-0000-4000-8000-000000000082",
+              tournamentId,
+              teamId: ownTeamId,
+              wifiConfigId: ownWifiId,
+              reporterName: "Driver A",
+              visibility: "team_private",
+              band: "5GHz",
+              channel: 36,
+              channelWidthMHz: 80,
+              symptom: "unstable",
+              severity: "critical",
+              avgPingMs: 42,
+              maxPingMs: 90,
+              packetLossPercent: 12,
+              distanceCategory: "far",
+              estimatedDistanceMeters: 24,
+              locationLabel: "North pit",
+              reproducibility: "always",
+              description: "long form note",
+              mitigationTried: ["change_channel", "move_position"],
+              improved: false,
+              attachments: [
+                {
+                  name: "speedtest.png",
+                  url: "https://example.com/speedtest.png",
+                  mimeType: "image/png",
+                  sizeBytes: 4096,
+                },
+              ],
+              apDeviceModel: "AP-9000",
+              clientDeviceModel: "Client-1",
+              createdAt: "2026-04-22T12:00:00.000Z",
+              updatedAt: "2026-04-22T12:00:00.000Z",
+            },
+            201,
+          );
+        }
 
-      const matched = ownResponses[path];
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
+        const matched = ownResponses[path];
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
 
-      return jsonResponse(matched.body, matched.status);
-    });
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
 
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'unstable' } });
-      fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'critical' } });
-      fireEvent.click(screen.getByRole('button', { name: '詳細モードを開く' }));
-      fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '42' } });
-      fireEvent.change(screen.getByLabelText('最大 Ping (ms)'), { target: { value: '90' } });
-      fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '12' } });
-      fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: 'far' } });
-      fireEvent.change(screen.getByLabelText('推定距離[m]'), { target: { value: '24' } });
-      fireEvent.change(screen.getByLabelText('再現性'), { target: { value: 'always' } });
-      fireEvent.change(screen.getByLabelText('改善有無'), { target: { value: 'false' } });
-      fireEvent.change(screen.getByLabelText('観測位置'), { target: { value: 'North pit' } });
-      fireEvent.click(screen.getByRole('checkbox', { name: 'change_channel' }));
-      fireEvent.click(screen.getByRole('checkbox', { name: 'move_position' }));
-      fireEvent.click(screen.getByRole('button', { name: '添付を追加' }));
-    });
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告を作成" }),
+    ).toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText('添付ファイル名 1'), {
-        target: { value: 'speedtest.png' },
+      fireEvent.change(screen.getByLabelText("症状"), {
+        target: { value: "unstable" },
       });
-      fireEvent.change(screen.getByLabelText('参照 URL 1'), {
-        target: { value: 'https://example.com/speedtest.png' },
+      fireEvent.change(screen.getByLabelText("深刻度"), {
+        target: { value: "critical" },
       });
-      fireEvent.change(screen.getByLabelText('MIME type 1'), {
-        target: { value: 'image/png' },
+      fireEvent.click(screen.getByRole("button", { name: "詳細モードを開く" }));
+      fireEvent.change(screen.getByLabelText("平均 Ping (ms)"), {
+        target: { value: "42" },
       });
-      fireEvent.change(screen.getByLabelText('サイズ (bytes) 1'), {
-        target: { value: '4096' },
+      fireEvent.change(screen.getByLabelText("最大 Ping (ms)"), {
+        target: { value: "90" },
       });
-      fireEvent.change(screen.getByLabelText('自由記述'), { target: { value: 'long form note' } });
-      fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+      fireEvent.change(screen.getByLabelText("パケットロス率 (%)"), {
+        target: { value: "12" },
+      });
+      fireEvent.change(screen.getByLabelText("距離カテゴリ"), {
+        target: { value: "far" },
+      });
+      fireEvent.change(screen.getByLabelText("推定距離[m]"), {
+        target: { value: "24" },
+      });
+      fireEvent.change(screen.getByLabelText("再現性"), {
+        target: { value: "always" },
+      });
+      fireEvent.change(screen.getByLabelText("改善有無"), {
+        target: { value: "false" },
+      });
+      fireEvent.change(screen.getByLabelText("観測位置"), {
+        target: { value: "North pit" },
+      });
+      fireEvent.click(screen.getByRole("checkbox", { name: "change_channel" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "move_position" }));
+      fireEvent.click(screen.getByRole("button", { name: "添付を追加" }));
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("添付ファイル名 1"), {
+        target: { value: "speedtest.png" },
+      });
+      fireEvent.change(screen.getByLabelText("参照 URL 1"), {
+        target: { value: "https://example.com/speedtest.png" },
+      });
+      fireEvent.change(screen.getByLabelText("MIME type 1"), {
+        target: { value: "image/png" },
+      });
+      fireEvent.change(screen.getByLabelText("サイズ (bytes) 1"), {
+        target: { value: "4096" },
+      });
+      fireEvent.change(screen.getByLabelText("自由記述"), {
+        target: { value: "long form note" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "報告を保存" }));
     });
 
     await waitFor(() => {
@@ -1277,18 +1423,18 @@ describe('team management routes', () => {
         avgPingMs: 42,
         maxPingMs: 90,
         packetLossPercent: 12,
-        distanceCategory: 'far',
+        distanceCategory: "far",
         estimatedDistanceMeters: 24,
-        reproducibility: 'always',
-        locationLabel: 'North pit',
-        mitigationTried: ['change_channel', 'move_position'],
+        reproducibility: "always",
+        locationLabel: "North pit",
+        mitigationTried: ["change_channel", "move_position"],
         improved: false,
-        description: 'long form note',
+        description: "long form note",
         attachments: [
           {
-            name: 'speedtest.png',
-            url: 'https://example.com/speedtest.png',
-            mimeType: 'image/png',
+            name: "speedtest.png",
+            url: "https://example.com/speedtest.png",
+            mimeType: "image/png",
             sizeBytes: 4096,
           },
         ],
@@ -1296,22 +1442,159 @@ describe('team management routes', () => {
     });
   });
 
-  it.each([
-    400, 401, 403, 409, 422,
-  ])('不具合報告フォームは API %s 応答でも画面を維持してエラーを表示する', async (status) => {
+  it.each([400, 401, 403, 409, 422])(
+    "不具合報告フォームは API %s 応答でも画面を維持してエラーを表示する",
+    async (status) => {
+      const ownResponses = createOwnTeamDetailResponses();
+
+      renderRoute(
+        `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+        ownResponses,
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const path = url.replace("http://localhost:3000", "");
+
+          if (
+            path === `/api/tournaments/${tournamentId}/issue-reports` &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse(
+              { error: { code: "API_ERROR", message: `status ${status}` } },
+              status,
+            );
+          }
+
+          const matched = ownResponses[path];
+
+          if (!matched) {
+            throw new Error(`Unhandled fetch: ${path}`);
+          }
+
+          return jsonResponse(matched.body, matched.status);
+        },
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: "不具合報告を作成" }),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.change(screen.getByLabelText("症状"), {
+          target: { value: "high_latency" },
+        });
+        fireEvent.change(screen.getByLabelText("深刻度"), {
+          target: { value: "high" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "報告を保存" }));
+      });
+
+      expect(await screen.findByText("API request failed")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "不具合報告を作成" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("オフライン保存すると syncRecords に pending が残る", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+      createOwnTeamDetailResponses(),
+    );
+
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const path = url.replace("http://localhost:3000", "");
+
+      if (path === `/api/tournaments/${tournamentId}/issue-reports`) {
+        throw new TypeError("Failed to fetch");
+      }
+
+      const matched = createOwnTeamDetailResponses()[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告を作成" }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("症状"), {
+      target: { value: "high_latency" },
+    });
+    fireEvent.change(screen.getByLabelText("深刻度"), {
+      target: { value: "high" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "オフライン保存" }));
+
+    expect(
+      (await screen.findAllByText("オフライン保存しました")).length,
+    ).toBeGreaterThan(0);
+
+    await waitFor(async () => {
+      const records = await appDb.syncRecords.toArray();
+      expect(records).toHaveLength(1);
+      expect(records[0]?.status).toBe("pending");
+      expect(records[0]?.entityType).toBe("issue-report");
+    });
+  });
+
+  it("作成画面の必須欠落は field error として表示し submit error は出さない", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告を作成" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "報告を保存" }));
+
+    expect(
+      await screen.findByText("症状を選択してください"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("深刻度を選択してください"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("報告の保存に失敗しました"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("作成画面の API 失敗は submit error として表示する", async () => {
     const ownResponses = createOwnTeamDetailResponses();
 
     renderRoute(
       `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
-      ownResponses,
+      {
+        ...ownResponses,
+        [`/api/tournaments/${tournamentId}/issue-reports`]: {
+          status: 200,
+          body: getRequiredResponse(
+            ownResponses,
+            `/api/tournaments/${tournamentId}/issue-reports`,
+          ).body,
+        },
+      },
+    );
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
-        const path = url.replace('http://localhost:3000', '');
+        const path = url.replace("http://localhost:3000", "");
 
-        if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+        if (
+          path === `/api/tournaments/${tournamentId}/issue-reports` &&
+          init?.method === "POST"
+        ) {
           return jsonResponse(
-            { error: { code: 'API_ERROR', message: `status ${status}` } },
-            status,
+            { error: { code: "BAD_REQUEST", message: "server submit failed" } },
+            400,
           );
         }
 
@@ -1325,364 +1608,344 @@ describe('team management routes', () => {
       },
     );
 
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告を作成" }),
+    ).toBeInTheDocument();
 
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
-      fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
-      fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+    fireEvent.change(screen.getByLabelText("症状"), {
+      target: { value: "high_latency" },
     });
+    fireEvent.change(screen.getByLabelText("深刻度"), {
+      target: { value: "high" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "報告を保存" }));
 
-    expect(await screen.findByText('API request failed')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    expect(await screen.findByText("server submit failed")).toBeInTheDocument();
+    expect(
+      screen.queryByText("症状を選択してください"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("深刻度を選択してください"),
+    ).not.toBeInTheDocument();
   });
 
-  it('オフライン保存すると syncRecords に pending が残る', async () => {
-    renderRoute(
-      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
-      createOwnTeamDetailResponses(),
-    );
-
-    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
-
-      if (path === `/api/tournaments/${tournamentId}/issue-reports`) {
-        throw new TypeError('Failed to fetch');
-      }
-
-      const matched = createOwnTeamDetailResponses()[path];
-
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
-
-      return jsonResponse(matched.body, matched.status);
-    });
-
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
-    fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
-    fireEvent.click(screen.getByRole('button', { name: 'オフライン保存' }));
-
-    expect((await screen.findAllByText('オフライン保存しました')).length).toBeGreaterThan(0);
-
-    await waitFor(async () => {
-      const records = await appDb.syncRecords.toArray();
-      expect(records).toHaveLength(1);
-      expect(records[0]?.status).toBe('pending');
-      expect(records[0]?.entityType).toBe('issue-report');
-    });
-  });
-
-  it('作成画面の必須欠落は field error として表示し submit error は出さない', async () => {
-    renderRoute(
-      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
-      createOwnTeamDetailResponses(),
-    );
-
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
-
-    expect(await screen.findByText('症状を選択してください')).toBeInTheDocument();
-    expect(await screen.findByText('深刻度を選択してください')).toBeInTheDocument();
-    expect(screen.queryByText('報告の保存に失敗しました')).not.toBeInTheDocument();
-  });
-
-  it('作成画面の API 失敗は submit error として表示する', async () => {
-    const ownResponses = createOwnTeamDetailResponses();
-
-    renderRoute(`/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`, {
-      ...ownResponses,
-      [`/api/tournaments/${tournamentId}/issue-reports`]: {
-        status: 200,
-        body: getRequiredResponse(ownResponses, `/api/tournaments/${tournamentId}/issue-reports`)
-          .body,
-      },
-    });
-
-    const fetchMock = vi.mocked(fetch);
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
-
-      if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
-        return jsonResponse(
-          { error: { code: 'BAD_REQUEST', message: 'server submit failed' } },
-          400,
-        );
-      }
-
-      const matched = ownResponses[path];
-
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
-
-      return jsonResponse(matched.body, matched.status);
-    });
-
-    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
-    fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
-    fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
-
-    expect(await screen.findByText('server submit failed')).toBeInTheDocument();
-    expect(screen.queryByText('症状を選択してください')).not.toBeInTheDocument();
-    expect(screen.queryByText('深刻度を選択してください')).not.toBeInTheDocument();
-  });
-
-  it('同期状況画面から local pending 報告詳細へ移動できる', async () => {
+  it("同期状況画面から local pending 報告詳細へ移動できる", async () => {
     const record = await queueIssueReportSync(tournamentId, {
       teamId: ownTeamId,
       wifiConfigId: ownWifiId,
-      visibility: 'team_private',
-      symptom: 'high_latency',
-      severity: 'high',
-      band: '5GHz',
+      visibility: "team_private",
+      symptom: "high_latency",
+      severity: "high",
+      band: "5GHz",
       channel: 36,
-      description: 'offline sync from sync page',
+      description: "offline sync from sync page",
     });
 
-    renderRoute('/app/sync', {
+    renderRoute("/app/sync", {
       ...createOperatorResponses(),
       [`/api/issue-reports/${record.entityId}`]: {
         status: 404,
-        body: { error: { code: 'NOT_FOUND', message: 'not found' } },
+        body: { error: { code: "NOT_FOUND", message: "not found" } },
       },
     });
 
-    expect(await screen.findByRole('heading', { name: '同期状況' })).toBeInTheDocument();
-    expect(await screen.findByText('offline sync from sync page')).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "同期状況" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("offline sync from sync page"),
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('link', { name: '詳細を開く' }));
+    fireEvent.click(screen.getByRole("link", { name: "詳細を開く" }));
 
-    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
-    expect(screen.getByText('同期状態')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('offline sync from sync page')).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告詳細" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("同期状態")).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue("offline sync from sync page"),
+    ).toBeInTheDocument();
   });
 
-  it('team session で operator 向け同期状況画面へ直接アクセスするとトップへ戻す', async () => {
-    renderRoute('/app/sync', createOwnTeamDetailResponses());
+  it("team session で operator 向け同期状況画面へ直接アクセスするとトップへ戻す", async () => {
+    renderRoute("/app/sync", createOwnTeamDetailResponses());
 
-    expect(await screen.findByRole('heading', { name: 'WiFiMan Web' })).toBeInTheDocument();
-    expect(window.location.pathname).toBe('/');
-    expect(screen.queryByRole('heading', { name: '同期状況' })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "WiFiMan Web" }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/");
+    expect(
+      screen.queryByRole("heading", { name: "同期状況" }),
+    ).not.toBeInTheDocument();
   });
 
-  it('operator dashboard で大会切替時に集計と team access 対象を切り替える', async () => {
-    renderRoute('/app', createOperatorDashboardResponses());
+  it("operator dashboard で大会切替時に集計と team access 対象を切り替える", async () => {
+    renderRoute("/app", createOperatorDashboardResponses());
 
-    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-    expect(await screen.findByText('2.4GHz 1 / 5GHz 2 / 6GHz 0')).toBeInTheDocument();
-    expect(screen.getByText('total reports 2')).toBeInTheDocument();
-    expect(await screen.findByText('alpha-access@example.com')).toBeInTheDocument();
-    expect(screen.getByLabelText('チーム選択')).toHaveValue(ownTeamId);
+    expect(
+      await screen.findByRole("heading", { name: "operator dashboard" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("2.4GHz 1 / 5GHz 2 / 6GHz 0"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("total reports 2")).toBeInTheDocument();
+    expect(
+      await screen.findByText("alpha-access@example.com"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("チーム選択")).toHaveValue(ownTeamId);
 
-    fireEvent.change(screen.getByLabelText('大会選択'), {
+    fireEvent.change(screen.getByLabelText("大会選択"), {
       target: { value: secondTournamentId },
     });
 
     await waitFor(() => {
-      expect(screen.getByLabelText('チーム選択')).toHaveValue(secondTournamentTeamId);
-    });
-
-    expect(await screen.findByText('2.4GHz 0 / 5GHz 1 / 6GHz 3')).toBeInTheDocument();
-    expect(screen.getByText('total reports 3')).toBeInTheDocument();
-    expect(await screen.findByText('gamma-access@example.com')).toBeInTheDocument();
-    expect(screen.queryByText('alpha-access@example.com')).not.toBeInTheDocument();
-  });
-
-  it('operator dashboard の CSV 取込で行番号付きクライアント検証エラーを表示する', async () => {
-    renderRoute('/app', createOperatorDashboardResponses());
-
-    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText('CSV'), {
-        target: {
-          value: [
-            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
-            'manual,Bad Row,00:11:22:33:44:56,2.4GHz,149,80,-50,South Hall,2026-04-21T10:05:00.000Z,invalid channel',
-          ].join('\n'),
-        },
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
+      expect(screen.getByLabelText("チーム選択")).toHaveValue(
+        secondTournamentTeamId,
+      );
     });
 
     expect(
-      await screen.findByText('2 行目: 帯域 2.4GHz に対してチャンネル 149 は無効です'),
+      await screen.findByText("2.4GHz 0 / 5GHz 1 / 6GHz 3"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("total reports 3")).toBeInTheDocument();
+    expect(
+      await screen.findByText("gamma-access@example.com"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("alpha-access@example.com"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("operator dashboard の CSV 取込で行番号付きクライアント検証エラーを表示する", async () => {
+    renderRoute("/app", createOperatorDashboardResponses());
+
+    expect(
+      await screen.findByRole("heading", { name: "operator dashboard" }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("CSV"), {
+        target: {
+          value: [
+            "source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes",
+            "manual,Bad Row,00:11:22:33:44:56,2.4GHz,149,80,-50,South Hall,2026-04-21T10:05:00.000Z,invalid channel",
+          ].join("\n"),
+        },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "CSV を一括登録" }));
+    });
+
+    expect(
+      await screen.findByText(
+        "2 行目: 帯域 2.4GHz に対してチャンネル 149 は無効です",
+      ),
     ).toBeInTheDocument();
   });
 
-  it('operator dashboard の CSV 取込で 422 応答の行番号付きエラーを表示する', async () => {
+  it("operator dashboard の CSV 取込で 422 応答の行番号付きエラーを表示する", async () => {
     const responses = createOperatorDashboardResponses();
 
-    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
+    renderRoute(
+      "/app",
+      responses,
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace("http://localhost:3000", "");
 
-      if (
-        path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
-        init?.method === 'POST'
-      ) {
-        return jsonResponse(
-          {
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: 'validation failed',
-              details: {
-                errors: [{ row: 4, message: '4 行目: BSSID が重複しています' }],
+        if (
+          path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse(
+            {
+              error: {
+                code: "VALIDATION_ERROR",
+                message: "validation failed",
+                details: {
+                  errors: [
+                    { row: 4, message: "4 行目: BSSID が重複しています" },
+                  ],
+                },
               },
             },
+            422,
+          );
+        }
+
+        const matched = responses[path];
+
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
+
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "operator dashboard" }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("CSV"), {
+        target: {
+          value: [
+            "source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes",
+            "manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner",
+          ].join("\n"),
+        },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "CSV を一括登録" }));
+    });
+
+    expect(
+      await screen.findByText("4 行目: BSSID が重複しています"),
+    ).toBeInTheDocument();
+  });
+
+  it.each([400, 401, 403, 409])(
+    "operator dashboard の CSV 取込は API %s 応答時に generic error を表示する",
+    async (status) => {
+      const responses = createOperatorDashboardResponses();
+
+      renderRoute(
+        "/app",
+        responses,
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const path = url.replace("http://localhost:3000", "");
+
+          if (
+            path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse(
+              { error: { code: "API_ERROR", message: `status ${status}` } },
+              status,
+            );
+          }
+
+          const matched = responses[path];
+
+          if (!matched) {
+            throw new Error(`Unhandled fetch: ${path}`);
+          }
+
+          return jsonResponse(matched.body, matched.status);
+        },
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: "operator dashboard" }),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.change(screen.getByLabelText("CSV"), {
+          target: {
+            value: [
+              "source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes",
+              "manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner",
+            ].join("\n"),
           },
-          422,
+        });
+        fireEvent.click(screen.getByRole("button", { name: "CSV を一括登録" }));
+      });
+
+      expect(await screen.findByText("API request failed")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "operator dashboard" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it.each([400, 401, 403, 409, 422])(
+    "operator dashboard の野良 WiFi 手入力は API %s 応答時にエラー alert を表示する",
+    async (status) => {
+      const responses = createOperatorDashboardResponses();
+
+      renderRoute(
+        "/app",
+        responses,
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const path = url.replace("http://localhost:3000", "");
+
+          if (
+            path === `/api/tournaments/${tournamentId}/observed-wifis` &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse(
+              { error: { code: "API_ERROR", message: `status ${status}` } },
+              status,
+            );
+          }
+
+          const matched = responses[path];
+
+          if (!matched) {
+            throw new Error(`Unhandled fetch: ${path}`);
+          }
+
+          return jsonResponse(matched.body, matched.status);
+        },
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: "operator dashboard" }),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "野良 WiFi を登録" }),
         );
-      }
-
-      const matched = responses[path];
-
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
-
-      return jsonResponse(matched.body, matched.status);
-    });
-
-    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText('CSV'), {
-        target: {
-          value: [
-            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
-            'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
-          ].join('\n'),
-        },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
-    });
 
-    expect(await screen.findByText('4 行目: BSSID が重複しています')).toBeInTheDocument();
-  });
+      expect(await screen.findByText("API request failed")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "operator dashboard" }),
+      ).toBeInTheDocument();
+    },
+  );
 
-  it.each([
-    400, 401, 403, 409,
-  ])('operator dashboard の CSV 取込は API %s 応答時に generic error を表示する', async (status) => {
-    const responses = createOperatorDashboardResponses();
-
-    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
-
-      if (
-        path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
-        init?.method === 'POST'
-      ) {
-        return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
-      }
-
-      const matched = responses[path];
-
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
-
-      return jsonResponse(matched.body, matched.status);
-    });
-
-    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText('CSV'), {
-        target: {
-          value: [
-            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
-            'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
-          ].join('\n'),
-        },
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
-    });
-
-    expect(await screen.findByText('API request failed')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-  });
-
-  it.each([
-    400, 401, 403, 409, 422,
-  ])('operator dashboard の野良 WiFi 手入力は API %s 応答時にエラー alert を表示する', async (status) => {
-    const responses = createOperatorDashboardResponses();
-
-    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
-
-      if (path === `/api/tournaments/${tournamentId}/observed-wifis` && init?.method === 'POST') {
-        return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
-      }
-
-      const matched = responses[path];
-
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
-
-      return jsonResponse(matched.body, matched.status);
-    });
-
-    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
-    });
-
-    expect(await screen.findByText('API request failed')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-  });
-
-  it('初回マウント時にオンラインなら pending を自動同期する', async () => {
+  it("初回マウント時にオンラインなら pending を自動同期する", async () => {
     const record = await queueIssueReportSync(tournamentId, {
       teamId: ownTeamId,
       wifiConfigId: ownWifiId,
-      visibility: 'team_private',
-      symptom: 'high_latency',
-      severity: 'high',
-      band: '5GHz',
+      visibility: "team_private",
+      symptom: "high_latency",
+      severity: "high",
+      band: "5GHz",
       channel: 36,
     });
 
-    Object.defineProperty(window.navigator, 'onLine', {
+    Object.defineProperty(window.navigator, "onLine", {
       configurable: true,
       value: true,
     });
 
-    renderRoute('/', {
+    renderRoute("/", {
       ...createBaseResponses(ownTeamSession),
       [`/api/tournaments/${tournamentId}/issue-reports`]: {
         status: 201,
         body: {
-          id: '00000000-0000-4000-8000-000000000301',
+          id: "00000000-0000-4000-8000-000000000301",
           tournamentId,
           teamId: ownTeamId,
           wifiConfigId: ownWifiId,
-          visibility: 'team_private',
-          band: '5GHz',
+          visibility: "team_private",
+          band: "5GHz",
           channel: 36,
-          symptom: 'high_latency',
-          severity: 'high',
-          createdAt: '2026-04-22T12:00:00.000Z',
-          updatedAt: '2026-04-22T12:00:00.000Z',
+          symptom: "high_latency",
+          severity: "high",
+          createdAt: "2026-04-22T12:00:00.000Z",
+          updatedAt: "2026-04-22T12:00:00.000Z",
         },
       },
     });
 
     await waitFor(async () => {
       const synced = await appDb.syncRecords.get(record.id);
-      expect(synced?.status).toBe('done');
+      expect(synced?.status).toBe("done");
     });
 
     expect(
@@ -1690,24 +1953,25 @@ describe('team management routes', () => {
         .mocked(fetch)
         .mock.calls.some(
           ([input, init]) =>
-            String(input).endsWith(`/api/tournaments/${tournamentId}/issue-reports`) &&
-            init?.method === 'POST',
+            String(input).endsWith(
+              `/api/tournaments/${tournamentId}/issue-reports`,
+            ) && init?.method === "POST",
         ),
     ).toBe(true);
   });
 
-  it('未認証マウント時はオンラインでも pending を自動同期しない', async () => {
+  it("未認証マウント時はオンラインでも pending を自動同期しない", async () => {
     const record = await queueIssueReportSync(tournamentId, {
       teamId: ownTeamId,
       wifiConfigId: ownWifiId,
-      visibility: 'team_private',
-      symptom: 'high_latency',
-      severity: 'high',
-      band: '5GHz',
+      visibility: "team_private",
+      symptom: "high_latency",
+      severity: "high",
+      band: "5GHz",
       channel: 36,
     });
 
-    Object.defineProperty(window.navigator, 'onLine', {
+    Object.defineProperty(window.navigator, "onLine", {
       configurable: true,
       value: true,
     });
@@ -1715,69 +1979,86 @@ describe('team management routes', () => {
     const responses: Record<string, MockResponse> = createBaseResponses(null);
     const issueReportPostSpy = vi.fn();
 
-    renderRoute('/', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
+    renderRoute(
+      "/",
+      responses,
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace("http://localhost:3000", "");
 
-      if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
-        issueReportPostSpy();
-        return jsonResponse({ error: { code: 'UNAUTHORIZED', message: 'unauthorized' } }, 401);
-      }
+        if (
+          path === `/api/tournaments/${tournamentId}/issue-reports` &&
+          init?.method === "POST"
+        ) {
+          issueReportPostSpy();
+          return jsonResponse(
+            { error: { code: "UNAUTHORIZED", message: "unauthorized" } },
+            401,
+          );
+        }
 
-      const matched = responses[path];
+        const matched = responses[path];
 
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
 
-      return jsonResponse(matched.body, matched.status);
-    });
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('公開中の大会')).toBeInTheDocument();
+      expect(screen.getByText("公開中の大会")).toBeInTheDocument();
     });
 
     await waitFor(async () => {
       const synced = await appDb.syncRecords.get(record.id);
-      expect(synced?.status).toBe('pending');
+      expect(synced?.status).toBe("pending");
     });
 
     expect(issueReportPostSpy).not.toHaveBeenCalled();
   });
 
-  it('自チームの報告詳細で同期状態と公開範囲を表示し、追記編集できる', async () => {
+  it("自チームの報告詳細で同期状態と公開範囲を表示し、追記編集できる", async () => {
     const ownResponses = createOwnTeamDetailResponses();
     const issueReports = getRequiredResponse(
       ownResponses,
       `/api/tournaments/${tournamentId}/issue-reports`,
     ).body as Array<unknown>;
 
-    renderRoute(`/tournaments/${tournamentId}/issue-reports/00000000-0000-4000-8000-000000000061`, {
-      ...ownResponses,
-      '/api/issue-reports/00000000-0000-4000-8000-000000000061': {
-        status: 200,
-        body: issueReports[0],
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/00000000-0000-4000-8000-000000000061`,
+      {
+        ...ownResponses,
+        "/api/issue-reports/00000000-0000-4000-8000-000000000061": {
+          status: 200,
+          body: issueReports[0],
+        },
       },
-    });
+    );
 
-    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
-    expect(screen.getByText('同期状態')).toBeInTheDocument();
-    expect(screen.getByText('server_synced')).toBeInTheDocument();
-    expect(screen.getByLabelText('公開範囲')).toHaveValue('team_private');
-    expect(screen.getByDisplayValue('AP の近くで遅延増加')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '追記を保存' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告詳細" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("同期状態")).toBeInTheDocument();
+    expect(screen.getByText("server_synced")).toBeInTheDocument();
+    expect(screen.getByLabelText("公開範囲")).toHaveValue("team_private");
+    expect(screen.getByDisplayValue("AP の近くで遅延増加")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "追記を保存" }),
+    ).toBeInTheDocument();
   });
 
-  it('報告詳細の追記編集で空値クリアを PATCH に含めて送信できる', async () => {
+  it("報告詳細の追記編集で空値クリアを PATCH に含めて送信できる", async () => {
     const ownResponses = createOwnTeamDetailResponses();
     const issueReports = getRequiredResponse(
       ownResponses,
       `/api/tournaments/${tournamentId}/issue-reports`,
     ).body as Array<Record<string, unknown>>;
-    const reportId = '00000000-0000-4000-8000-000000000061';
+    const reportId = "00000000-0000-4000-8000-000000000061";
     const report = issueReports[0];
     if (!report) {
-      throw new Error('issue report fixture not found');
+      throw new Error("issue report fixture not found");
     }
     const responses: Record<string, MockResponse> = {
       ...ownResponses,
@@ -1788,54 +2069,87 @@ describe('team management routes', () => {
     };
     let capturedPatchBody: Record<string, unknown> | undefined;
 
-    renderRoute(`/tournaments/${tournamentId}/issue-reports/${reportId}`, responses);
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/${reportId}`,
+      responses,
+    );
 
     const fetchMock = vi.mocked(fetch);
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace("http://localhost:3000", "");
 
-      if (path === `/api/issue-reports/${reportId}` && init?.method === 'PATCH') {
-        capturedPatchBody = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return jsonResponse({
-          ...report,
-          ...capturedPatchBody,
-          reporterName: null,
-          avgPingMs: null,
-          reproducibility: null,
-          locationLabel: null,
-          description: null,
-        });
-      }
+        if (
+          path === `/api/issue-reports/${reportId}` &&
+          init?.method === "PATCH"
+        ) {
+          capturedPatchBody = JSON.parse(String(init.body)) as Record<
+            string,
+            unknown
+          >;
+          return jsonResponse({
+            ...report,
+            ...capturedPatchBody,
+            reporterName: null,
+            avgPingMs: null,
+            reproducibility: null,
+            locationLabel: null,
+            description: null,
+          });
+        }
 
-      const matched = responses[path];
+        const matched = responses[path];
 
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
 
-      return jsonResponse(matched.body, matched.status);
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告詳細" }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("報告者名"), {
+      target: { value: "" },
     });
-
-    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('報告者名'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('最大 Ping (ms)'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('パケットロス率 (%)'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('推定距離[m]'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('再現性'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('観測位置'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'change_channel' }));
-    fireEvent.change(screen.getByLabelText('改善有無'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: '添付を削除' }));
-    fireEvent.change(screen.getByLabelText('自由記述'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: '追記を保存' }));
+    fireEvent.change(screen.getByLabelText("平均 Ping (ms)"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("最大 Ping (ms)"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("パケットロス率 (%)"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("距離カテゴリ"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("推定距離[m]"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("再現性"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("観測位置"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "change_channel" }));
+    fireEvent.change(screen.getByLabelText("改善有無"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "添付を削除" }));
+    fireEvent.change(screen.getByLabelText("自由記述"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "追記を保存" }));
 
     await waitFor(() => {
       expect(capturedPatchBody).toEqual({
-        visibility: 'team_private',
+        visibility: "team_private",
         reporterName: null,
         avgPingMs: null,
         maxPingMs: null,
@@ -1852,16 +2166,16 @@ describe('team management routes', () => {
     });
   });
 
-  it('報告詳細の不正入力は field error として表示し submit error は出さない', async () => {
+  it("報告詳細の不正入力は field error として表示し submit error は出さない", async () => {
     const ownResponses = createOwnTeamDetailResponses();
     const issueReports = getRequiredResponse(
       ownResponses,
       `/api/tournaments/${tournamentId}/issue-reports`,
     ).body as Array<Record<string, unknown>>;
-    const reportId = '00000000-0000-4000-8000-000000000061';
+    const reportId = "00000000-0000-4000-8000-000000000061";
     const report = issueReports[0];
     if (!report) {
-      throw new Error('issue report fixture not found');
+      throw new Error("issue report fixture not found");
     }
 
     renderRoute(`/tournaments/${tournamentId}/issue-reports/${reportId}`, {
@@ -1872,34 +2186,42 @@ describe('team management routes', () => {
       },
     });
 
-    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告詳細" }),
+    ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '-1' } });
-    fireEvent.click(screen.getByRole('button', { name: '追記を保存' }));
+    fireEvent.change(screen.getByLabelText("平均 Ping (ms)"), {
+      target: { value: "-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "追記を保存" }));
 
-    expect(await screen.findByText('0 以上の値を入力してください')).toBeInTheDocument();
-    expect(screen.queryByText('報告の更新に失敗しました')).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("0 以上の値を入力してください"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("報告の更新に失敗しました"),
+    ).not.toBeInTheDocument();
   });
 
-  it('local sync record の再送は validation 済み payload で create API を呼ぶ', async () => {
+  it("local sync record の再送は validation 済み payload で create API を呼ぶ", async () => {
     const record = await queueIssueReportSync(tournamentId, {
       teamId: ownTeamId,
       wifiConfigId: ownWifiId,
-      visibility: 'team_private',
-      symptom: 'high_latency',
-      severity: 'high',
-      band: '5GHz',
+      visibility: "team_private",
+      symptom: "high_latency",
+      severity: "high",
+      band: "5GHz",
       channel: 36,
-      reporterName: 'Offline Reporter',
-      description: 'offline note',
+      reporterName: "Offline Reporter",
+      description: "offline note",
     });
-    const createdId = '00000000-0000-4000-8000-000000000302';
+    const createdId = "00000000-0000-4000-8000-000000000302";
     const ownResponses = createOwnTeamDetailResponses();
     const responses: Record<string, MockResponse> = {
       ...ownResponses,
       [`/api/issue-reports/${record.entityId}`]: {
         status: 404,
-        body: { error: { code: 'NOT_FOUND', message: 'not found' } },
+        body: { error: { code: "NOT_FOUND", message: "not found" } },
       },
       [`/api/issue-reports/${createdId}`]: {
         status: 200,
@@ -1908,21 +2230,21 @@ describe('team management routes', () => {
           tournamentId,
           teamId: ownTeamId,
           wifiConfigId: ownWifiId,
-          visibility: 'team_public',
-          symptom: 'high_latency',
-          severity: 'high',
-          band: '5GHz',
+          visibility: "team_public",
+          symptom: "high_latency",
+          severity: "high",
+          band: "5GHz",
           channel: 36,
-          reporterName: 'Updated Reporter',
+          reporterName: "Updated Reporter",
           avgPingMs: 55,
-          createdAt: '2026-04-22T12:00:00.000Z',
-          updatedAt: '2026-04-22T12:00:00.000Z',
+          createdAt: "2026-04-22T12:00:00.000Z",
+          updatedAt: "2026-04-22T12:00:00.000Z",
         },
       },
     };
     let capturedCreateBody: Record<string, unknown> | undefined;
 
-    Object.defineProperty(window.navigator, 'onLine', {
+    Object.defineProperty(window.navigator, "onLine", {
       configurable: true,
       value: false,
     });
@@ -1932,25 +2254,31 @@ describe('team management routes', () => {
       responses,
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
-        const path = url.replace('http://localhost:3000', '');
+        const path = url.replace("http://localhost:3000", "");
 
-        if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
-          capturedCreateBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+        if (
+          path === `/api/tournaments/${tournamentId}/issue-reports` &&
+          init?.method === "POST"
+        ) {
+          capturedCreateBody = JSON.parse(String(init.body)) as Record<
+            string,
+            unknown
+          >;
           return jsonResponse(
             {
               id: createdId,
               tournamentId,
               teamId: ownTeamId,
               wifiConfigId: ownWifiId,
-              visibility: 'team_public',
-              symptom: 'high_latency',
-              severity: 'high',
-              band: '5GHz',
+              visibility: "team_public",
+              symptom: "high_latency",
+              severity: "high",
+              band: "5GHz",
               channel: 36,
-              reporterName: 'Updated Reporter',
+              reporterName: "Updated Reporter",
               avgPingMs: 55,
-              createdAt: '2026-04-22T12:00:00.000Z',
-              updatedAt: '2026-04-22T12:00:00.000Z',
+              createdAt: "2026-04-22T12:00:00.000Z",
+              updatedAt: "2026-04-22T12:00:00.000Z",
             },
             201,
           );
@@ -1966,61 +2294,69 @@ describe('team management routes', () => {
       },
     );
 
-    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告詳細" }),
+    ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('公開範囲'), { target: { value: 'team_public' } });
-    fireEvent.change(screen.getByLabelText('報告者名'), {
-      target: { value: '  Updated Reporter  ' },
+    fireEvent.change(screen.getByLabelText("公開範囲"), {
+      target: { value: "team_public" },
     });
-    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '55' } });
-    fireEvent.change(screen.getByLabelText('自由記述'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: '再送' }));
+    fireEvent.change(screen.getByLabelText("報告者名"), {
+      target: { value: "  Updated Reporter  " },
+    });
+    fireEvent.change(screen.getByLabelText("平均 Ping (ms)"), {
+      target: { value: "55" },
+    });
+    fireEvent.change(screen.getByLabelText("自由記述"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "再送" }));
 
     await waitFor(() => {
       expect(capturedCreateBody).toMatchObject({
         teamId: ownTeamId,
         wifiConfigId: ownWifiId,
-        visibility: 'team_public',
-        symptom: 'high_latency',
-        severity: 'high',
-        band: '5GHz',
+        visibility: "team_public",
+        symptom: "high_latency",
+        severity: "high",
+        band: "5GHz",
         channel: 36,
-        reporterName: 'Updated Reporter',
+        reporterName: "Updated Reporter",
         avgPingMs: 55,
       });
     });
-    expect(capturedCreateBody).not.toHaveProperty('description');
+    expect(capturedCreateBody).not.toHaveProperty("description");
 
     await waitFor(async () => {
       const synced = await appDb.syncRecords.get(record.id);
 
-      expect(synced?.status).toBe('done');
+      expect(synced?.status).toBe("done");
       expect(synced?.entityId).toBe(createdId);
     });
   });
 
-  it('local sync record の再送で不正入力なら field error を出して API を呼ばない', async () => {
+  it("local sync record の再送で不正入力なら field error を出して API を呼ばない", async () => {
     const record = await queueIssueReportSync(tournamentId, {
       teamId: ownTeamId,
       wifiConfigId: ownWifiId,
-      visibility: 'team_private',
-      symptom: 'high_latency',
-      severity: 'high',
-      band: '5GHz',
+      visibility: "team_private",
+      symptom: "high_latency",
+      severity: "high",
+      band: "5GHz",
       channel: 36,
-      description: 'offline note',
+      description: "offline note",
     });
     const ownResponses = createOwnTeamDetailResponses();
     const responses: Record<string, MockResponse> = {
       ...ownResponses,
       [`/api/issue-reports/${record.entityId}`]: {
         status: 404,
-        body: { error: { code: 'NOT_FOUND', message: 'not found' } },
+        body: { error: { code: "NOT_FOUND", message: "not found" } },
       },
     };
     const createSpy = vi.fn();
 
-    Object.defineProperty(window.navigator, 'onLine', {
+    Object.defineProperty(window.navigator, "onLine", {
       configurable: true,
       value: false,
     });
@@ -2030,337 +2366,16 @@ describe('team management routes', () => {
       responses,
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
-        const path = url.replace('http://localhost:3000', '');
+        const path = url.replace("http://localhost:3000", "");
 
-        if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+        if (
+          path === `/api/tournaments/${tournamentId}/issue-reports` &&
+          init?.method === "POST"
+        ) {
           createSpy();
-          return jsonResponse({ error: { code: 'BAD_REQUEST', message: 'unexpected' } }, 400);
-        }
-
-        const matched = responses[path];
-
-        if (!matched) {
-          throw new Error(`Unhandled fetch: ${path}`);
-        }
-
-        return jsonResponse(matched.body, matched.status);
-      },
-    );
-
-    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '-1' } });
-    fireEvent.click(screen.getByRole('button', { name: '再送' }));
-
-    expect(await screen.findByText('0 以上の値を入力してください')).toBeInTheDocument();
-    expect(createSpy).not.toHaveBeenCalled();
-    expect(screen.queryByText('再送に失敗しました')).not.toBeInTheDocument();
-
-    await waitFor(async () => {
-      const synced = await appDb.syncRecords.get(record.id);
-
-      expect(synced?.status).toBe('pending');
-    });
-  });
-
-  it('報告詳細の API 失敗は submit error として表示する', async () => {
-    const ownResponses = createOwnTeamDetailResponses();
-    const issueReports = getRequiredResponse(
-      ownResponses,
-      `/api/tournaments/${tournamentId}/issue-reports`,
-    ).body as Array<Record<string, unknown>>;
-    const reportId = '00000000-0000-4000-8000-000000000061';
-    const report = issueReports[0];
-    if (!report) {
-      throw new Error('issue report fixture not found');
-    }
-    const responses: Record<string, MockResponse> = {
-      ...ownResponses,
-      [`/api/issue-reports/${reportId}`]: {
-        status: 200,
-        body: report,
-      },
-    };
-
-    renderRoute(`/tournaments/${tournamentId}/issue-reports/${reportId}`, responses);
-
-    const fetchMock = vi.mocked(fetch);
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const path = url.replace('http://localhost:3000', '');
-
-      if (path === `/api/issue-reports/${reportId}` && init?.method === 'PATCH') {
-        return jsonResponse(
-          { error: { code: 'BAD_REQUEST', message: 'server patch failed' } },
-          400,
-        );
-      }
-
-      const matched = responses[path];
-
-      if (!matched) {
-        throw new Error(`Unhandled fetch: ${path}`);
-      }
-
-      return jsonResponse(matched.body, matched.status);
-    });
-
-    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '追記を保存' }));
-
-    expect(await screen.findByText('server patch failed')).toBeInTheDocument();
-    expect(screen.queryByText('0 以上の値を入力してください')).not.toBeInTheDocument();
-  });
-
-  it('他チームからは team_private 報告詳細を閲覧できない', async () => {
-    renderRoute(`/tournaments/${tournamentId}/issue-reports/00000000-0000-4000-8000-000000000061`, {
-      ...createOtherTeamDetailResponses(),
-      '/api/issue-reports/00000000-0000-4000-8000-000000000061': {
-        status: 403,
-        body: { error: { code: 'FORBIDDEN', message: 'forbidden' } },
-      },
-    });
-
-    expect(await screen.findByText('報告詳細を取得できませんでした')).toBeInTheDocument();
-  });
-
-  it('ベストプラクティス画面で帯域・用途・型番の検索ができる', async () => {
-    renderRoute(`/tournaments/${tournamentId}/best-practices`, createOwnTeamDetailResponses());
-
-    expect(
-      await screen.findByRole('heading', { name: 'Spring Cup ベストプラクティス' }),
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('radio', { name: '5GHz' }));
-    fireEvent.change(screen.getByLabelText('用途フィルタ'), { target: { value: 'control' } });
-    fireEvent.change(screen.getByLabelText('型番フィルタ'), { target: { value: 'AP-9000' } });
-
-    const list = screen.getByRole('list', { name: 'ベストプラクティス一覧' });
-    expect(within(list).getByText('5GHz guidance')).toBeInTheDocument();
-    expect(screen.getByText('用途候補: control')).toBeInTheDocument();
-  });
-
-  it('未認証で保護されたチーム詳細に入ると元 URL を next に保持して login へ遷移する', async () => {
-    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createBaseResponses(null));
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
-    });
-
-    expect(window.location.pathname).toBe('/login');
-    expect(window.location.search).toBe(
-      `?next=${encodeURIComponent(`/tournaments/${tournamentId}/teams/${ownTeamId}`)}`,
-    );
-  });
-
-  it('未認証の channel map deep link は search params を保ったまま login 後に復帰する', async () => {
-    vi.stubEnv('DEV', true);
-    vi.stubEnv('VITE_ENABLE_DEV_OPERATOR_AUTH', 'true');
-
-    renderRoute(`/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`, {
-      ...createBaseResponses(null),
-      '/api/auth/dev-operator-session': {
-        status: 200,
-        body: {
-          kind: 'operator',
-          role: 'operator',
-          sessionId: 'operator-session-1',
-          displayName: 'Operator 1',
-        },
-      },
-      [`/api/tournaments/${tournamentId}/best-practices`]: {
-        status: 200,
-        body: [],
-      },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
-    });
-
-    expect(window.location.pathname).toBe('/login');
-    expect(window.location.search).toBe(
-      `?next=${encodeURIComponent(`/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`)}`,
-    );
-
-    fireEvent.change(screen.getByLabelText('表示名'), { target: { value: 'Operator 1' } });
-    fireEvent.change(screen.getByLabelText('パスフレーズ'), {
-      target: { value: 'local-dev-passphrase' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'ダッシュボードへ進む' }));
-
-    expect(
-      await screen.findByRole('heading', { name: 'Spring Cup チャンネルマップ' }),
-    ).toBeInTheDocument();
-    expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/channel-map`);
-    expect(window.location.search).toBe('?band=5GHz&controlOnly=1&model=AP-9000');
-    expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
-    expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
-  });
-
-  it('自チーム詳細では報告一覧に詳細 DTO を表示し、WiFi editor で補助表示を出す', async () => {
-    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
-
-    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
-    expect(screen.getByText('報告者: Driver A')).toBeInTheDocument();
-    expect(screen.getByText('場所: East Hall')).toBeInTheDocument();
-    expect(screen.getByText('詳細: AP の近くで遅延増加')).toBeInTheDocument();
-
-    const [editButton] = screen.getAllByRole('button', { name: '編集' });
-    if (!editButton) {
-      throw new Error('edit button not found');
-    }
-    fireEvent.click(editButton);
-
-    expect(await screen.findByText('同帯域の既存構成: Backup 5G (standby)')).toBeInTheDocument();
-    expect(
-      screen.getByText('5GHz の control link は AP-9000 を優先し混雑を避ける'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('AP-9000: DFS 切替で瞬断しやすい')).toBeInTheDocument();
-  });
-
-  it('team viewer は閲覧専用 UI となり private 情報と編集導線を表示しない', async () => {
-    renderRoute(
-      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
-      createOtherTeamDetailResponses(),
-    );
-
-    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'この画面は閲覧専用です。編集 UI は自チーム editor または運営者にのみ表示されます。',
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: '新しい WiFi 構成を追加' }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText('Ping 監視先: 192.168.10.1')).not.toBeInTheDocument();
-    expect(screen.queryByText('private wifi note')).not.toBeInTheDocument();
-  });
-
-  it('WiFi 構成追加フォームで必須入力エラーを表示する', async () => {
-    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
-
-    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
-    });
-
-    const nameInput = await screen.findByLabelText('構成名');
-    const form = nameInput.closest('form');
-    const saveButton = form?.querySelector('button[type="submit"]');
-
-    if (!(form instanceof HTMLFormElement) || !(saveButton instanceof HTMLButtonElement)) {
-      throw new Error('wifi config form not found');
-    }
-
-    await act(async () => {
-      fireEvent.click(saveButton);
-    });
-
-    expect(within(form).getByText(/at least 1 character/i)).toBeInTheDocument();
-  });
-
-  it('WiFi 構成追加フォームで帯域とチャンネル整合性エラーを表示する', async () => {
-    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
-
-    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
-    });
-
-    const nameInput = await screen.findByLabelText('構成名');
-    const channelInput = screen.getByLabelText('チャンネル');
-    const form = nameInput.closest('form');
-    const saveButton = form?.querySelector('button[type="submit"]');
-
-    if (!(form instanceof HTMLFormElement) || !(saveButton instanceof HTMLButtonElement)) {
-      throw new Error('wifi config form not found');
-    }
-
-    await act(async () => {
-      fireEvent.change(nameInput, { target: { value: 'Invalid Config' } });
-      fireEvent.change(channelInput, { target: { value: '999' } });
-      fireEvent.click(saveButton);
-    });
-
-    expect(
-      await within(form).findByText('帯域 5GHz に対して無効なチャンネルです'),
-    ).toBeInTheDocument();
-  });
-
-  it('WiFi 構成追加フォームで最大 3 件制約エラーを表示する', async () => {
-    const responses = createOwnTeamDetailResponses();
-    responses[`/api/teams/${ownTeamId}/wifi-configs`] = {
-      status: 200,
-      body: [
-        ...(getRequiredResponse(responses, `/api/teams/${ownTeamId}/wifi-configs`)
-          .body as Array<unknown>),
-        {
-          id: '00000000-0000-4000-8000-000000000023',
-          teamId: ownTeamId,
-          name: 'Driver Station 6G',
-          purpose: 'video',
-          band: '6GHz',
-          channel: 37,
-          channelWidthMHz: 80,
-          role: 'primary',
-          status: 'active',
-          apDeviceId: ownApId,
-          clientDeviceId: ownClientId,
-          expectedDistanceCategory: 'far',
-          pingTargetIp: null,
-          notes: null,
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
-        },
-      ],
-    };
-
-    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, responses);
-
-    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
-    });
-
-    const nameInput = await screen.findByLabelText('構成名');
-    const form = nameInput.closest('form');
-    const saveButton = form?.querySelector('button[type="submit"]');
-
-    if (!(saveButton instanceof HTMLButtonElement)) {
-      throw new Error('wifi config save button not found');
-    }
-
-    await act(async () => {
-      fireEvent.change(nameInput, { target: { value: 'Fourth Config' } });
-      fireEvent.click(saveButton);
-    });
-
-    expect(screen.getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
-  });
-
-  it.each([
-    400, 401, 403, 409, 422,
-  ])('WiFi 構成フォームは API %s 応答でもクラッシュせずエラーを表示する', async (status) => {
-    const responses = createOwnTeamDetailResponses();
-
-    renderRoute(
-      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
-      responses,
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        const path = url.replace('http://localhost:3000', '');
-
-        if (path === `/api/teams/${ownTeamId}/wifi-configs` && init?.method === 'POST') {
           return jsonResponse(
-            { error: { code: 'API_ERROR', message: `status ${status}` } },
-            status,
+            { error: { code: "BAD_REQUEST", message: "unexpected" } },
+            400,
           );
         }
 
@@ -2374,85 +2389,540 @@ describe('team management routes', () => {
       },
     );
 
-    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告詳細" }),
+    ).toBeInTheDocument();
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
+    fireEvent.change(screen.getByLabelText("平均 Ping (ms)"), {
+      target: { value: "-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "再送" }));
+
+    expect(
+      await screen.findByText("0 以上の値を入力してください"),
+    ).toBeInTheDocument();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText("再送に失敗しました")).not.toBeInTheDocument();
+
+    await waitFor(async () => {
+      const synced = await appDb.syncRecords.get(record.id);
+
+      expect(synced?.status).toBe("pending");
+    });
+  });
+
+  it("報告詳細の API 失敗は submit error として表示する", async () => {
+    const ownResponses = createOwnTeamDetailResponses();
+    const issueReports = getRequiredResponse(
+      ownResponses,
+      `/api/tournaments/${tournamentId}/issue-reports`,
+    ).body as Array<Record<string, unknown>>;
+    const reportId = "00000000-0000-4000-8000-000000000061";
+    const report = issueReports[0];
+    if (!report) {
+      throw new Error("issue report fixture not found");
+    }
+    const responses: Record<string, MockResponse> = {
+      ...ownResponses,
+      [`/api/issue-reports/${reportId}`]: {
+        status: 200,
+        body: report,
+      },
+    };
+
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/${reportId}`,
+      responses,
+    );
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace("http://localhost:3000", "");
+
+        if (
+          path === `/api/issue-reports/${reportId}` &&
+          init?.method === "PATCH"
+        ) {
+          return jsonResponse(
+            { error: { code: "BAD_REQUEST", message: "server patch failed" } },
+            400,
+          );
+        }
+
+        const matched = responses[path];
+
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
+
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告詳細" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "追記を保存" }));
+
+    expect(await screen.findByText("server patch failed")).toBeInTheDocument();
+    expect(
+      screen.queryByText("0 以上の値を入力してください"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("他チームからは team_private 報告詳細を閲覧できない", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/00000000-0000-4000-8000-000000000061`,
+      {
+        ...createOtherTeamDetailResponses(),
+        "/api/issue-reports/00000000-0000-4000-8000-000000000061": {
+          status: 403,
+          body: { error: { code: "FORBIDDEN", message: "forbidden" } },
+        },
+      },
+    );
+
+    expect(
+      await screen.findByText("報告詳細を取得できませんでした"),
+    ).toBeInTheDocument();
+  });
+
+  it("ベストプラクティス画面で帯域・用途・型番の検索ができる", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/best-practices`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Spring Cup ベストプラクティス",
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "5GHz" }));
+    fireEvent.change(screen.getByLabelText("用途フィルタ"), {
+      target: { value: "control" },
+    });
+    fireEvent.change(screen.getByLabelText("型番フィルタ"), {
+      target: { value: "AP-9000" },
     });
 
-    const nameInput = await screen.findByLabelText('構成名');
-    const form = nameInput.closest('form');
+    const list = screen.getByRole("list", { name: "ベストプラクティス一覧" });
+    expect(within(list).getByText("5GHz guidance")).toBeInTheDocument();
+    expect(screen.getByText("用途候補: control")).toBeInTheDocument();
+  });
+
+  it("未認証で保護されたチーム詳細に入ると元 URL を next に保持して login へ遷移する", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+      createBaseResponses(null),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "運営ログイン" }),
+      ).toBeInTheDocument();
+    });
+
+    expect(window.location.pathname).toBe("/login");
+    expect(window.location.search).toBe(
+      `?next=${encodeURIComponent(`/tournaments/${tournamentId}/teams/${ownTeamId}`)}`,
+    );
+  });
+
+  it("未認証の channel map deep link は search params を保ったまま login 後に復帰する", async () => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("VITE_ENABLE_DEV_OPERATOR_AUTH", "true");
+
+    renderRoute(
+      `/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`,
+      {
+        ...createBaseResponses(null),
+        "/api/auth/dev-operator-session": {
+          status: 200,
+          body: {
+            kind: "operator",
+            role: "operator",
+            sessionId: "operator-session-1",
+            displayName: "Operator 1",
+          },
+        },
+        [`/api/tournaments/${tournamentId}/best-practices`]: {
+          status: 200,
+          body: [],
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "運営ログイン" }),
+      ).toBeInTheDocument();
+    });
+
+    expect(window.location.pathname).toBe("/login");
+    expect(window.location.search).toBe(
+      `?next=${encodeURIComponent(`/tournaments/${tournamentId}/channel-map?band=5GHz&controlOnly=1&model=AP-9000`)}`,
+    );
+
+    fireEvent.change(screen.getByLabelText("表示名"), {
+      target: { value: "Operator 1" },
+    });
+    fireEvent.change(screen.getByLabelText("パスフレーズ"), {
+      target: { value: "local-dev-passphrase" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "ダッシュボードへ進む" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Spring Cup チャンネルマップ",
+      }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe(
+      `/tournaments/${tournamentId}/channel-map`,
+    );
+    expect(window.location.search).toBe(
+      "?band=5GHz&controlOnly=1&model=AP-9000",
+    );
+    expect(screen.getByRole("radio", { name: "5GHz" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "制御用途のみ" }),
+    ).toBeChecked();
+    expect(screen.getByLabelText("型番フィルタ")).toHaveValue("AP-9000");
+  });
+
+  it("自チーム詳細では報告一覧に詳細 DTO を表示し、WiFi editor で補助表示を出す", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Alpha" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("報告者: Driver A")).toBeInTheDocument();
+    expect(screen.getByText("場所: East Hall")).toBeInTheDocument();
+    expect(screen.getByText("詳細: AP の近くで遅延増加")).toBeInTheDocument();
+
+    const [editButton] = screen.getAllByRole("button", { name: "編集" });
+    if (!editButton) {
+      throw new Error("edit button not found");
+    }
+    fireEvent.click(editButton);
+
+    expect(
+      await screen.findByText("同帯域の既存構成: Backup 5G (standby)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("5GHz の control link は AP-9000 を優先し混雑を避ける"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("AP-9000: DFS 切替で瞬断しやすい"),
+    ).toBeInTheDocument();
+  });
+
+  it("team viewer は閲覧専用 UI となり private 情報と編集導線を表示しない", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+      createOtherTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Alpha" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "この画面は閲覧専用です。編集 UI は自チーム editor または運営者にのみ表示されます。",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新しい WiFi 構成を追加" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Ping 監視先: 192.168.10.1"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("private wifi note")).not.toBeInTheDocument();
+  });
+
+  it("WiFi 構成追加フォームで必須入力エラーを表示する", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Alpha" }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "新しい WiFi 構成を追加" }),
+      );
+    });
+
+    const nameInput = await screen.findByLabelText("構成名");
+    const form = nameInput.closest("form");
     const saveButton = form?.querySelector('button[type="submit"]');
 
-    if (!(saveButton instanceof HTMLButtonElement)) {
-      throw new Error('wifi config save button not found');
+    if (
+      !(form instanceof HTMLFormElement) ||
+      !(saveButton instanceof HTMLButtonElement)
+    ) {
+      throw new Error("wifi config form not found");
     }
 
     await act(async () => {
-      fireEvent.change(nameInput, { target: { value: `Status ${status} Config` } });
       fireEvent.click(saveButton);
     });
 
-    expect(await screen.findByText('API request failed')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+    expect(within(form).getByText(/at least 1 character/i)).toBeInTheDocument();
   });
 
-  it('自チーム詳細から local pending 報告詳細へ遷移できる', async () => {
+  it("WiFi 構成追加フォームで帯域とチャンネル整合性エラーを表示する", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Alpha" }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "新しい WiFi 構成を追加" }),
+      );
+    });
+
+    const nameInput = await screen.findByLabelText("構成名");
+    const channelInput = screen.getByLabelText("チャンネル");
+    const form = nameInput.closest("form");
+    const saveButton = form?.querySelector('button[type="submit"]');
+
+    if (
+      !(form instanceof HTMLFormElement) ||
+      !(saveButton instanceof HTMLButtonElement)
+    ) {
+      throw new Error("wifi config form not found");
+    }
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: "Invalid Config" } });
+      fireEvent.change(channelInput, { target: { value: "999" } });
+      fireEvent.click(saveButton);
+    });
+
+    expect(
+      await within(form).findByText("帯域 5GHz に対して無効なチャンネルです"),
+    ).toBeInTheDocument();
+  });
+
+  it("WiFi 構成追加フォームで最大 3 件制約エラーを表示する", async () => {
+    const responses = createOwnTeamDetailResponses();
+    responses[`/api/teams/${ownTeamId}/wifi-configs`] = {
+      status: 200,
+      body: [
+        ...(getRequiredResponse(
+          responses,
+          `/api/teams/${ownTeamId}/wifi-configs`,
+        ).body as Array<unknown>),
+        {
+          id: "00000000-0000-4000-8000-000000000023",
+          teamId: ownTeamId,
+          name: "Driver Station 6G",
+          purpose: "video",
+          band: "6GHz",
+          channel: 37,
+          channelWidthMHz: 80,
+          role: "primary",
+          status: "active",
+          apDeviceId: ownApId,
+          clientDeviceId: ownClientId,
+          expectedDistanceCategory: "far",
+          pingTargetIp: null,
+          notes: null,
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
+        },
+      ],
+    };
+
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, responses);
+
+    expect(
+      await screen.findByRole("heading", { name: "Alpha" }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "新しい WiFi 構成を追加" }),
+      );
+    });
+
+    const nameInput = await screen.findByLabelText("構成名");
+    const form = nameInput.closest("form");
+    const saveButton = form?.querySelector('button[type="submit"]');
+
+    if (!(saveButton instanceof HTMLButtonElement)) {
+      throw new Error("wifi config save button not found");
+    }
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: "Fourth Config" } });
+      fireEvent.click(saveButton);
+    });
+
+    expect(
+      screen.getByText("WiFi 構成は最大 3 件までです"),
+    ).toBeInTheDocument();
+  });
+
+  it.each([400, 401, 403, 409, 422])(
+    "WiFi 構成フォームは API %s 応答でもクラッシュせずエラーを表示する",
+    async (status) => {
+      const responses = createOwnTeamDetailResponses();
+
+      renderRoute(
+        `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+        responses,
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const path = url.replace("http://localhost:3000", "");
+
+          if (
+            path === `/api/teams/${ownTeamId}/wifi-configs` &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse(
+              { error: { code: "API_ERROR", message: `status ${status}` } },
+              status,
+            );
+          }
+
+          const matched = responses[path];
+
+          if (!matched) {
+            throw new Error(`Unhandled fetch: ${path}`);
+          }
+
+          return jsonResponse(matched.body, matched.status);
+        },
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: "Alpha" }),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "新しい WiFi 構成を追加" }),
+        );
+      });
+
+      const nameInput = await screen.findByLabelText("構成名");
+      const form = nameInput.closest("form");
+      const saveButton = form?.querySelector('button[type="submit"]');
+
+      if (!(saveButton instanceof HTMLButtonElement)) {
+        throw new Error("wifi config save button not found");
+      }
+
+      await act(async () => {
+        fireEvent.change(nameInput, {
+          target: { value: `Status ${status} Config` },
+        });
+        fireEvent.click(saveButton);
+      });
+
+      expect(await screen.findByText("API request failed")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Alpha" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("自チーム詳細から local pending 報告詳細へ遷移できる", async () => {
     const record = await queueIssueReportSync(tournamentId, {
       teamId: ownTeamId,
       wifiConfigId: ownWifiId,
-      visibility: 'team_private',
-      symptom: 'high_latency',
-      severity: 'high',
-      band: '5GHz',
+      visibility: "team_private",
+      symptom: "high_latency",
+      severity: "high",
+      band: "5GHz",
       channel: 36,
-      description: 'offline sync from team detail',
+      description: "offline sync from team detail",
     });
 
     await updateSyncRecordAfterAttempt(record.id, {
-      status: 'failed',
-      errorMessage: 'network error',
+      status: "failed",
+      errorMessage: "network error",
     });
 
     renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, {
       ...createOwnTeamDetailResponses(),
       [`/api/issue-reports/${record.entityId}`]: {
         status: 404,
-        body: { error: { code: 'NOT_FOUND', message: 'not found' } },
+        body: { error: { code: "NOT_FOUND", message: "not found" } },
       },
     });
 
-    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
-    expect(await screen.findByText('offline sync from team detail')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('link', { name: '未同期報告を開く' }));
-
-    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
-    expect(screen.getByText('failed')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('offline sync from team detail')).toBeInTheDocument();
-  });
-
-  it('ベストプラクティス画面は用途候補で絞り込み、不一致なら空表示になる', async () => {
-    renderRoute(`/tournaments/${tournamentId}/best-practices`, createOwnTeamDetailResponses());
-
     expect(
-      await screen.findByRole('heading', { name: 'Spring Cup ベストプラクティス' }),
+      await screen.findByRole("heading", { name: "Alpha" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("offline sync from team detail"),
     ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('用途フィルタ'), { target: { value: 'video' } });
+    fireEvent.click(screen.getByRole("link", { name: "未同期報告を開く" }));
 
-    expect(screen.getByText('条件に一致するベストプラクティスはありません。')).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "不具合報告詳細" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue("offline sync from team detail"),
+    ).toBeInTheDocument();
   });
 
-  it('他チーム詳細では team_public の公開サマリのみ表示する', async () => {
+  it("ベストプラクティス画面は用途候補で絞り込み、不一致なら空表示になる", async () => {
+    renderRoute(
+      `/tournaments/${tournamentId}/best-practices`,
+      createOwnTeamDetailResponses(),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Spring Cup ベストプラクティス",
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("用途フィルタ"), {
+      target: { value: "video" },
+    });
+
+    expect(
+      screen.getByText("条件に一致するベストプラクティスはありません。"),
+    ).toBeInTheDocument();
+  });
+
+  it("他チーム詳細では team_public の公開サマリのみ表示する", async () => {
     renderRoute(
       `/tournaments/${tournamentId}/teams/${ownTeamId}`,
       createOtherTeamDetailResponses(),
     );
 
-    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
-    expect(screen.getByText('公開サマリのみ表示しています。')).toBeInTheDocument();
-    expect(screen.getByText('unstable / medium')).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Alpha" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("公開サマリのみ表示しています。"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("unstable / medium")).toBeInTheDocument();
     expect(screen.queryByText(/報告者:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/場所:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/詳細:/)).not.toBeInTheDocument();

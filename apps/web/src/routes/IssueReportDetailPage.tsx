@@ -13,25 +13,25 @@ import {
   Textarea,
   TextInput,
   Title,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import { useForm } from '@tanstack/react-form';
-import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useForm } from "@tanstack/react-form";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   DISTANCE_CATEGORIES,
   ISSUE_REPORT_VISIBILITIES,
   MITIGATIONS,
   REPRODUCIBILITIES,
-} from '@wifiman/shared';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { apiClient, type IssueReportView } from '../lib/api/client.js';
-import { canEditTeamResources } from '../lib/authz.js';
+} from "@wifiman/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { apiClient, type IssueReportView } from "../lib/api/client.js";
+import { canEditTeamResources } from "../lib/authz.js";
 import {
   findIssueReportSyncRecord,
   updateIssueReportSyncPayload,
   updateSyncRecordAfterAttempt,
-} from '../lib/db/appDb.js';
+} from "../lib/db/appDb.js";
 import {
   applyIssueReportPatchToCreatePayload,
   buildIssueReportPatchFormValues,
@@ -39,45 +39,64 @@ import {
   type IssueReportPatchFormValues,
   issueReportPatchFormSchema,
   toValidatedIssueReportPatchInput,
-} from '../lib/issueReportForm.js';
-import { createTanStackFormZodHelpers, getSubmitErrorMessage } from '../lib/tanstackFormZod.js';
-import { useAuthSession } from '../lib/useAuthSession.js';
-import { useIssueReport, useUpdateIssueReportMutation } from '../lib/useTeamManagement.js';
+} from "../lib/issueReportForm.js";
+import {
+  createTanStackFormZodHelpers,
+  getSubmitErrorMessage,
+} from "../lib/tanstackFormZod.js";
+import { useAuthSession } from "../lib/useAuthSession.js";
+import {
+  useIssueReport,
+  useUpdateIssueReportMutation,
+} from "../lib/useTeamManagement.js";
 
 type IssueReportDetailPageProps = {
   tournamentId: string;
   issueReportId: string;
 };
 
-export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueReportDetailPageProps) {
+export function IssueReportDetailPage({
+  tournamentId,
+  issueReportId,
+}: IssueReportDetailPageProps) {
   const navigate = useNavigate();
   const { data: session } = useAuthSession();
   const issueReportQuery = useIssueReport(issueReportId);
   const localSyncQuery = useQuery({
-    queryKey: ['local-sync', 'issue-report', issueReportId],
+    queryKey: ["local-sync", "issue-report", issueReportId],
     queryFn: () => findIssueReportSyncRecord(issueReportId),
     retry: false,
   });
-  const updateIssueReportMutation = useUpdateIssueReportMutation(issueReportId, tournamentId);
+  const updateIssueReportMutation = useUpdateIssueReportMutation(
+    issueReportId,
+    tournamentId,
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const submitModeRef = useRef<'save' | 'resend'>('save');
+  const submitModeRef = useRef<"save" | "resend">("save");
   const zodFormHelpers = useMemo(
     () =>
       createTanStackFormZodHelpers(
         issueReportPatchFormSchema,
         setSubmitError,
-        '報告の更新に失敗しました',
+        "報告の更新に失敗しました",
       ),
     [],
   );
   const resolvedReport = issueReportQuery.data ?? null;
   const localRecord = localSyncQuery.data;
 
-  const effectiveTeamId = resolvedReport?.teamId ?? localRecord?.payload.teamId ?? '';
-  const canEdit = Boolean(effectiveTeamId && canEditTeamResources(session, effectiveTeamId));
-  const syncStatus = localRecord?.status ?? 'server_synced';
+  const effectiveTeamId =
+    resolvedReport?.teamId ?? localRecord?.payload.teamId ?? "";
+  const canEdit = Boolean(
+    effectiveTeamId && canEditTeamResources(session, effectiveTeamId),
+  );
+  const syncStatus = localRecord?.status ?? "server_synced";
   const syncBadgeColor =
-    syncStatus === 'failed' ? 'red' : syncStatus === 'pending' ? 'orange' : 'teal';
+    syncStatus === "failed"
+      ? "red"
+      : syncStatus === "pending"
+        ? "orange"
+        : "teal";
   const sourcePayload = localRecord?.payload;
   const displayReport = useMemo(() => {
     if (resolvedReport) {
@@ -94,8 +113,8 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
       teamId: sourcePayload.teamId ?? null,
       wifiConfigId: sourcePayload.wifiConfigId ?? null,
       reporterName: sourcePayload.reporterName ?? null,
-      visibility: sourcePayload.visibility ?? 'team_private',
-      band: sourcePayload.band ?? '5GHz',
+      visibility: sourcePayload.visibility ?? "team_private",
+      band: sourcePayload.band ?? "5GHz",
       channel: sourcePayload.channel ?? 0,
       channelWidthMHz: sourcePayload.channelWidthMHz ?? null,
       symptom: sourcePayload.symptom,
@@ -127,13 +146,13 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
       zodFormHelpers.clearSubmitError();
       const patch = toValidatedIssueReportPatchInput(value);
 
-      if (submitModeRef.current === 'resend') {
+      if (submitModeRef.current === "resend") {
         if (!localRecord) {
           return;
         }
 
         await updateSyncRecordAfterAttempt(localRecord.id, {
-          status: 'processing',
+          status: "processing",
         });
 
         try {
@@ -143,24 +162,26 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
           );
 
           await updateSyncRecordAfterAttempt(localRecord.id, {
-            status: 'done',
+            status: "done",
             entityId: created.id,
           });
 
           notifications.show({
-            color: 'teal',
-            title: '再送しました',
-            message: '同期状態を更新しました。',
+            color: "teal",
+            title: "再送しました",
+            message: "同期状態を更新しました。",
           });
 
-          await navigate({ to: `/tournaments/${tournamentId}/issue-reports/${created.id}` });
+          await navigate({
+            to: `/tournaments/${tournamentId}/issue-reports/${created.id}`,
+          });
           return;
         } catch (error) {
           await updateSyncRecordAfterAttempt(localRecord.id, {
-            status: 'failed',
-            errorMessage: getSubmitErrorMessage(error, 'failed to resend'),
+            status: "failed",
+            errorMessage: getSubmitErrorMessage(error, "failed to resend"),
           });
-          setSubmitError(getSubmitErrorMessage(error, '再送に失敗しました'));
+          setSubmitError(getSubmitErrorMessage(error, "再送に失敗しました"));
           return;
         }
       }
@@ -173,12 +194,16 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
         }
 
         notifications.show({
-          color: 'teal',
-          title: '報告を更新しました',
-          message: localRecord ? 'ローカル保存内容を更新しました。' : '追記内容を保存しました。',
+          color: "teal",
+          title: "報告を更新しました",
+          message: localRecord
+            ? "ローカル保存内容を更新しました。"
+            : "追記内容を保存しました。",
         });
       } catch (error) {
-        setSubmitError(getSubmitErrorMessage(error, '報告の更新に失敗しました'));
+        setSubmitError(
+          getSubmitErrorMessage(error, "報告の更新に失敗しました"),
+        );
       }
     },
   });
@@ -211,7 +236,9 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
         <Group justify='space-between' align='flex-start'>
           <div>
             <Title order={2}>不具合報告詳細</Title>
-            <Text c='dimmed'>同期状態、公開範囲、追記内容をここで確認・更新します。</Text>
+            <Text c='dimmed'>
+              同期状態、公開範囲、追記内容をここで確認・更新します。
+            </Text>
           </div>
           <Button
             component={Link}
@@ -244,10 +271,18 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
 
         <Group grow align='flex-start'>
           <TextInput label='帯域' value={displayReport.band} readOnly />
-          <TextInput label='チャンネル' value={String(displayReport.channel)} readOnly />
+          <TextInput
+            label='チャンネル'
+            value={String(displayReport.channel)}
+            readOnly
+          />
           <TextInput
             label='帯域幅 (MHz)'
-            value={displayReport.channelWidthMHz ? String(displayReport.channelWidthMHz) : ''}
+            value={
+              displayReport.channelWidthMHz
+                ? String(displayReport.channelWidthMHz)
+                : ""
+            }
             readOnly
           />
         </Group>
@@ -266,7 +301,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
             })}
           >
             {({ values, isSubmitting }) => {
-              const handleFieldChange = <T,>(handleChange: (value: T) => void, nextValue: T) => {
+              const handleFieldChange = <T,>(
+                handleChange: (value: T) => void,
+                nextValue: T,
+              ) => {
                 zodFormHelpers.clearSubmitError();
                 handleChange(nextValue);
               };
@@ -276,7 +314,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                   <Group grow align='flex-start'>
                     <form.Field
                       name='visibility'
-                      validators={{ onSubmit: zodFormHelpers.getFieldValidator('visibility') }}
+                      validators={{
+                        onSubmit:
+                          zodFormHelpers.getFieldValidator("visibility"),
+                      }}
                     >
                       {(field) => (
                         <NativeSelect
@@ -290,7 +331,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                           }))}
                           onBlur={field.handleBlur}
                           onChange={(event) => {
-                            handleFieldChange(field.handleChange, event.currentTarget.value);
+                            handleFieldChange(
+                              field.handleChange,
+                              event.currentTarget.value,
+                            );
                           }}
                         />
                       )}
@@ -299,8 +343,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     <form.Field
                       name='reporterName'
                       validators={{
-                        onChange: zodFormHelpers.getFieldValidator('reporterName'),
-                        onSubmit: zodFormHelpers.getFieldValidator('reporterName'),
+                        onChange:
+                          zodFormHelpers.getFieldValidator("reporterName"),
+                        onSubmit:
+                          zodFormHelpers.getFieldValidator("reporterName"),
                       }}
                     >
                       {(field) => (
@@ -311,7 +357,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                           disabled={!canEdit}
                           onBlur={field.handleBlur}
                           onChange={(event) => {
-                            handleFieldChange(field.handleChange, event.currentTarget.value);
+                            handleFieldChange(
+                              field.handleChange,
+                              event.currentTarget.value,
+                            );
                           }}
                         />
                       )}
@@ -322,8 +371,8 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     <form.Field
                       name='avgPingMs'
                       validators={{
-                        onChange: zodFormHelpers.getFieldValidator('avgPingMs'),
-                        onSubmit: zodFormHelpers.getFieldValidator('avgPingMs'),
+                        onChange: zodFormHelpers.getFieldValidator("avgPingMs"),
+                        onSubmit: zodFormHelpers.getFieldValidator("avgPingMs"),
                       }}
                     >
                       {(field) => (
@@ -337,7 +386,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                           onChange={(value) => {
                             handleFieldChange(
                               field.handleChange,
-                              typeof value === 'number' ? value : '',
+                              typeof value === "number" ? value : "",
                             );
                           }}
                         />
@@ -347,8 +396,8 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     <form.Field
                       name='maxPingMs'
                       validators={{
-                        onChange: zodFormHelpers.getFieldValidator('maxPingMs'),
-                        onSubmit: zodFormHelpers.getFieldValidator('maxPingMs'),
+                        onChange: zodFormHelpers.getFieldValidator("maxPingMs"),
+                        onSubmit: zodFormHelpers.getFieldValidator("maxPingMs"),
                       }}
                     >
                       {(field) => (
@@ -362,7 +411,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                           onChange={(value) => {
                             handleFieldChange(
                               field.handleChange,
-                              typeof value === 'number' ? value : '',
+                              typeof value === "number" ? value : "",
                             );
                           }}
                         />
@@ -372,8 +421,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     <form.Field
                       name='packetLossPercent'
                       validators={{
-                        onChange: zodFormHelpers.getFieldValidator('packetLossPercent'),
-                        onSubmit: zodFormHelpers.getFieldValidator('packetLossPercent'),
+                        onChange:
+                          zodFormHelpers.getFieldValidator("packetLossPercent"),
+                        onSubmit:
+                          zodFormHelpers.getFieldValidator("packetLossPercent"),
                       }}
                     >
                       {(field) => (
@@ -388,7 +439,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                           onChange={(value) => {
                             handleFieldChange(
                               field.handleChange,
-                              typeof value === 'number' ? value : '',
+                              typeof value === "number" ? value : "",
                             );
                           }}
                         />
@@ -400,8 +451,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     <form.Field
                       name='distanceCategory'
                       validators={{
-                        onChange: zodFormHelpers.getFieldValidator('distanceCategory'),
-                        onSubmit: zodFormHelpers.getFieldValidator('distanceCategory'),
+                        onChange:
+                          zodFormHelpers.getFieldValidator("distanceCategory"),
+                        onSubmit:
+                          zodFormHelpers.getFieldValidator("distanceCategory"),
                       }}
                     >
                       {(field) => (
@@ -411,12 +464,18 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                           value={field.state.value}
                           error={field.state.meta.errors[0]}
                           data={[
-                            { value: '', label: '未選択' },
-                            ...DISTANCE_CATEGORIES.map((entry) => ({ value: entry, label: entry })),
+                            { value: "", label: "未選択" },
+                            ...DISTANCE_CATEGORIES.map((entry) => ({
+                              value: entry,
+                              label: entry,
+                            })),
                           ]}
                           onBlur={field.handleBlur}
                           onChange={(event) => {
-                            handleFieldChange(field.handleChange, event.currentTarget.value);
+                            handleFieldChange(
+                              field.handleChange,
+                              event.currentTarget.value,
+                            );
                           }}
                         />
                       )}
@@ -425,8 +484,12 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     <form.Field
                       name='estimatedDistanceMeters'
                       validators={{
-                        onChange: zodFormHelpers.getFieldValidator('estimatedDistanceMeters'),
-                        onSubmit: zodFormHelpers.getFieldValidator('estimatedDistanceMeters'),
+                        onChange: zodFormHelpers.getFieldValidator(
+                          "estimatedDistanceMeters",
+                        ),
+                        onSubmit: zodFormHelpers.getFieldValidator(
+                          "estimatedDistanceMeters",
+                        ),
                       }}
                     >
                       {(field) => (
@@ -440,7 +503,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                           onChange={(value) => {
                             handleFieldChange(
                               field.handleChange,
-                              typeof value === 'number' ? value : '',
+                              typeof value === "number" ? value : "",
                             );
                           }}
                         />
@@ -450,8 +513,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     <form.Field
                       name='reproducibility'
                       validators={{
-                        onChange: zodFormHelpers.getFieldValidator('reproducibility'),
-                        onSubmit: zodFormHelpers.getFieldValidator('reproducibility'),
+                        onChange:
+                          zodFormHelpers.getFieldValidator("reproducibility"),
+                        onSubmit:
+                          zodFormHelpers.getFieldValidator("reproducibility"),
                       }}
                     >
                       {(field) => (
@@ -461,12 +526,18 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                           value={field.state.value}
                           error={field.state.meta.errors[0]}
                           data={[
-                            { value: '', label: '未選択' },
-                            ...REPRODUCIBILITIES.map((entry) => ({ value: entry, label: entry })),
+                            { value: "", label: "未選択" },
+                            ...REPRODUCIBILITIES.map((entry) => ({
+                              value: entry,
+                              label: entry,
+                            })),
                           ]}
                           onBlur={field.handleBlur}
                           onChange={(event) => {
-                            handleFieldChange(field.handleChange, event.currentTarget.value);
+                            handleFieldChange(
+                              field.handleChange,
+                              event.currentTarget.value,
+                            );
                           }}
                         />
                       )}
@@ -476,8 +547,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                   <form.Field
                     name='locationLabel'
                     validators={{
-                      onChange: zodFormHelpers.getFieldValidator('locationLabel'),
-                      onSubmit: zodFormHelpers.getFieldValidator('locationLabel'),
+                      onChange:
+                        zodFormHelpers.getFieldValidator("locationLabel"),
+                      onSubmit:
+                        zodFormHelpers.getFieldValidator("locationLabel"),
                     }}
                   >
                     {(field) => (
@@ -488,7 +561,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                         disabled={!canEdit}
                         onBlur={field.handleBlur}
                         onChange={(event) => {
-                          handleFieldChange(field.handleChange, event.currentTarget.value);
+                          handleFieldChange(
+                            field.handleChange,
+                            event.currentTarget.value,
+                          );
                         }}
                       />
                     )}
@@ -505,7 +581,12 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                       >
                         <Group mt='xs'>
                           {MITIGATIONS.map((entry) => (
-                            <Checkbox key={entry} value={entry} label={entry} disabled={!canEdit} />
+                            <Checkbox
+                              key={entry}
+                              value={entry}
+                              label={entry}
+                              disabled={!canEdit}
+                            />
                           ))}
                         </Group>
                       </Checkbox.Group>
@@ -520,15 +601,16 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                         value={field.state.value}
                         error={field.state.meta.errors[0]}
                         data={[
-                          { value: '', label: '未選択' },
-                          { value: 'true', label: '改善した' },
-                          { value: 'false', label: '改善しない' },
+                          { value: "", label: "未選択" },
+                          { value: "true", label: "改善した" },
+                          { value: "false", label: "改善しない" },
                         ]}
                         onBlur={field.handleBlur}
                         onChange={(event) => {
                           handleFieldChange(
                             field.handleChange,
-                            event.currentTarget.value as IssueReportPatchFormValues['improved'],
+                            event.currentTarget
+                              .value as IssueReportPatchFormValues["improved"],
                           );
                         }}
                       />
@@ -538,7 +620,9 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                   <form.Field
                     name='attachments'
                     mode='array'
-                    validators={{ onSubmit: zodFormHelpers.getFieldValidator('attachments') }}
+                    validators={{
+                      onSubmit: zodFormHelpers.getFieldValidator("attachments"),
+                    }}
                   >
                     {(field) => (
                       <Stack gap='sm'>
@@ -551,7 +635,9 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                               size='xs'
                               onClick={() => {
                                 zodFormHelpers.clearSubmitError();
-                                field.pushValue(createEmptyIssueReportAttachment());
+                                field.pushValue(
+                                  createEmptyIssueReportAttachment(),
+                                );
                               }}
                             >
                               添付を追加
@@ -566,7 +652,12 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                         ) : null}
 
                         {values.attachments.map((attachment, index) => (
-                          <Card key={attachment.id} withBorder radius='md' padding='md'>
+                          <Card
+                            key={attachment.id}
+                            withBorder
+                            radius='md'
+                            padding='md'
+                          >
                             <Stack gap='sm'>
                               <Group grow align='flex-start'>
                                 <form.Field name={`attachments[${index}].name`}>
@@ -605,7 +696,9 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                               </Group>
 
                               <Group grow align='flex-start'>
-                                <form.Field name={`attachments[${index}].mimeType`}>
+                                <form.Field
+                                  name={`attachments[${index}].mimeType`}
+                                >
                                   {(subField) => (
                                     <TextInput
                                       label={`MIME type ${index + 1}`}
@@ -622,7 +715,9 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                                   )}
                                 </form.Field>
 
-                                <form.Field name={`attachments[${index}].sizeBytes`}>
+                                <form.Field
+                                  name={`attachments[${index}].sizeBytes`}
+                                >
                                   {(subField) => (
                                     <NumberInput
                                       label={`サイズ (bytes) ${index + 1}`}
@@ -633,7 +728,9 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                                       onChange={(value) => {
                                         handleFieldChange(
                                           subField.handleChange,
-                                          typeof value === 'number' ? value : '',
+                                          typeof value === "number"
+                                            ? value
+                                            : "",
                                         );
                                       }}
                                     />
@@ -667,8 +764,8 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                   <form.Field
                     name='description'
                     validators={{
-                      onChange: zodFormHelpers.getFieldValidator('description'),
-                      onSubmit: zodFormHelpers.getFieldValidator('description'),
+                      onChange: zodFormHelpers.getFieldValidator("description"),
+                      onSubmit: zodFormHelpers.getFieldValidator("description"),
                     }}
                   >
                     {(field) => (
@@ -680,7 +777,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                         disabled={!canEdit}
                         onBlur={field.handleBlur}
                         onChange={(event) => {
-                          handleFieldChange(field.handleChange, event.currentTarget.value);
+                          handleFieldChange(
+                            field.handleChange,
+                            event.currentTarget.value,
+                          );
                         }}
                       />
                     )}
@@ -692,9 +792,12 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                         type='submit'
                         color='orange'
                         variant='light'
-                        loading={Boolean(isSubmitting) && submitModeRef.current === 'resend'}
+                        loading={
+                          Boolean(isSubmitting) &&
+                          submitModeRef.current === "resend"
+                        }
                         onClick={() => {
-                          submitModeRef.current = 'resend';
+                          submitModeRef.current = "resend";
                         }}
                       >
                         再送
@@ -703,9 +806,12 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
                     {canEdit ? (
                       <Button
                         type='submit'
-                        loading={Boolean(isSubmitting) && submitModeRef.current === 'save'}
+                        loading={
+                          Boolean(isSubmitting) &&
+                          submitModeRef.current === "save"
+                        }
                         onClick={() => {
-                          submitModeRef.current = 'save';
+                          submitModeRef.current = "save";
                         }}
                       >
                         追記を保存
