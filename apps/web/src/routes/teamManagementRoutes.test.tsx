@@ -1936,21 +1936,24 @@ describe('team management routes', () => {
 
         if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
           capturedCreateBody = JSON.parse(String(init.body)) as Record<string, unknown>;
-          return jsonResponse({
-            id: createdId,
-            tournamentId,
-            teamId: ownTeamId,
-            wifiConfigId: ownWifiId,
-            visibility: 'team_public',
-            symptom: 'high_latency',
-            severity: 'high',
-            band: '5GHz',
-            channel: 36,
-            reporterName: 'Updated Reporter',
-            avgPingMs: 55,
-            createdAt: '2026-04-22T12:00:00.000Z',
-            updatedAt: '2026-04-22T12:00:00.000Z',
-          }, 201);
+          return jsonResponse(
+            {
+              id: createdId,
+              tournamentId,
+              teamId: ownTeamId,
+              wifiConfigId: ownWifiId,
+              visibility: 'team_public',
+              symptom: 'high_latency',
+              severity: 'high',
+              band: '5GHz',
+              channel: 36,
+              reporterName: 'Updated Reporter',
+              avgPingMs: 55,
+              createdAt: '2026-04-22T12:00:00.000Z',
+              updatedAt: '2026-04-22T12:00:00.000Z',
+            },
+            201,
+          );
         }
 
         const matched = responses[path];
@@ -1966,7 +1969,9 @@ describe('team management routes', () => {
     expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('公開範囲'), { target: { value: 'team_public' } });
-    fireEvent.change(screen.getByLabelText('報告者名'), { target: { value: '  Updated Reporter  ' } });
+    fireEvent.change(screen.getByLabelText('報告者名'), {
+      target: { value: '  Updated Reporter  ' },
+    });
     fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '55' } });
     fireEvent.change(screen.getByLabelText('自由記述'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '再送' }));

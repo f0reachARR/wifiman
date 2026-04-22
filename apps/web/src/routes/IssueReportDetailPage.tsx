@@ -15,6 +15,7 @@ import {
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { useForm } from '@tanstack/react-form';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
@@ -24,7 +25,6 @@ import {
   REPRODUCIBILITIES,
 } from '@wifiman/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useForm } from '@tanstack/react-form';
 import { apiClient, type IssueReportView } from '../lib/api/client.js';
 import { canEditTeamResources } from '../lib/authz.js';
 import {
@@ -36,14 +36,11 @@ import {
   applyIssueReportPatchToCreatePayload,
   buildIssueReportPatchFormValues,
   createEmptyIssueReportAttachment,
-  issueReportPatchFormSchema,
   type IssueReportPatchFormValues,
+  issueReportPatchFormSchema,
   toValidatedIssueReportPatchInput,
 } from '../lib/issueReportForm.js';
-import {
-  createTanStackFormZodHelpers,
-  getSubmitErrorMessage,
-} from '../lib/tanstackFormZod.js';
+import { createTanStackFormZodHelpers, getSubmitErrorMessage } from '../lib/tanstackFormZod.js';
 import { useAuthSession } from '../lib/useAuthSession.js';
 import { useIssueReport, useUpdateIssueReportMutation } from '../lib/useTeamManagement.js';
 
