@@ -2,8 +2,8 @@ import { createTheme, MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { type QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { AppRouterProvider } from '../router.js';
 import { useAutoSyncPendingIssueReports } from '../lib/syncEngine.js';
+import { AppRouterProvider } from '../router.js';
 import { PwaLifecycle } from '../ui/PwaLifecycle.js';
 
 const theme = createTheme({

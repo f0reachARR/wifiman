@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildWifiConfigFormValues,
   filterBestPractices,
-  parseObservedWifiCsv,
   parseDeviceSpecFormValues,
+  parseObservedWifiCsv,
   parseTeamFormValues,
   parseWifiConfigFormValues,
 } from './teamManagement.js';

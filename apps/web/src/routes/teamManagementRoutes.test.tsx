@@ -25,8 +25,10 @@ type MockResponse = {
 };
 
 const tournamentId = '00000000-0000-4000-8000-000000000001';
+const secondTournamentId = '00000000-0000-4000-8000-000000000002';
 const ownTeamId = '00000000-0000-4000-8000-000000000011';
 const otherTeamId = '00000000-0000-4000-8000-000000000012';
+const secondTournamentTeamId = '00000000-0000-4000-8000-000000000013';
 const ownWifiId = '00000000-0000-4000-8000-000000000021';
 const ownApId = '00000000-0000-4000-8000-000000000031';
 const ownClientId = '00000000-0000-4000-8000-000000000032';
@@ -368,6 +370,298 @@ function createOperatorResponses(): Record<string, MockResponse> {
     [`/api/tournaments/${tournamentId}/best-practices`]: {
       status: 200,
       body: [],
+    },
+  } satisfies Record<string, MockResponse>;
+}
+
+function createOperatorDashboardResponses(): Record<string, MockResponse> {
+  return {
+    '/api/auth/session': {
+      status: 200,
+      body: operatorSession,
+    },
+    '/api/tournaments': {
+      status: 200,
+      body: [
+        {
+          id: tournamentId,
+          name: 'Spring Cup',
+          venueName: 'Main Hall',
+          startDate: '2026-04-21',
+          endDate: '2026-04-22',
+          description: 'Tournament for testing',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: secondTournamentId,
+          name: 'Autumn Cup',
+          venueName: 'Sub Hall',
+          startDate: '2026-05-01',
+          endDate: '2026-05-02',
+          description: 'Second tournament for dashboard tests',
+          createdAt: '2026-04-10T00:00:00.000Z',
+          updatedAt: '2026-04-10T00:00:00.000Z',
+        },
+      ],
+    },
+    [`/api/tournaments/${tournamentId}/public-overview`]: {
+      status: 200,
+      body: {
+        tournament: {
+          id: tournamentId,
+          name: 'Spring Cup',
+          venueName: 'Main Hall',
+          startDate: '2026-04-21',
+          endDate: '2026-04-22',
+          description: 'Tournament for testing',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        teamCount: 2,
+        wifiConfigSummary: {
+          '2.4GHz': 1,
+          '5GHz': 2,
+          '6GHz': 0,
+        },
+        publicIssueReportCount: 1,
+        noticeCount: 1,
+      },
+    },
+    [`/api/tournaments/${secondTournamentId}/public-overview`]: {
+      status: 200,
+      body: {
+        tournament: {
+          id: secondTournamentId,
+          name: 'Autumn Cup',
+          venueName: 'Sub Hall',
+          startDate: '2026-05-01',
+          endDate: '2026-05-02',
+          description: 'Second tournament for dashboard tests',
+          createdAt: '2026-04-10T00:00:00.000Z',
+          updatedAt: '2026-04-10T00:00:00.000Z',
+        },
+        teamCount: 1,
+        wifiConfigSummary: {
+          '2.4GHz': 0,
+          '5GHz': 1,
+          '6GHz': 3,
+        },
+        publicIssueReportCount: 2,
+        noticeCount: 2,
+      },
+    },
+    [`/api/tournaments/${tournamentId}/notices`]: {
+      status: 200,
+      body: [],
+    },
+    [`/api/tournaments/${secondTournamentId}/notices`]: {
+      status: 200,
+      body: [],
+    },
+    [`/api/tournaments/${tournamentId}/issue-reports`]: {
+      status: 200,
+      body: [
+        {
+          id: '00000000-0000-4000-8000-000000000081',
+          tournamentId,
+          teamId: ownTeamId,
+          wifiConfigId: ownWifiId,
+          visibility: 'team_private',
+          band: '5GHz',
+          channel: 36,
+          channelWidthMHz: 80,
+          symptom: 'high_latency',
+          severity: 'high',
+          createdAt: '2026-04-22T10:00:00.000Z',
+          updatedAt: '2026-04-22T10:00:00.000Z',
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000082',
+          tournamentId,
+          teamId: otherTeamId,
+          wifiConfigId: '00000000-0000-4000-8000-000000000099',
+          visibility: 'team_public',
+          band: '2.4GHz',
+          channel: 6,
+          channelWidthMHz: 20,
+          symptom: 'unstable',
+          severity: 'medium',
+          createdAt: '2026-04-22T11:00:00.000Z',
+          updatedAt: '2026-04-22T11:00:00.000Z',
+        },
+      ],
+    },
+    [`/api/tournaments/${secondTournamentId}/issue-reports`]: {
+      status: 200,
+      body: [
+        {
+          id: '00000000-0000-4000-8000-000000000083',
+          tournamentId: secondTournamentId,
+          teamId: secondTournamentTeamId,
+          wifiConfigId: '00000000-0000-4000-8000-000000000023',
+          visibility: 'team_private',
+          band: '6GHz',
+          channel: 37,
+          channelWidthMHz: 160,
+          symptom: 'disconnect',
+          severity: 'critical',
+          createdAt: '2026-04-23T10:00:00.000Z',
+          updatedAt: '2026-04-23T10:00:00.000Z',
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000084',
+          tournamentId: secondTournamentId,
+          teamId: secondTournamentTeamId,
+          wifiConfigId: '00000000-0000-4000-8000-000000000024',
+          visibility: 'team_private',
+          band: '6GHz',
+          channel: 85,
+          channelWidthMHz: 80,
+          symptom: 'high_latency',
+          severity: 'high',
+          createdAt: '2026-04-23T11:00:00.000Z',
+          updatedAt: '2026-04-23T11:30:00.000Z',
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000085',
+          tournamentId: secondTournamentId,
+          teamId: secondTournamentTeamId,
+          wifiConfigId: '00000000-0000-4000-8000-000000000025',
+          visibility: 'team_public',
+          band: '5GHz',
+          channel: 149,
+          channelWidthMHz: 80,
+          symptom: 'unstable',
+          severity: 'medium',
+          createdAt: '2026-04-23T12:00:00.000Z',
+          updatedAt: '2026-04-23T12:15:00.000Z',
+        },
+      ],
+    },
+    [`/api/tournaments/${tournamentId}/teams`]: {
+      status: 200,
+      body: [
+        {
+          id: ownTeamId,
+          tournamentId,
+          name: 'Alpha',
+          organization: 'A School',
+          pitId: 'P-1',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: otherTeamId,
+          tournamentId,
+          name: 'Beta',
+          organization: 'B School',
+          pitId: 'P-2',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    },
+    [`/api/tournaments/${secondTournamentId}/teams`]: {
+      status: 200,
+      body: [
+        {
+          id: secondTournamentTeamId,
+          tournamentId: secondTournamentId,
+          name: 'Gamma',
+          organization: 'C School',
+          pitId: 'P-9',
+          createdAt: '2026-04-10T00:00:00.000Z',
+          updatedAt: '2026-04-10T00:00:00.000Z',
+        },
+      ],
+    },
+    [`/api/tournaments/${tournamentId}/observed-wifis`]: {
+      status: 200,
+      body: [
+        {
+          id: '00000000-0000-4000-8000-000000000101',
+          tournamentId,
+          source: 'wild',
+          ssid: 'Venue WiFi',
+          bssid: '00:11:22:33:44:55',
+          band: '5GHz',
+          channel: 40,
+          channelWidthMHz: 20,
+          rssi: -68,
+          locationLabel: 'North Hall',
+          observedAt: '2026-04-21T10:00:00.000Z',
+          createdAt: '2026-04-21T10:00:00.000Z',
+          updatedAt: '2026-04-21T10:00:00.000Z',
+        },
+      ],
+    },
+    [`/api/tournaments/${secondTournamentId}/observed-wifis`]: {
+      status: 200,
+      body: [
+        {
+          id: '00000000-0000-4000-8000-000000000102',
+          tournamentId: secondTournamentId,
+          source: 'manual',
+          ssid: 'Sub Hall Analyzer',
+          bssid: '66:77:88:99:AA:BB',
+          band: '6GHz',
+          channel: 37,
+          channelWidthMHz: 80,
+          rssi: -59,
+          locationLabel: 'West Hall',
+          observedAt: '2026-05-01T09:30:00.000Z',
+          createdAt: '2026-05-01T09:30:00.000Z',
+          updatedAt: '2026-05-01T09:30:00.000Z',
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000103',
+          tournamentId: secondTournamentId,
+          source: 'wild',
+          ssid: 'Guest WiFi',
+          bssid: 'CC:DD:EE:FF:00:11',
+          band: '5GHz',
+          channel: 157,
+          channelWidthMHz: 40,
+          rssi: -71,
+          locationLabel: 'Entrance',
+          observedAt: '2026-05-01T10:10:00.000Z',
+          createdAt: '2026-05-01T10:10:00.000Z',
+          updatedAt: '2026-05-01T10:10:00.000Z',
+        },
+      ],
+    },
+    [`/api/teams/${ownTeamId}/team-accesses`]: {
+      status: 200,
+      body: [
+        {
+          id: '00000000-0000-4000-8000-000000000201',
+          teamId: ownTeamId,
+          email: 'alpha-access@example.com',
+          issuedAt: '2026-04-20T09:00:00.000Z',
+          lastUsedAt: '2026-04-22T09:30:00.000Z',
+          revokedAt: null,
+          role: 'editor',
+          createdAt: '2026-04-20T09:00:00.000Z',
+          updatedAt: '2026-04-22T09:30:00.000Z',
+        },
+      ],
+    },
+    [`/api/teams/${secondTournamentTeamId}/team-accesses`]: {
+      status: 200,
+      body: [
+        {
+          id: '00000000-0000-4000-8000-000000000202',
+          teamId: secondTournamentTeamId,
+          email: 'gamma-access@example.com',
+          issuedAt: '2026-05-01T08:00:00.000Z',
+          lastUsedAt: '2026-05-01T08:30:00.000Z',
+          revokedAt: null,
+          role: 'viewer',
+          createdAt: '2026-05-01T08:00:00.000Z',
+          updatedAt: '2026-05-01T08:30:00.000Z',
+        },
+      ],
     },
   } satisfies Record<string, MockResponse>;
 }
@@ -1053,7 +1347,7 @@ describe('team management routes', () => {
     fireEvent.click(screen.getByRole('link', { name: '詳細を開く' }));
 
     expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
-    expect(screen.getByText('pending')).toBeInTheDocument();
+    expect(screen.getByText('同期状態')).toBeInTheDocument();
     expect(screen.getByDisplayValue('offline sync from sync page')).toBeInTheDocument();
   });
 
@@ -1063,6 +1357,81 @@ describe('team management routes', () => {
     expect(await screen.findByRole('heading', { name: 'WiFiMan Web' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/');
     expect(screen.queryByRole('heading', { name: '同期状況' })).not.toBeInTheDocument();
+  });
+
+  it('operator dashboard で大会切替時に集計と team access 対象を切り替える', async () => {
+    renderRoute('/app', createOperatorDashboardResponses());
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+    expect(await screen.findByText('2.4GHz 1 / 5GHz 2 / 6GHz 0')).toBeInTheDocument();
+    expect(screen.getByText('total reports 2')).toBeInTheDocument();
+    expect(await screen.findByText('alpha-access@example.com')).toBeInTheDocument();
+    expect(screen.getByLabelText('チーム選択')).toHaveValue(ownTeamId);
+
+    fireEvent.change(screen.getByLabelText('大会選択'), {
+      target: { value: secondTournamentId },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('チーム選択')).toHaveValue(secondTournamentTeamId);
+    });
+
+    expect(await screen.findByText('2.4GHz 0 / 5GHz 1 / 6GHz 3')).toBeInTheDocument();
+    expect(screen.getByText('total reports 3')).toBeInTheDocument();
+    expect(await screen.findByText('gamma-access@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('alpha-access@example.com')).not.toBeInTheDocument();
+  });
+
+  it('初回マウント時にオンラインなら pending を自動同期する', async () => {
+    const record = await queueIssueReportSync(tournamentId, {
+      teamId: ownTeamId,
+      wifiConfigId: ownWifiId,
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+    });
+
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: true,
+    });
+
+    renderRoute('/', {
+      ...createBaseResponses(null),
+      [`/api/tournaments/${tournamentId}/issue-reports`]: {
+        status: 201,
+        body: {
+          id: '00000000-0000-4000-8000-000000000301',
+          tournamentId,
+          teamId: ownTeamId,
+          wifiConfigId: ownWifiId,
+          visibility: 'team_private',
+          band: '5GHz',
+          channel: 36,
+          symptom: 'high_latency',
+          severity: 'high',
+          createdAt: '2026-04-22T12:00:00.000Z',
+          updatedAt: '2026-04-22T12:00:00.000Z',
+        },
+      },
+    });
+
+    await waitFor(async () => {
+      const synced = await appDb.syncRecords.get(record.id);
+      expect(synced?.status).toBe('done');
+    });
+
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith(`/api/tournaments/${tournamentId}/issue-reports`) &&
+            init?.method === 'POST',
+        ),
+    ).toBe(true);
   });
 
   it('自チームの報告詳細で同期状態と公開範囲を表示し、追記編集できる', async () => {

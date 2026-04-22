@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { ApiClientError, apiClient, apiQueryKeys } from './api/client.js';
 import {
   findIssueReportSyncRecord,
-  listIssueReportSyncRecords,
   type IssueReportSyncRecord,
+  listIssueReportSyncRecords,
   updateSyncRecordAfterAttempt,
 } from './db/appDb.js';
 
@@ -70,7 +70,11 @@ export async function syncIssueReportRecord(recordId: string, queryClient?: Quer
 
 export async function syncPendingIssueReports(queryClient?: QueryClient) {
   const records = await listIssueReportSyncRecords({ statuses: ['pending'] });
-  const results = await Promise.all(records.map((record) => syncIssueReportRecordInternal(record)));
+  const results = [];
+
+  for (const record of records) {
+    results.push(await syncIssueReportRecordInternal(record));
+  }
 
   await invalidateSyncQueries(queryClient);
 
@@ -96,18 +100,23 @@ export async function syncPendingIssueReports(queryClient?: QueryClient) {
   );
 }
 
+export async function flushPendingIssueReportsIfOnline(queryClient?: QueryClient) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return undefined;
+  }
+
+  return syncPendingIssueReports(queryClient);
+}
+
 export function useAutoSyncPendingIssueReports() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
     const run = () => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        return;
-      }
-
-      void syncPendingIssueReports(queryClient);
+      void flushPendingIssueReportsIfOnline(queryClient);
     };
 
+    run();
     window.addEventListener('online', run);
 
     return () => {

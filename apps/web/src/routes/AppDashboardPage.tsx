@@ -11,8 +11,8 @@ import {
   Stack,
   Table,
   Text,
-  TextInput,
   Textarea,
+  TextInput,
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -40,8 +40,8 @@ import {
   useTournamentIssueReports,
   useTournamentNotices,
   useTournamentPublicOverview,
-  useTournamentTeams,
   useTournaments,
+  useTournamentTeams,
   useUpdateNoticeMutation,
 } from '../lib/useTeamManagement.js';
 
@@ -185,11 +185,20 @@ export function AppDashboardPage() {
   const teamAccessesQuery = useTeamAccesses(selectedTeamId);
 
   useEffect(() => {
-    if (selectedTeamId || (teamsQuery.data?.length ?? 0) === 0) {
+    const teams = teamsQuery.data ?? [];
+
+    if (teams.length === 0) {
+      if (selectedTeamId) {
+        setSelectedTeamId('');
+      }
       return;
     }
 
-    setSelectedTeamId(teamsQuery.data?.[0]?.id ?? '');
+    if (teams.some((team) => team.id === selectedTeamId)) {
+      return;
+    }
+
+    setSelectedTeamId(teams[0]?.id ?? '');
   }, [selectedTeamId, teamsQuery.data]);
 
   const createObservedWifiMutation = useCreateObservedWifiMutation(selectedTournamentId);
@@ -220,6 +229,9 @@ export function AppDashboardPage() {
   const selectedTournament = tournamentsQuery.data?.find(
     (tournament) => tournament.id === selectedTournamentId,
   );
+  const bandSummary = overviewQuery.data?.wifiConfigSummary;
+  const bandSummaryText = `2.4GHz ${bandSummary?.['2.4GHz'] ?? 0} / 5GHz ${bandSummary?.['5GHz'] ?? 0} / 6GHz ${bandSummary?.['6GHz'] ?? 0}`;
+  const issueReportCount = issueReportsQuery.data?.length ?? 0;
 
   const handleObservedWifiSubmit = async () => {
     setObservedWifiError(null);
@@ -430,7 +442,7 @@ export function AppDashboardPage() {
       </Card>
 
       <Grid>
-        <Grid.Col span={{ base: 12, md: 3 }}>
+        <Grid.Col span={{ base: 12, sm: 6, xl: 2 }}>
           <Card className='feature-card' padding='lg' radius='xl'>
             <Text size='sm' c='dimmed'>
               Teams
@@ -438,7 +450,15 @@ export function AppDashboardPage() {
             <Title order={3}>{overviewQuery.data?.teamCount ?? 0}</Title>
           </Card>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 3 }}>
+        <Grid.Col span={{ base: 12, sm: 6, xl: 2 }}>
+          <Card className='feature-card' padding='lg' radius='xl'>
+            <Text size='sm' c='dimmed'>
+              Band Summary
+            </Text>
+            <Text fw={700}>{bandSummaryText}</Text>
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 6, xl: 2 }}>
           <Card className='feature-card' padding='lg' radius='xl'>
             <Text size='sm' c='dimmed'>
               Observed WiFi
@@ -446,7 +466,18 @@ export function AppDashboardPage() {
             <Title order={3}>{observedWifisQuery.data?.length ?? 0}</Title>
           </Card>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 3 }}>
+        <Grid.Col span={{ base: 12, sm: 6, xl: 2 }}>
+          <Card className='feature-card' padding='lg' radius='xl'>
+            <Text size='sm' c='dimmed'>
+              Issue Reports
+            </Text>
+            <Title order={3}>{issueReportCount}</Title>
+            <Text size='sm' c='dimmed'>
+              total reports {issueReportCount}
+            </Text>
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 6, xl: 2 }}>
           <Card className='feature-card' padding='lg' radius='xl'>
             <Text size='sm' c='dimmed'>
               Notices
@@ -454,7 +485,7 @@ export function AppDashboardPage() {
             <Title order={3}>{overviewQuery.data?.noticeCount ?? 0}</Title>
           </Card>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 3 }}>
+        <Grid.Col span={{ base: 12, sm: 6, xl: 2 }}>
           <Card className='feature-card' padding='lg' radius='xl'>
             <Text size='sm' c='dimmed'>
               Pending Sync
