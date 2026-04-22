@@ -100,4 +100,35 @@ describe('team management validation', () => {
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.title).toBe('5GHz control guidance');
   });
+
+  it('用途フィルタは用途候補分類に基づいて厳密に絞り込む', () => {
+    const filtered = filterBestPractices(
+      [
+        {
+          id: '00000000-0000-4000-8000-000000000061',
+          tournamentId: '00000000-0000-4000-8000-000000000001',
+          title: 'Controller uplink tuning',
+          body: 'Control link 用の AP-9000 設定を優先する',
+          scope: 'band',
+          targetBand: '5GHz',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000062',
+          tournamentId: '00000000-0000-4000-8000-000000000001',
+          title: 'Video relay tuning',
+          body: 'Video stream 用のチャネル幅を維持する',
+          scope: 'band',
+          targetBand: '5GHz',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+      { band: '5GHz', purpose: 'control' },
+    );
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.title).toBe('Controller uplink tuning');
+  });
 });

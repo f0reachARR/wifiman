@@ -118,14 +118,59 @@ export async function updateSyncRecordAfterAttempt(recordId: string, update: Syn
   });
 }
 
-export async function findIssueReportSyncRecordByEntityId(entityId: string) {
-  const record = await appDb.syncRecords.where('entityId').equals(entityId).first();
-
+function asIssueReportSyncRecord(record?: SyncRecordEntry) {
   if (!record || record.entityType !== 'issue-report' || !record.payload) {
     return null;
   }
 
   return record as IssueReportSyncRecord;
+}
+
+type ListIssueReportSyncRecordOptions = {
+  tournamentId?: string;
+  teamId?: string;
+  statuses?: ReadonlyArray<SyncRecordStatus>;
+};
+
+export async function listIssueReportSyncRecords(options: ListIssueReportSyncRecordOptions = {}) {
+  const records = await appDb.syncRecords.toArray();
+
+  return records
+    .map((record) => asIssueReportSyncRecord(record))
+    .filter((record): record is IssueReportSyncRecord => record != null)
+    .filter((record) => {
+      if (options.tournamentId && record.tournamentId !== options.tournamentId) {
+        return false;
+      }
+      if (options.teamId && record.payload.teamId !== options.teamId) {
+        return false;
+      }
+      if (options.statuses && !options.statuses.includes(record.status)) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+export async function findIssueReportSyncRecord(identifier: string) {
+  const record = await appDb.syncRecords.get(identifier);
+  const directMatch = asIssueReportSyncRecord(record);
+
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const byEntityId = await appDb.syncRecords.where('entityId').equals(identifier).first();
+
+  return asIssueReportSyncRecord(byEntityId);
+}
+
+export async function findIssueReportSyncRecordByEntityId(entityId: string) {
+  const record = await findIssueReportSyncRecord(entityId);
+
+  return record;
 }
 
 export async function updateIssueReportSyncPayload(

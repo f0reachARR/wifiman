@@ -2,7 +2,9 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   appDb,
+  findIssueReportSyncRecord,
   getSyncOverview,
+  listIssueReportSyncRecords,
   queueIssueReportSync,
   updateSyncRecordAfterAttempt,
 } from './appDb.js';
@@ -130,6 +132,59 @@ describe('AppDatabase', () => {
       status: 'done',
       errorMessage: undefined,
       lastAttemptAt: '2026-04-22T12:06:00.000Z',
+    });
+  });
+
+  it('不具合報告の同期レコードを teamId と status で一覧取得できる', async () => {
+    await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+    });
+    const otherRecord = await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000099',
+      wifiConfigId: '00000000-0000-4000-8000-000000000098',
+      visibility: 'team_public',
+      symptom: 'unstable',
+      severity: 'medium',
+      band: '5GHz',
+      channel: 149,
+    });
+
+    await updateSyncRecordAfterAttempt(otherRecord.id, {
+      status: 'failed',
+      errorMessage: 'network error',
+    });
+
+    await expect(
+      listIssueReportSyncRecords({
+        tournamentId: '00000000-0000-4000-8000-000000000001',
+        teamId: '00000000-0000-4000-8000-000000000011',
+        statuses: ['pending', 'processing', 'failed'],
+      }),
+    ).resolves.toHaveLength(1);
+  });
+
+  it('不具合報告の同期レコードを entityId または recordId で取得できる', async () => {
+    const record = await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+    });
+
+    await expect(findIssueReportSyncRecord(record.entityId)).resolves.toMatchObject({
+      id: record.id,
+    });
+    await expect(findIssueReportSyncRecord(record.id)).resolves.toMatchObject({
+      entityId: record.entityId,
     });
   });
 });

@@ -21,7 +21,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiClient, type IssueReportCreateInput, type IssueReportView } from '../lib/api/client.js';
 import { canEditTeamResources } from '../lib/authz.js';
 import {
-  findIssueReportSyncRecordByEntityId,
+  findIssueReportSyncRecord,
   updateIssueReportSyncPayload,
   updateSyncRecordAfterAttempt,
 } from '../lib/db/appDb.js';
@@ -96,7 +96,7 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
   const issueReportQuery = useIssueReport(issueReportId);
   const localSyncQuery = useQuery({
     queryKey: ['local-sync', 'issue-report', issueReportId],
-    queryFn: () => findIssueReportSyncRecordByEntityId(issueReportId),
+    queryFn: () => findIssueReportSyncRecord(issueReportId),
     retry: false,
   });
   const updateIssueReportMutation = useUpdateIssueReportMutation(issueReportId, tournamentId);

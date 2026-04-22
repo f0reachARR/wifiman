@@ -15,7 +15,7 @@ import {
 import { Link } from '@tanstack/react-router';
 import { BANDS, type Band, PURPOSES } from '@wifiman/shared';
 import { useMemo, useState } from 'react';
-import { filterBestPractices } from '../lib/teamManagement.js';
+import { filterBestPractices, inferBestPracticePurposes } from '../lib/teamManagement.js';
 import { useTournament, useTournamentBestPractices } from '../lib/useTeamManagement.js';
 
 type BestPracticesPageProps = {
@@ -66,7 +66,7 @@ export function BestPracticesPage({ tournamentId }: BestPracticesPageProps) {
                 Best Practices
               </Text>
               <Title order={1}>{tournamentQuery.data.name} ベストプラクティス</Title>
-              <Text c='dimmed'>帯域・用途キーワード・型番キーワードで参照先を絞り込みます。</Text>
+              <Text c='dimmed'>帯域・用途分類・型番キーワードで参照先を絞り込みます。</Text>
             </div>
             <Button component={Link} to={`/tournaments/${tournamentId}`} variant='subtle'>
               大会トップへ戻る
@@ -102,6 +102,13 @@ export function BestPracticesPage({ tournamentId }: BestPracticesPageProps) {
         {filtered.map((practice) => (
           <Card key={practice.id} className='feature-card' padding='lg' radius='xl'>
             <Stack gap='xs'>
+              <Text size='sm' c='dimmed'>
+                用途候補: {(() => {
+                  const purposeCandidates = inferBestPracticePurposes(practice);
+
+                  return purposeCandidates.length > 0 ? purposeCandidates.join(', ') : '未分類';
+                })()}
+              </Text>
               <Group justify='space-between'>
                 <Title order={4}>{practice.title}</Title>
                 <Badge variant='light'>{practice.scope}</Badge>

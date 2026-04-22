@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { appDb } from '../lib/db/appDb.js';
+import { appDb, queueIssueReportSync, updateSyncRecordAfterAttempt } from '../lib/db/appDb.js';
 
 vi.mock('../lib/betterAuthClient.js', () => ({
   betterAuthClient: {
@@ -707,6 +707,7 @@ describe('team management routes', () => {
     );
 
     expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    expect(screen.getByLabelText('チーム')).toHaveValue('Alpha');
     expect(screen.getByLabelText('構成名')).toHaveValue('Control 5G');
     expect(screen.getByLabelText('帯域')).toHaveValue('5GHz');
     expect(screen.getByLabelText('チャンネル')).toHaveValue('36');
@@ -843,6 +844,36 @@ describe('team management routes', () => {
     });
   });
 
+  it('同期状況画面から local pending 報告詳細へ移動できる', async () => {
+    const record = await queueIssueReportSync(tournamentId, {
+      teamId: ownTeamId,
+      wifiConfigId: ownWifiId,
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+      description: 'offline sync from sync page',
+    });
+
+    renderRoute('/app/sync', {
+      ...createOwnTeamDetailResponses(),
+      [`/api/issue-reports/${record.entityId}`]: {
+        status: 404,
+        body: { error: { code: 'NOT_FOUND', message: 'not found' } },
+      },
+    });
+
+    expect(await screen.findByRole('heading', { name: '同期状況' })).toBeInTheDocument();
+    expect(await screen.findByText('offline sync from sync page')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: '詳細を開く' }));
+
+    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
+    expect(screen.getByText('pending')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('offline sync from sync page')).toBeInTheDocument();
+  });
+
   it('自チームの報告詳細で同期状態と公開範囲を表示し、追記編集できる', async () => {
     const ownResponses = createOwnTeamDetailResponses();
     const issueReports = getRequiredResponse(
@@ -891,6 +922,7 @@ describe('team management routes', () => {
 
     const list = screen.getByRole('list', { name: 'ベストプラクティス一覧' });
     expect(within(list).getByText('5GHz guidance')).toBeInTheDocument();
+    expect(screen.getByText('用途候補: control')).toBeInTheDocument();
   });
 
   it('未認証で保護されたチーム詳細に入ると元 URL を next に保持して login へ遷移する', async () => {
@@ -971,6 +1003,53 @@ describe('team management routes', () => {
       screen.getByText('5GHz の control link は AP-9000 を優先し混雑を避ける'),
     ).toBeInTheDocument();
     expect(screen.getByText('AP-9000: DFS 切替で瞬断しやすい')).toBeInTheDocument();
+  });
+
+  it('自チーム詳細から local pending 報告詳細へ遷移できる', async () => {
+    const record = await queueIssueReportSync(tournamentId, {
+      teamId: ownTeamId,
+      wifiConfigId: ownWifiId,
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+      description: 'offline sync from team detail',
+    });
+
+    await updateSyncRecordAfterAttempt(record.id, {
+      status: 'failed',
+      errorMessage: 'network error',
+    });
+
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, {
+      ...createOwnTeamDetailResponses(),
+      [`/api/issue-reports/${record.entityId}`]: {
+        status: 404,
+        body: { error: { code: 'NOT_FOUND', message: 'not found' } },
+      },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+    expect(await screen.findByText('offline sync from team detail')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: '未同期報告を開く' }));
+
+    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
+    expect(screen.getByText('failed')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('offline sync from team detail')).toBeInTheDocument();
+  });
+
+  it('ベストプラクティス画面は用途候補で絞り込み、不一致なら空表示になる', async () => {
+    renderRoute(`/tournaments/${tournamentId}/best-practices`, createOwnTeamDetailResponses());
+
+    expect(
+      await screen.findByRole('heading', { name: 'Spring Cup ベストプラクティス' }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('用途フィルタ'), { target: { value: 'video' } });
+
+    expect(screen.getByText('条件に一致するベストプラクティスはありません。')).toBeInTheDocument();
   });
 
   it('他チーム詳細では team_public の公開サマリのみ表示する', async () => {

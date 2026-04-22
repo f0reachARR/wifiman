@@ -10,6 +10,8 @@ import {
   isValidChannel,
   isValidChannelWidth,
   MAX_ACTIVE_WIFI_CONFIGS,
+  PURPOSES,
+  type Purpose,
   type UpdateTeam,
   UpdateTeamSchema,
   type WifiConfig,
@@ -269,15 +271,38 @@ export function countActiveWifiConfigs(configs: ReadonlyArray<Pick<WifiConfig, '
     .length;
 }
 
+const PURPOSE_PATTERNS: Record<Purpose, ReadonlyArray<RegExp>> = {
+  control: [/\bcontrol\b/i, /control link/i, /uplink/i, /操縦/i, /制御/i],
+  video: [/\bvideo\b/i, /stream/i, /映像/i, /配信/i],
+  debug: [/\bdebug\b/i, /diagnostic/i, /telemetry/i, /検証/i, /デバッグ/i],
+  other: [/\bother\b/i, /general/i, /misc/i, /その他/i],
+};
+
+export function inferBestPracticePurposes(
+  practice: Pick<BestPractice, 'title' | 'body'>,
+): Purpose[] {
+  const source = `${practice.title}\n${practice.body}`;
+
+  return PURPOSES.filter((purpose) =>
+    PURPOSE_PATTERNS[purpose].some((pattern) => pattern.test(source)),
+  );
+}
+
 export function findRelevantBestPractices(
   bestPractices: ReadonlyArray<BestPractice>,
   band: WifiConfigFormValues['band'],
+  purpose: WifiConfigFormValues['purpose'],
   relatedModels: ReadonlyArray<string>,
 ): BestPractice[] {
   const modelSet = new Set(
     relatedModels.map((model) => model.trim().toLowerCase()).filter(Boolean),
   );
   return bestPractices.filter((practice) => {
+    const purposes = inferBestPracticePurposes(practice);
+
+    if (purposes.length > 0 && !purposes.includes(purpose)) {
+      return false;
+    }
     if (practice.scope === 'general' || practice.scope === 'tournament') {
       return true;
     }
@@ -307,13 +332,15 @@ export function filterBestPractices(
       return false;
     }
 
+    const inferredPurposes = inferBestPracticePurposes(practice);
+
+    if (purpose && !inferredPurposes.includes(purpose as Purpose)) {
+      return false;
+    }
+
     const searchable = [practice.title, practice.body, practice.targetModel ?? '']
       .join(' ')
       .toLowerCase();
-
-    if (purpose && !searchable.includes(purpose)) {
-      return false;
-    }
 
     if (model && !searchable.includes(model)) {
       return false;

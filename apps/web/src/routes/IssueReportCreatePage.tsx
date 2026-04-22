@@ -28,6 +28,7 @@ import { queueIssueReportSync } from '../lib/db/appDb.js';
 import { useAuthSession } from '../lib/useAuthSession.js';
 import {
   useCreateIssueReportMutation,
+  useTeam,
   useTeamDeviceSpecs,
   useTeamWifiConfigs,
 } from '../lib/useTeamManagement.js';
@@ -62,6 +63,7 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
   const { data: session, isLoading: isSessionLoading } = useAuthSession();
   const teamId =
     session?.kind === 'team' && session.tournamentId === tournamentId ? session.teamId : '';
+  const teamQuery = useTeam(teamId);
   const wifiConfigsQuery = useTeamWifiConfigs(teamId);
   const deviceSpecsQuery = useTeamDeviceSpecs(teamId, false);
   const createIssueReportMutation = useCreateIssueReportMutation(tournamentId);
@@ -133,7 +135,7 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
     );
   }, [deviceSpecsQuery.data, selectedConfig]);
 
-  if (isSessionLoading || (canCreate && wifiConfigsQuery.isLoading)) {
+  if (isSessionLoading || (canCreate && (teamQuery.isLoading || wifiConfigsQuery.isLoading))) {
     return (
       <Stack align='center' py='xl'>
         <Loader color='teal' />
@@ -277,6 +279,8 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
         ) : null}
 
         <Stack gap='md'>
+          <TextInput label='チーム' value={teamQuery.data?.name ?? ''} readOnly />
+
           <NativeSelect
             label='WiFi 構成'
             data={wifiConfigs.map((config) => ({ value: config.id, label: config.name }))}
