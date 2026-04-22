@@ -16,10 +16,20 @@ import {
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { useForm } from '@tanstack/react-form';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CreateNoticeSchema, CreateObservedWifiSchema } from '@wifiman/shared';
+import {
+  BANDS,
+  CreateNoticeSchema,
+  CreateObservedWifiSchema,
+  NOTICE_SEVERITIES,
+  OBSERVED_WIFI_SOURCES,
+  isValidChannel,
+  isValidChannelWidth,
+} from '@wifiman/shared';
 import { useEffect, useMemo, useState } from 'react';
+import { z } from 'zod';
 import {
   ApiClientError,
   apiQueryKeys,
@@ -29,6 +39,10 @@ import {
   type ObservedWifiCreateInput,
 } from '../lib/api/client.js';
 import { getSyncOverview } from '../lib/db/appDb.js';
+import {
+  createTanStackFormZodHelpers,
+  toGlobalFormValidationError,
+} from '../lib/tanstackFormZod.js';
 import { parseObservedWifiCsv } from '../lib/teamManagement.js';
 import {
   useBulkCreateObservedWifiMutation,
@@ -78,6 +92,71 @@ type ObservedWifiDraft = {
   observedAt: string;
   notes?: string | null | undefined;
 };
+
+const DateTimeLocalStringSchema = z
+  .string()
+  .min(1)
+  .refine((value) => !Number.isNaN(new Date(value).getTime()), 'Invalid datetime');
+
+const OptionalDateTimeLocalStringSchema = z
+  .string()
+  .refine(
+    (value) => value.trim().length === 0 || !Number.isNaN(new Date(value).getTime()),
+    'Invalid datetime',
+  );
+
+const ObservedWifiFormSchema = z.object({
+  source: z.enum(OBSERVED_WIFI_SOURCES),
+  ssid: z.string().max(32),
+  bssid: z
+    .string()
+    .refine(
+      (value) => value.trim().length === 0 || /^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(value),
+      'Invalid',
+    ),
+  band: z.enum(BANDS),
+  channel: z.string(),
+  channelWidthMHz: z.string(),
+  rssi: z.string(),
+  locationLabel: z.string().max(200),
+  observedAt: DateTimeLocalStringSchema,
+  notes: z.string().max(2000),
+});
+
+const CsvImportFormSchema = z.object({
+  csvInput: z.string().trim().min(1, 'CSV を入力してください'),
+});
+
+const NoticeFormSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  body: z.string().trim().min(1).max(5000),
+  severity: z.enum(NOTICE_SEVERITIES),
+  publishedAt: DateTimeLocalStringSchema,
+  expiresAt: OptionalDateTimeLocalStringSchema,
+});
+
+const ObservedWifiSubmitSchema = CreateObservedWifiSchema.omit({ tournamentId: true });
+const NoticeSubmitSchema = CreateNoticeSchema.omit({ tournamentId: true });
+
+function mapIssuesToFieldErrors<TFieldName extends string>(
+  error: z.ZodError,
+): Partial<Record<TFieldName, string>> {
+  const errors: Partial<Record<TFieldName, string>> = {};
+
+  for (const issue of error.issues) {
+    const field = issue.path[0];
+    if (typeof field === 'string' && !(field in errors)) {
+      errors[field as TFieldName] = issue.message;
+    }
+  }
+
+  return errors;
+}
+
+function normalizeOptionalString(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 function toDateTimeLocalValue(value: string) {
   return value.slice(0, 16);
@@ -151,6 +230,85 @@ function toNoticeUpdateInput(values: NoticeFormValues): NoticeUpdateInput {
   };
 }
 
+function parseObservedWifiFormValues(values: ObservedWifiFormValues): {
+  data?: ObservedWifiDraft;
+  errors: Partial<Record<keyof ObservedWifiFormValues, string>>;
+} {
+  const rawParsed = ObservedWifiFormSchema.safeParse(values);
+
+  if (!rawParsed.success) {
+    return {
+      errors: mapIssuesToFieldErrors<keyof ObservedWifiFormValues & string>(rawParsed.error),
+    };
+  }
+
+  const parsed = ObservedWifiSubmitSchema.safeParse({
+    source: rawParsed.data.source,
+    ssid: normalizeOptionalString(rawParsed.data.ssid),
+    bssid: normalizeOptionalString(rawParsed.data.bssid),
+    band: rawParsed.data.band,
+    channel: Number(rawParsed.data.channel),
+    channelWidthMHz: rawParsed.data.channelWidthMHz.trim()
+      ? Number(rawParsed.data.channelWidthMHz)
+      : null,
+    rssi: rawParsed.data.rssi.trim() ? Number(rawParsed.data.rssi) : null,
+    locationLabel: normalizeOptionalString(rawParsed.data.locationLabel),
+    observedAt: new Date(rawParsed.data.observedAt).toISOString(),
+    notes: normalizeOptionalString(rawParsed.data.notes),
+  });
+
+  if (!parsed.success) {
+    return {
+      errors: mapIssuesToFieldErrors<keyof ObservedWifiFormValues & string>(parsed.error),
+    };
+  }
+
+  const errors: Partial<Record<keyof ObservedWifiFormValues, string>> = {};
+
+  if (!isValidChannel(parsed.data.band, parsed.data.channel)) {
+    errors.channel = `帯域 ${parsed.data.band} に対してチャンネル ${parsed.data.channel} は無効です`;
+  }
+
+  if (
+    parsed.data.channelWidthMHz != null &&
+    !isValidChannelWidth(parsed.data.band, parsed.data.channelWidthMHz as 20 | 40 | 80 | 160)
+  ) {
+    errors.channelWidthMHz = `帯域 ${parsed.data.band} に対してチャンネル幅 ${parsed.data.channelWidthMHz}MHz は無効です`;
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { errors };
+  }
+
+  return { data: parsed.data, errors: {} };
+}
+
+function parseNoticeFormValues(values: NoticeFormValues): {
+  createInput?: NoticeCreateInput;
+  updateInput?: NoticeUpdateInput;
+  errors: Partial<Record<keyof NoticeFormValues, string>>;
+} {
+  const rawParsed = NoticeFormSchema.safeParse(values);
+
+  if (!rawParsed.success) {
+    return {
+      errors: mapIssuesToFieldErrors<keyof NoticeFormValues & string>(rawParsed.error),
+    };
+  }
+
+  const createInput = toNoticeCreateInput(rawParsed.data);
+  const updateInput = toNoticeUpdateInput(rawParsed.data);
+  const parsed = NoticeSubmitSchema.safeParse(createInput);
+
+  if (!parsed.success) {
+    return {
+      errors: mapIssuesToFieldErrors<keyof NoticeFormValues & string>(parsed.error),
+    };
+  }
+
+  return { createInput, updateInput, errors: {} };
+}
+
 export function AppDashboardPage() {
   const tournamentsQuery = useTournaments();
   const syncOverview = useQuery({
@@ -159,15 +317,172 @@ export function AppDashboardPage() {
   });
   const [selectedTournamentId, setSelectedTournamentId] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('');
-  const [observedWifiValues, setObservedWifiValues] = useState<ObservedWifiFormValues>(
-    buildObservedWifiInitialValues,
-  );
-  const [csvInput, setCsvInput] = useState('');
   const [csvErrors, setCsvErrors] = useState<Array<{ row: number; message: string }>>([]);
+  const [csvSubmitError, setCsvSubmitError] = useState<string | null>(null);
   const [observedWifiError, setObservedWifiError] = useState<string | null>(null);
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
-  const [noticeValues, setNoticeValues] = useState<NoticeFormValues>(buildNoticeInitialValues);
   const [noticeError, setNoticeError] = useState<string | null>(null);
+  const createObservedWifiMutation = useCreateObservedWifiMutation(selectedTournamentId);
+  const bulkCreateObservedWifiMutation = useBulkCreateObservedWifiMutation(selectedTournamentId);
+  const createNoticeMutation = useCreateTournamentNoticeMutation(selectedTournamentId);
+  const updateNoticeMutation = useUpdateNoticeMutation(selectedTournamentId);
+  const observedWifiZodForm = createTanStackFormZodHelpers(
+    ObservedWifiFormSchema,
+    setObservedWifiError,
+    '登録に失敗しました',
+  );
+  const csvZodForm = createTanStackFormZodHelpers(
+    CsvImportFormSchema,
+    setCsvSubmitError,
+    'CSV 取込に失敗しました',
+  );
+  const noticeZodForm = createTanStackFormZodHelpers(
+    NoticeFormSchema,
+    setNoticeError,
+    'お知らせ保存に失敗しました',
+  );
+  const observedWifiForm = useForm({
+    defaultValues: buildObservedWifiInitialValues(),
+    validators: {
+      onSubmit: ({ value }) =>
+        toGlobalFormValidationError<ObservedWifiFormValues>(
+          parseObservedWifiFormValues(value).errors,
+        ),
+    },
+    onSubmit: async ({ value }) => {
+      observedWifiZodForm.clearSubmitError();
+
+      if (!selectedTournamentId) {
+        setObservedWifiError('大会を選択してください');
+        return;
+      }
+
+      const parsed = parseObservedWifiFormValues(value);
+      if (!parsed.data) {
+        return;
+      }
+
+      try {
+        await createObservedWifiMutation.mutateAsync(toObservedWifiInput(parsed.data));
+        observedWifiForm.reset(buildObservedWifiInitialValues());
+        notifications.show({
+          color: 'teal',
+          title: '野良 WiFi を登録しました',
+          message: 'チャンネルマップ反映用データを更新しました。',
+        });
+      } catch (error) {
+        observedWifiZodForm.handleSubmitError(error);
+      }
+    },
+  });
+  const csvForm = useForm({
+    defaultValues: {
+      csvInput: '',
+    },
+    validators: {
+      onSubmit: ({ value }) => {
+        const parsed = CsvImportFormSchema.safeParse(value);
+
+        if (parsed.success) {
+          return undefined;
+        }
+
+        return toGlobalFormValidationError<{ csvInput: string }>({
+          csvInput: parsed.error.issues[0]?.message ?? 'CSV を入力してください',
+        });
+      },
+    },
+    onSubmit: async ({ value }) => {
+      csvZodForm.clearSubmitError();
+
+      if (!selectedTournamentId) {
+        setCsvSubmitError('大会を選択してください');
+        return;
+      }
+
+      const parsed = parseObservedWifiCsv(value.csvInput);
+      if (parsed.errors.length > 0) {
+        setCsvSubmitError(null);
+        setCsvErrors(parsed.errors);
+        return;
+      }
+
+      setCsvSubmitError(null);
+      setCsvErrors([]);
+
+      try {
+        const result = await bulkCreateObservedWifiMutation.mutateAsync({
+          items: parsed.items.map((item) => ({
+            ...toObservedWifiInput(item),
+            tournamentId: selectedTournamentId,
+          })),
+        } satisfies ObservedWifiBulkCreateInput);
+
+        notifications.show({
+          color: 'teal',
+          title: 'CSV を一括登録しました',
+          message: `${result.count} 件を all-or-nothing で登録しました。`,
+        });
+        csvForm.reset({ csvInput: '' });
+      } catch (error) {
+        if (error instanceof ApiClientError) {
+          const details = (
+            error.payload as {
+              error?: { details?: { errors?: Array<{ row: number; message: string }> } };
+            }
+          )?.error?.details;
+          const serverErrors = details?.errors ?? [];
+          if (serverErrors.length > 0) {
+            setCsvErrors(serverErrors);
+            return;
+          }
+        }
+
+        csvZodForm.handleSubmitError(error);
+      }
+    },
+  });
+  const noticeForm = useForm({
+    defaultValues: buildNoticeInitialValues(),
+    validators: {
+      onSubmit: ({ value }) =>
+        toGlobalFormValidationError<NoticeFormValues>(parseNoticeFormValues(value).errors),
+    },
+    onSubmit: async ({ value }) => {
+      noticeZodForm.clearSubmitError();
+
+      if (!selectedTournamentId) {
+        setNoticeError('大会を選択してください');
+        return;
+      }
+
+      const parsed = parseNoticeFormValues(value);
+      if (!parsed.createInput || !parsed.updateInput) {
+        return;
+      }
+
+      try {
+        if (editingNoticeId) {
+          await updateNoticeMutation.mutateAsync({
+            id: editingNoticeId,
+            input: parsed.updateInput,
+          });
+        } else {
+          await createNoticeMutation.mutateAsync(parsed.createInput);
+        }
+
+        notifications.show({
+          color: 'teal',
+          title: editingNoticeId ? 'お知らせを更新しました' : 'お知らせを作成しました',
+          message: '大会トップの notices を更新しました。',
+        });
+        setEditingNoticeId(null);
+        noticeForm.reset(buildNoticeInitialValues());
+      } catch (error) {
+        noticeZodForm.handleSubmitError(error);
+      }
+    },
+  });
 
   useEffect(() => {
     if (selectedTournamentId || (tournamentsQuery.data?.length ?? 0) === 0) {
@@ -201,10 +516,6 @@ export function AppDashboardPage() {
     setSelectedTeamId(teams[0]?.id ?? '');
   }, [selectedTeamId, teamsQuery.data]);
 
-  const createObservedWifiMutation = useCreateObservedWifiMutation(selectedTournamentId);
-  const bulkCreateObservedWifiMutation = useBulkCreateObservedWifiMutation(selectedTournamentId);
-  const createNoticeMutation = useCreateTournamentNoticeMutation(selectedTournamentId);
-  const updateNoticeMutation = useUpdateNoticeMutation(selectedTournamentId);
   const resendTeamAccessMutation = useResendTeamAccessMutation(selectedTeamId);
 
   const highSeverityReports = useMemo(() => {
@@ -233,137 +544,10 @@ export function AppDashboardPage() {
   const bandSummaryText = `2.4GHz ${bandSummary?.['2.4GHz'] ?? 0} / 5GHz ${bandSummary?.['5GHz'] ?? 0} / 6GHz ${bandSummary?.['6GHz'] ?? 0}`;
   const issueReportCount = issueReportsQuery.data?.length ?? 0;
 
-  const handleObservedWifiSubmit = async () => {
-    setObservedWifiError(null);
-
-    if (!selectedTournamentId) {
-      setObservedWifiError('大会を選択してください');
-      return;
-    }
-
-    const parsed = CreateObservedWifiSchema.omit({ tournamentId: true }).safeParse({
-      source: observedWifiValues.source,
-      ssid: observedWifiValues.ssid.trim() || null,
-      bssid: observedWifiValues.bssid.trim() || null,
-      band: observedWifiValues.band,
-      channel: Number(observedWifiValues.channel),
-      channelWidthMHz: observedWifiValues.channelWidthMHz.trim()
-        ? Number(observedWifiValues.channelWidthMHz)
-        : null,
-      rssi: observedWifiValues.rssi.trim() ? Number(observedWifiValues.rssi) : null,
-      locationLabel: observedWifiValues.locationLabel.trim() || null,
-      observedAt: new Date(observedWifiValues.observedAt).toISOString(),
-      notes: observedWifiValues.notes.trim() || null,
-    });
-
-    if (!parsed.success) {
-      setObservedWifiError(parsed.error.issues[0]?.message ?? '入力内容を確認してください');
-      return;
-    }
-
-    try {
-      await createObservedWifiMutation.mutateAsync(toObservedWifiInput(parsed.data));
-      setObservedWifiValues(buildObservedWifiInitialValues());
-      notifications.show({
-        color: 'teal',
-        title: '野良 WiFi を登録しました',
-        message: 'チャンネルマップ反映用データを更新しました。',
-      });
-    } catch (error) {
-      setObservedWifiError(error instanceof Error ? error.message : '登録に失敗しました');
-    }
-  };
-
-  const handleCsvImport = async () => {
-    setObservedWifiError(null);
-
-    if (!selectedTournamentId) {
-      setObservedWifiError('大会を選択してください');
-      return;
-    }
-
-    const parsed = parseObservedWifiCsv(csvInput);
-    if (parsed.errors.length > 0) {
-      setCsvErrors(parsed.errors);
-      return;
-    }
-
-    setCsvErrors([]);
-
-    try {
-      const result = await bulkCreateObservedWifiMutation.mutateAsync({
-        items: parsed.items.map((item) => ({
-          ...toObservedWifiInput(item),
-          tournamentId: selectedTournamentId,
-        })),
-      } satisfies ObservedWifiBulkCreateInput);
-
-      notifications.show({
-        color: 'teal',
-        title: 'CSV を一括登録しました',
-        message: `${result.count} 件を all-or-nothing で登録しました。`,
-      });
-      setCsvInput('');
-    } catch (error) {
-      if (error instanceof ApiClientError) {
-        const details = (
-          error.payload as {
-            error?: { details?: { errors?: Array<{ row: number; message: string }> } };
-          }
-        )?.error?.details;
-        const serverErrors = details?.errors ?? [];
-        if (serverErrors.length > 0) {
-          setCsvErrors(serverErrors);
-          return;
-        }
-      }
-
-      setObservedWifiError(error instanceof Error ? error.message : 'CSV 取込に失敗しました');
-    }
-  };
-
-  const handleNoticeSubmit = async () => {
-    setNoticeError(null);
-
-    if (!selectedTournamentId) {
-      setNoticeError('大会を選択してください');
-      return;
-    }
-
-    const createPayload = toNoticeCreateInput(noticeValues);
-    const updatePayload = toNoticeUpdateInput(noticeValues);
-
-    const parsed = editingNoticeId
-      ? CreateNoticeSchema.omit({ tournamentId: true }).safeParse(updatePayload)
-      : CreateNoticeSchema.omit({ tournamentId: true }).safeParse(createPayload);
-
-    if (!parsed.success) {
-      setNoticeError(parsed.error.issues[0]?.message ?? 'お知らせ入力を確認してください');
-      return;
-    }
-
-    try {
-      if (editingNoticeId) {
-        await updateNoticeMutation.mutateAsync({ id: editingNoticeId, input: updatePayload });
-      } else {
-        await createNoticeMutation.mutateAsync(createPayload);
-      }
-
-      notifications.show({
-        color: 'teal',
-        title: editingNoticeId ? 'お知らせを更新しました' : 'お知らせを作成しました',
-        message: '大会トップの notices を更新しました。',
-      });
-      setEditingNoticeId(null);
-      setNoticeValues(buildNoticeInitialValues());
-    } catch (error) {
-      setNoticeError(error instanceof Error ? error.message : 'お知らせ保存に失敗しました');
-    }
-  };
-
   const handleStartNoticeEdit = (notice: NonNullable<typeof noticesQuery.data>[number]) => {
     setEditingNoticeId(notice.id);
-    setNoticeValues({
+    setNoticeError(null);
+    noticeForm.reset({
       title: notice.title,
       body: notice.body,
       severity: notice.severity,
@@ -513,146 +697,242 @@ export function AppDashboardPage() {
 
               {observedWifiError ? <Alert color='red'>{observedWifiError}</Alert> : null}
 
-              <Grid>
-                <Grid.Col span={{ base: 12, md: 6 }}>
-                  <NativeSelect
-                    label='source'
-                    data={[
-                      { value: 'manual', label: 'manual' },
-                      { value: 'wild', label: 'wild' },
-                      { value: 'analyzer_import', label: 'analyzer_import' },
-                    ]}
-                    value={observedWifiValues.source}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        source: event.currentTarget.value as ObservedWifiFormValues['source'],
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 6 }}>
-                  <TextInput
-                    label='SSID'
-                    value={observedWifiValues.ssid}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        ssid: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 6 }}>
-                  <TextInput
-                    label='BSSID'
-                    placeholder='00:11:22:33:44:55'
-                    value={observedWifiValues.bssid}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        bssid: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 3 }}>
-                  <NativeSelect
-                    label='帯域'
-                    data={['2.4GHz', '5GHz', '6GHz']}
-                    value={observedWifiValues.band}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        band: event.currentTarget.value as ObservedWifiFormValues['band'],
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 3 }}>
-                  <TextInput
-                    label='channel'
-                    value={observedWifiValues.channel}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        channel: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 3 }}>
-                  <TextInput
-                    label='channel width MHz'
-                    value={observedWifiValues.channelWidthMHz}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        channelWidthMHz: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 3 }}>
-                  <TextInput
-                    label='RSSI'
-                    value={observedWifiValues.rssi}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        rssi: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 6 }}>
-                  <TextInput
-                    label='location'
-                    value={observedWifiValues.locationLabel}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        locationLabel: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 6 }}>
-                  <TextInput
-                    label='observed at'
-                    type='datetime-local'
-                    value={observedWifiValues.observedAt}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        observedAt: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={12}>
-                  <Textarea
-                    label='notes'
-                    minRows={3}
-                    value={observedWifiValues.notes}
-                    onChange={(event) =>
-                      setObservedWifiValues((current) => ({
-                        ...current,
-                        notes: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-              </Grid>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  observedWifiZodForm.handleSubmitInvalid();
+                  void observedWifiForm.handleSubmit();
+                }}
+              >
+                <Stack gap='md'>
+                  <Grid>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <observedWifiForm.Field
+                        name='source'
+                        validators={{
+                          onSubmit: observedWifiZodForm.getFieldValidator('source'),
+                        }}
+                      >
+                        {(field) => (
+                          <NativeSelect
+                            label='source'
+                            data={[
+                              { value: 'manual', label: 'manual' },
+                              { value: 'wild', label: 'wild' },
+                              { value: 'analyzer_import', label: 'analyzer_import' },
+                            ]}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value as ObservedWifiFormValues['source'],
+                              );
+                            }}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <observedWifiForm.Field
+                        name='ssid'
+                        validators={{
+                          onChange: observedWifiZodForm.getFieldValidator('ssid'),
+                          onSubmit: observedWifiZodForm.getFieldValidator('ssid'),
+                        }}
+                      >
+                        {(field) => (
+                          <TextInput
+                            label='SSID'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <observedWifiForm.Field
+                        name='bssid'
+                        validators={{
+                          onChange: observedWifiZodForm.getFieldValidator('bssid'),
+                          onSubmit: observedWifiZodForm.getFieldValidator('bssid'),
+                        }}
+                      >
+                        {(field) => (
+                          <TextInput
+                            label='BSSID'
+                            placeholder='00:11:22:33:44:55'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 3 }}>
+                      <observedWifiForm.Field
+                        name='band'
+                        validators={{
+                          onSubmit: observedWifiZodForm.getFieldValidator('band'),
+                        }}
+                      >
+                        {(field) => (
+                          <NativeSelect
+                            label='帯域'
+                            data={['2.4GHz', '5GHz', '6GHz']}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value as ObservedWifiFormValues['band'],
+                              );
+                            }}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 3 }}>
+                      <observedWifiForm.Field name='channel'>
+                        {(field) => (
+                          <TextInput
+                            label='channel'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 3 }}>
+                      <observedWifiForm.Field name='channelWidthMHz'>
+                        {(field) => (
+                          <TextInput
+                            label='channel width MHz'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 3 }}>
+                      <observedWifiForm.Field name='rssi'>
+                        {(field) => (
+                          <TextInput
+                            label='RSSI'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <observedWifiForm.Field
+                        name='locationLabel'
+                        validators={{
+                          onChange: observedWifiZodForm.getFieldValidator('locationLabel'),
+                          onSubmit: observedWifiZodForm.getFieldValidator('locationLabel'),
+                        }}
+                      >
+                        {(field) => (
+                          <TextInput
+                            label='location'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                      <observedWifiForm.Field
+                        name='observedAt'
+                        validators={{
+                          onChange: observedWifiZodForm.getFieldValidator('observedAt'),
+                          onSubmit: observedWifiZodForm.getFieldValidator('observedAt'),
+                        }}
+                      >
+                        {(field) => (
+                          <TextInput
+                            label='observed at'
+                            type='datetime-local'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={12}>
+                      <observedWifiForm.Field
+                        name='notes'
+                        validators={{
+                          onChange: observedWifiZodForm.getFieldValidator('notes'),
+                          onSubmit: observedWifiZodForm.getFieldValidator('notes'),
+                        }}
+                      >
+                        {(field) => (
+                          <Textarea
+                            label='notes'
+                            minRows={3}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              observedWifiZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </observedWifiForm.Field>
+                    </Grid.Col>
+                  </Grid>
 
-              <Group justify='flex-end'>
-                <Button
-                  loading={createObservedWifiMutation.isPending}
-                  onClick={() => void handleObservedWifiSubmit()}
-                >
-                  野良 WiFi を登録
-                </Button>
-              </Group>
+                  <Group justify='flex-end'>
+                    <Button type='submit' loading={createObservedWifiMutation.isPending}>
+                      野良 WiFi を登録
+                    </Button>
+                  </Group>
+                </Stack>
+              </form>
             </Stack>
           </Card>
         </Grid.Col>
@@ -668,34 +948,62 @@ export function AppDashboardPage() {
                 </Text>
               </div>
 
-              <Textarea
-                label='CSV'
-                minRows={10}
-                placeholder='source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes'
-                value={csvInput}
-                onChange={(event) => setCsvInput(event.currentTarget.value)}
-              />
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  csvZodForm.handleSubmitInvalid();
+                  setCsvErrors([]);
+                  void csvForm.handleSubmit();
+                }}
+              >
+                <Stack gap='md'>
+                  {csvSubmitError ? <Alert color='red'>{csvSubmitError}</Alert> : null}
 
-              {csvErrors.length > 0 ? (
-                <Alert color='red' title='CSV バリデーション'>
-                  {csvErrors.map((error) => (
-                    <Text key={`${error.row}-${error.message}`}>{error.message}</Text>
-                  ))}
-                </Alert>
-              ) : (
-                <Alert color='blue' variant='light'>
-                  一括登録は all-or-nothing です。1 行でも無効なら登録しません。
-                </Alert>
-              )}
+                  <csvForm.Field
+                    name='csvInput'
+                    validators={{
+                      onChange: csvZodForm.getFieldValidator('csvInput'),
+                      onSubmit: csvZodForm.getFieldValidator('csvInput'),
+                    }}
+                  >
+                    {(field) => (
+                      <Textarea
+                        label='CSV'
+                        minRows={10}
+                        placeholder='source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes'
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => {
+                          setCsvErrors([]);
+                          csvZodForm.getChangeHandler(field.handleChange)(
+                            event.currentTarget.value,
+                          );
+                        }}
+                        error={field.state.meta.errors[0]}
+                      />
+                    )}
+                  </csvForm.Field>
 
-              <Group justify='flex-end'>
-                <Button
-                  loading={bulkCreateObservedWifiMutation.isPending}
-                  onClick={() => void handleCsvImport()}
-                >
-                  CSV を一括登録
-                </Button>
-              </Group>
+                  {csvErrors.length > 0 ? (
+                    <Alert color='red' title='CSV バリデーション'>
+                      {csvErrors.map((error) => (
+                        <Text key={`${error.row}-${error.message}`}>{error.message}</Text>
+                      ))}
+                    </Alert>
+                  ) : (
+                    <Alert color='blue' variant='light'>
+                      一括登録は all-or-nothing です。1 行でも無効なら登録しません。
+                    </Alert>
+                  )}
+
+                  <Group justify='flex-end'>
+                    <Button type='submit' loading={bulkCreateObservedWifiMutation.isPending}>
+                      CSV を一括登録
+                    </Button>
+                  </Group>
+                </Stack>
+              </form>
             </Stack>
           </Card>
         </Grid.Col>
@@ -787,7 +1095,8 @@ export function AppDashboardPage() {
                     variant='subtle'
                     onClick={() => {
                       setEditingNoticeId(null);
-                      setNoticeValues(buildNoticeInitialValues());
+                      setNoticeError(null);
+                      noticeForm.reset(buildNoticeInitialValues());
                     }}
                   >
                     新規に戻す
@@ -797,77 +1106,141 @@ export function AppDashboardPage() {
 
               {noticeError ? <Alert color='red'>{noticeError}</Alert> : null}
 
-              <TextInput
-                label='title'
-                value={noticeValues.title}
-                onChange={(event) =>
-                  setNoticeValues((current) => ({
-                    ...current,
-                    title: event.currentTarget.value,
-                  }))
-                }
-              />
-              <Textarea
-                label='body'
-                minRows={4}
-                value={noticeValues.body}
-                onChange={(event) =>
-                  setNoticeValues((current) => ({
-                    ...current,
-                    body: event.currentTarget.value,
-                  }))
-                }
-              />
-              <Grid>
-                <Grid.Col span={{ base: 12, md: 4 }}>
-                  <NativeSelect
-                    label='severity'
-                    data={['info', 'warning', 'critical']}
-                    value={noticeValues.severity}
-                    onChange={(event) =>
-                      setNoticeValues((current) => ({
-                        ...current,
-                        severity: event.currentTarget.value as NoticeFormValues['severity'],
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 4 }}>
-                  <TextInput
-                    label='published at'
-                    type='datetime-local'
-                    value={noticeValues.publishedAt}
-                    onChange={(event) =>
-                      setNoticeValues((current) => ({
-                        ...current,
-                        publishedAt: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 4 }}>
-                  <TextInput
-                    label='expires at'
-                    type='datetime-local'
-                    value={noticeValues.expiresAt}
-                    onChange={(event) =>
-                      setNoticeValues((current) => ({
-                        ...current,
-                        expiresAt: event.currentTarget.value,
-                      }))
-                    }
-                  />
-                </Grid.Col>
-              </Grid>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  noticeZodForm.handleSubmitInvalid();
+                  void noticeForm.handleSubmit();
+                }}
+              >
+                <Stack gap='md'>
+                  <noticeForm.Field
+                    name='title'
+                    validators={{
+                      onChange: noticeZodForm.getFieldValidator('title'),
+                      onSubmit: noticeZodForm.getFieldValidator('title'),
+                    }}
+                  >
+                    {(field) => (
+                      <TextInput
+                        label='title'
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => {
+                          noticeZodForm.getChangeHandler(field.handleChange)(
+                            event.currentTarget.value,
+                          );
+                        }}
+                        error={field.state.meta.errors[0]}
+                      />
+                    )}
+                  </noticeForm.Field>
+                  <noticeForm.Field
+                    name='body'
+                    validators={{
+                      onChange: noticeZodForm.getFieldValidator('body'),
+                      onSubmit: noticeZodForm.getFieldValidator('body'),
+                    }}
+                  >
+                    {(field) => (
+                      <Textarea
+                        label='body'
+                        minRows={4}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => {
+                          noticeZodForm.getChangeHandler(field.handleChange)(
+                            event.currentTarget.value,
+                          );
+                        }}
+                        error={field.state.meta.errors[0]}
+                      />
+                    )}
+                  </noticeForm.Field>
+                  <Grid>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <noticeForm.Field
+                        name='severity'
+                        validators={{
+                          onSubmit: noticeZodForm.getFieldValidator('severity'),
+                        }}
+                      >
+                        {(field) => (
+                          <NativeSelect
+                            label='severity'
+                            data={['info', 'warning', 'critical']}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              noticeZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value as NoticeFormValues['severity'],
+                              );
+                            }}
+                          />
+                        )}
+                      </noticeForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <noticeForm.Field
+                        name='publishedAt'
+                        validators={{
+                          onChange: noticeZodForm.getFieldValidator('publishedAt'),
+                          onSubmit: noticeZodForm.getFieldValidator('publishedAt'),
+                        }}
+                      >
+                        {(field) => (
+                          <TextInput
+                            label='published at'
+                            type='datetime-local'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              noticeZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </noticeForm.Field>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <noticeForm.Field
+                        name='expiresAt'
+                        validators={{
+                          onChange: noticeZodForm.getFieldValidator('expiresAt'),
+                          onSubmit: noticeZodForm.getFieldValidator('expiresAt'),
+                        }}
+                      >
+                        {(field) => (
+                          <TextInput
+                            label='expires at'
+                            type='datetime-local'
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              noticeZodForm.getChangeHandler(field.handleChange)(
+                                event.currentTarget.value,
+                              );
+                            }}
+                            error={field.state.meta.errors[0]}
+                          />
+                        )}
+                      </noticeForm.Field>
+                    </Grid.Col>
+                  </Grid>
 
-              <Group justify='flex-end'>
-                <Button
-                  loading={createNoticeMutation.isPending || updateNoticeMutation.isPending}
-                  onClick={() => void handleNoticeSubmit()}
-                >
-                  {editingNoticeId ? 'お知らせを更新' : 'お知らせを作成'}
-                </Button>
-              </Group>
+                  <Group justify='flex-end'>
+                    <Button
+                      type='submit'
+                      loading={createNoticeMutation.isPending || updateNoticeMutation.isPending}
+                    >
+                      {editingNoticeId ? 'お知らせを更新' : 'お知らせを作成'}
+                    </Button>
+                  </Group>
+                </Stack>
+              </form>
 
               <Divider />
 

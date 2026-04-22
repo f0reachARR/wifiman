@@ -4,6 +4,22 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appDb, queueIssueReportSync, updateSyncRecordAfterAttempt } from '../lib/db/appDb.js';
 
+const { notificationsShow } = vi.hoisted(() => ({
+  notificationsShow: vi.fn(),
+}));
+
+vi.mock('@mantine/notifications', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mantine/notifications')>();
+
+  return {
+    ...actual,
+    notifications: {
+      ...actual.notifications,
+      show: notificationsShow,
+    },
+  };
+});
+
 vi.mock('../lib/betterAuthClient.js', () => ({
   betterAuthClient: {
     signIn: {
@@ -787,6 +803,7 @@ function renderRoute(
 describe('team management routes', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/');
+    notificationsShow.mockClear();
   });
 
   afterEach(async () => {
@@ -1553,6 +1570,54 @@ describe('team management routes', () => {
     expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
   });
 
+  it('operator dashboard の CSV 取込 submit error は CSV カード直下に表示する', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (
+        path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({ error: { code: 'API_ERROR', message: 'status 400' } }, 400);
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('CSV'), {
+        target: {
+          value: [
+            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+            'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
+          ].join('\n'),
+        },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
+    });
+
+    const csvCard = screen.getByRole('heading', { name: 'CSV 取込' }).closest('.feature-card');
+    const observedWifiCard = screen
+      .getByRole('heading', { name: '野良 WiFi 手入力登録' })
+      .closest('.feature-card');
+
+    expect(csvCard).not.toBeNull();
+    expect(observedWifiCard).not.toBeNull();
+    expect(await within(csvCard as HTMLElement).findByText('API request failed')).toBeInTheDocument();
+    expect(within(observedWifiCard as HTMLElement).queryByText('API request failed')).not.toBeInTheDocument();
+  });
+
   it.each([
     400, 401, 403, 409, 422,
   ])('operator dashboard の野良 WiFi 手入力は API %s 応答時にエラー alert を表示する', async (status) => {
@@ -1583,6 +1648,183 @@ describe('team management routes', () => {
 
     expect(await screen.findByText('API request failed')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+  });
+
+  it('operator dashboard の野良 WiFi 手入力は field error を表示する', async () => {
+    renderRoute('/app', createOperatorDashboardResponses());
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('BSSID'), { target: { value: 'invalid-bssid' } });
+      fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
+    });
+
+    expect(await screen.findByText(/invalid/i)).toBeInTheDocument();
+  });
+
+  it('operator dashboard の notice 作成は field error を表示する', async () => {
+    renderRoute('/app', createOperatorDashboardResponses());
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'お知らせを作成' }));
+    });
+
+    expect((await screen.findAllByText(/at least 1 character/i)).length).toBeGreaterThan(0);
+  });
+
+  it('operator dashboard の野良 WiFi 手入力成功時は通知を出してフォームをリセットする', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/tournaments/${tournamentId}/observed-wifis` && init?.method === 'POST') {
+        return jsonResponse(
+          {
+            id: '00000000-0000-4000-8000-000000000401',
+            tournamentId,
+            source: 'manual',
+            ssid: null,
+            bssid: null,
+            band: '5GHz',
+            channel: 36,
+            channelWidthMHz: 20,
+            rssi: null,
+            locationLabel: null,
+            observedAt: '2026-04-21T10:00:00.000Z',
+            notes: null,
+            createdAt: '2026-04-21T10:00:00.000Z',
+            updatedAt: '2026-04-21T10:00:00.000Z',
+          },
+          201,
+        );
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('BSSID'), {
+        target: { value: '00:11:22:33:44:66' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('BSSID')).toHaveValue('');
+    });
+    expect(notificationsShow).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '野良 WiFi を登録しました' }),
+    );
+  });
+
+  it('operator dashboard の CSV 取込成功時は通知を出して textarea をリセットする', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (
+        path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({ count: 1 }, 201);
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('CSV'), {
+        target: {
+          value: [
+            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+            'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
+          ].join('\n'),
+        },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('CSV')).toHaveValue('');
+    });
+    expect(notificationsShow).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'CSV を一括登録しました' }),
+    );
+  });
+
+  it('operator dashboard の notice 作成成功時は通知を出してフォームをリセットする', async () => {
+    const responses = createOperatorDashboardResponses();
+
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/tournaments/${tournamentId}/notices` && init?.method === 'POST') {
+        return jsonResponse(
+          {
+            id: '00000000-0000-4000-8000-000000000402',
+            tournamentId,
+            title: 'Urgent Notice',
+            body: 'Bring spare radios',
+            severity: 'warning',
+            publishedAt: '2026-04-21T10:00:00.000Z',
+            expiresAt: null,
+            createdAt: '2026-04-21T10:00:00.000Z',
+            updatedAt: '2026-04-21T10:00:00.000Z',
+          },
+          201,
+        );
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('title'), { target: { value: 'Urgent Notice' } });
+      fireEvent.change(screen.getByLabelText('body'), {
+        target: { value: 'Bring spare radios' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'お知らせを作成' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('title')).toHaveValue('');
+      expect(screen.getByLabelText('body')).toHaveValue('');
+    });
+    expect(notificationsShow).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'お知らせを作成しました' }),
+    );
   });
 
   it('初回マウント時にオンラインなら pending を自動同期する', async () => {
@@ -1901,6 +2143,53 @@ describe('team management routes', () => {
     expect(screen.getByText('AP-9000: DFS 切替で瞬断しやすい')).toBeInTheDocument();
   });
 
+  it('team editor は submit 時に field error を表示する', async () => {
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText('チーム名');
+    const form = nameInput.closest('form');
+    const saveButton = screen.getByRole('button', { name: 'チーム情報を保存' });
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('team form not found');
+    }
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: '' } });
+      fireEvent.click(saveButton);
+    });
+
+    expect(await within(form).findByText(/at least 1 character/i)).toBeInTheDocument();
+  });
+
+  it('機材仕様フォームは supportedBands の field error を表示する', async () => {
+    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '新しい機材仕様を追加' }));
+    });
+
+    const modelInput = await screen.findByLabelText('型番');
+    const form = modelInput.closest('form');
+    const saveButton = form?.querySelector('button[type="submit"]');
+
+    if (!(form instanceof HTMLFormElement) || !(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('device spec form not found');
+    }
+
+    await act(async () => {
+      fireEvent.change(modelInput, { target: { value: 'AP-01' } });
+      fireEvent.click(screen.getByRole('checkbox', { name: '5GHz' }));
+      fireEvent.click(saveButton);
+    });
+
+    expect(await within(form).findByText(/at least 1 element/i)).toBeInTheDocument();
+  });
+
   it('team viewer は閲覧専用 UI となり private 情報と編集導線を表示しない', async () => {
     renderRoute(
       `/tournaments/${tournamentId}/teams/${ownTeamId}`,
@@ -1971,6 +2260,20 @@ describe('team management routes', () => {
     expect(
       await within(form).findByText('帯域 5GHz に対して無効なチャンネルです'),
     ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: 'Still Invalid Config' } });
+    });
+
+    expect(within(form).getByText('帯域 5GHz に対して無効なチャンネルです')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(channelInput, { target: { value: '36' } });
+    });
+
+    expect(
+      within(form).queryByText('帯域 5GHz に対して無効なチャンネルです'),
+    ).not.toBeInTheDocument();
   });
 
   it('WiFi 構成追加フォームで最大 3 件制約エラーを表示する', async () => {
@@ -2013,8 +2316,14 @@ describe('team management routes', () => {
     const form = nameInput.closest('form');
     const saveButton = form?.querySelector('button[type="submit"]');
 
-    if (!(saveButton instanceof HTMLButtonElement)) {
-      throw new Error('wifi config save button not found');
+    if (!(form instanceof HTMLFormElement) || !(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('wifi config form not found');
+    }
+
+    const statusInput = within(form).getAllByDisplayValue('active')[0];
+
+    if (!(statusInput instanceof HTMLInputElement)) {
+      throw new Error('wifi config status input not found');
     }
 
     await act(async () => {
@@ -2022,7 +2331,20 @@ describe('team management routes', () => {
       fireEvent.click(saveButton);
     });
 
-    expect(screen.getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
+    expect(within(form).getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: 'Fourth Config Updated' } });
+    });
+
+    expect(within(form).getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.mouseDown(statusInput);
+      fireEvent.click(await screen.findByText('disabled'));
+    });
+
+    expect(within(form).queryByText('WiFi 構成は最大 3 件までです')).not.toBeInTheDocument();
   });
 
   it.each([
