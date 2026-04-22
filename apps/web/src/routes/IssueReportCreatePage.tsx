@@ -350,6 +350,80 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
             />
           </Group>
 
+          <Group grow align='flex-start'>
+            <NativeSelect
+              label='公開範囲'
+              data={ISSUE_REPORT_VISIBILITIES.map((value) => ({ value, label: value }))}
+              value={values.visibility}
+              onChange={(event) => {
+                const visibility = event.currentTarget.value as NonNullable<
+                  IssueReportCreateInput['visibility']
+                >;
+                setValues((current) => ({
+                  ...current,
+                  visibility,
+                }));
+              }}
+            />
+            <TextInput
+              label='報告者名'
+              placeholder='任意'
+              value={values.reporterName}
+              onChange={(event) => {
+                const reporterName = event.currentTarget.value;
+                setValues((current) => ({
+                  ...current,
+                  reporterName,
+                }));
+              }}
+            />
+          </Group>
+
+          <Group grow align='flex-start'>
+            <NumberInput
+              label='平均 Ping (ms)'
+              placeholder='任意'
+              min={0}
+              value={values.avgPingMs}
+              onChange={(value) => {
+                setValues((current) => ({
+                  ...current,
+                  avgPingMs: typeof value === 'number' ? value : '',
+                }));
+              }}
+            />
+            <NativeSelect
+              label='距離カテゴリ'
+              data={[
+                { value: '', label: '未選択' },
+                ...DISTANCE_CATEGORIES.map((value) => ({ value, label: value })),
+              ]}
+              value={values.distanceCategory}
+              onChange={(event) => {
+                const distanceCategory = event.currentTarget
+                  .value as FormValues['distanceCategory'];
+                setValues((current) => ({
+                  ...current,
+                  distanceCategory,
+                }));
+              }}
+            />
+          </Group>
+
+          <Textarea
+            label='一言メモ'
+            placeholder='任意'
+            minRows={3}
+            value={values.description}
+            onChange={(event) => {
+              const description = event.currentTarget.value;
+              setValues((current) => ({
+                ...current,
+                description,
+              }));
+            }}
+          />
+
           <Group justify='space-between'>
             <Text fw={700}>{isDetailedMode ? '詳細モード' : '簡易モード'}</Text>
             <Button
@@ -363,112 +437,36 @@ export function IssueReportCreatePage({ tournamentId }: IssueReportCreatePagePro
           </Group>
 
           {isDetailedMode ? (
-            <>
-              <Group grow align='flex-start'>
-                <NativeSelect
-                  label='公開範囲'
-                  data={ISSUE_REPORT_VISIBILITIES.map((value) => ({ value, label: value }))}
-                  value={values.visibility}
-                  onChange={(event) => {
-                    const visibility = event.currentTarget.value as NonNullable<
-                      IssueReportCreateInput['visibility']
-                    >;
-                    setValues((current) => ({
-                      ...current,
-                      visibility,
-                    }));
-                  }}
-                />
-                <TextInput
-                  label='報告者名'
-                  placeholder='任意'
-                  value={values.reporterName}
-                  onChange={(event) => {
-                    const reporterName = event.currentTarget.value;
-                    setValues((current) => ({
-                      ...current,
-                      reporterName,
-                    }));
-                  }}
-                />
-              </Group>
-
-              <Group grow align='flex-start'>
-                <NumberInput
-                  label='平均 Ping (ms)'
-                  placeholder='任意'
-                  min={0}
-                  value={values.avgPingMs}
-                  onChange={(value) => {
-                    setValues((current) => ({
-                      ...current,
-                      avgPingMs: typeof value === 'number' ? value : '',
-                    }));
-                  }}
-                />
-                <NativeSelect
-                  label='距離カテゴリ'
-                  data={[
-                    { value: '', label: '未選択' },
-                    ...DISTANCE_CATEGORIES.map((value) => ({ value, label: value })),
-                  ]}
-                  value={values.distanceCategory}
-                  onChange={(event) => {
-                    const distanceCategory = event.currentTarget
-                      .value as FormValues['distanceCategory'];
-                    setValues((current) => ({
-                      ...current,
-                      distanceCategory,
-                    }));
-                  }}
-                />
-              </Group>
-
-              <Group grow align='flex-start'>
-                <NativeSelect
-                  label='再現性'
-                  data={[
-                    { value: '', label: '未選択' },
-                    ...REPRODUCIBILITIES.map((value) => ({ value, label: value })),
-                  ]}
-                  value={values.reproducibility}
-                  onChange={(event) => {
-                    const reproducibility = event.currentTarget
-                      .value as FormValues['reproducibility'];
-                    setValues((current) => ({
-                      ...current,
-                      reproducibility,
-                    }));
-                  }}
-                />
-                <TextInput
-                  label='場所ラベル'
-                  placeholder='任意'
-                  value={values.locationLabel}
-                  onChange={(event) => {
-                    const locationLabel = event.currentTarget.value;
-                    setValues((current) => ({
-                      ...current,
-                      locationLabel,
-                    }));
-                  }}
-                />
-              </Group>
-
-              <Textarea
-                label='一言メモ'
-                placeholder='任意'
-                minRows={4}
-                value={values.description}
+            <Group grow align='flex-start'>
+              <NativeSelect
+                label='再現性'
+                data={[
+                  { value: '', label: '未選択' },
+                  ...REPRODUCIBILITIES.map((value) => ({ value, label: value })),
+                ]}
+                value={values.reproducibility}
                 onChange={(event) => {
-                  const description = event.currentTarget.value;
+                  const reproducibility = event.currentTarget
+                    .value as FormValues['reproducibility'];
                   setValues((current) => ({
                     ...current,
-                    description,
+                    reproducibility,
                   }));
                 }}
               />
-            </>
+              <TextInput
+                label='場所ラベル'
+                placeholder='任意'
+                value={values.locationLabel}
+                onChange={(event) => {
+                  const locationLabel = event.currentTarget.value;
+                  setValues((current) => ({
+                    ...current,
+                    locationLabel,
+                  }));
+                }}
+              />
+            </Group>
           ) : null}
         </Stack>
 

@@ -1,6 +1,6 @@
 import type { SyncRecord, SyncRecordStatus } from '@wifiman/shared';
 import Dexie, { type Table } from 'dexie';
-import type { IssueReportCreateInput } from '../api/client.js';
+import type { IssueReportCreateInput, IssueReportUpdateInput } from '../api/client.js';
 
 export type SyncRecordEntry = SyncRecord & {
   queuedAt: string;
@@ -175,7 +175,7 @@ export async function findIssueReportSyncRecordByEntityId(entityId: string) {
 
 export async function updateIssueReportSyncPayload(
   recordId: string,
-  patch: Partial<IssueReportCreateInput>,
+  patch: IssueReportUpdateInput,
   updatedAt = getNow(),
 ) {
   const record = await appDb.syncRecords.get(recordId);
@@ -184,12 +184,22 @@ export async function updateIssueReportSyncPayload(
     return undefined;
   }
 
+  const nextPayload = { ...(record.payload as IssueReportCreateInput) };
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      delete nextPayload[key as keyof IssueReportCreateInput];
+      continue;
+    }
+
+    Object.assign(nextPayload, {
+      [key]: value,
+    });
+  }
+
   const nextRecord: IssueReportSyncRecord = {
     ...(record as IssueReportSyncRecord),
-    payload: {
-      ...(record.payload as IssueReportCreateInput),
-      ...patch,
-    },
+    payload: nextPayload,
     updatedAt,
   };
 

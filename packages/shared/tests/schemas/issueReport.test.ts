@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CreateIssueReportSchema } from '../../src/schemas/issueReport.js';
+import { CreateIssueReportSchema, UpdateIssueReportSchema } from '../../src/schemas/issueReport.js';
 
 describe('CreateIssueReportSchema', () => {
   it('wifiConfigId がある場合は帯域とチャンネルを自動補完前提で省略できる', () => {
@@ -28,6 +28,31 @@ describe('CreateIssueReportSchema', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues.map((issue) => issue.path.join('.'))).toEqual(['band', 'channel']);
+    }
+  });
+});
+
+describe('UpdateIssueReportSchema', () => {
+  it('追記項目を null でクリアできる', () => {
+    const result = UpdateIssueReportSchema.safeParse({
+      reporterName: null,
+      avgPingMs: null,
+      distanceCategory: null,
+      reproducibility: null,
+      locationLabel: null,
+      description: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({
+        reporterName: null,
+        avgPingMs: null,
+        distanceCategory: null,
+        reproducibility: null,
+        locationLabel: null,
+        description: null,
+      });
     }
   });
 });

@@ -6,6 +6,7 @@ import {
   getSyncOverview,
   listIssueReportSyncRecords,
   queueIssueReportSync,
+  updateIssueReportSyncPayload,
   updateSyncRecordAfterAttempt,
 } from './appDb.js';
 
@@ -186,5 +187,33 @@ describe('AppDatabase', () => {
     await expect(findIssueReportSyncRecord(record.id)).resolves.toMatchObject({
       entityId: record.entityId,
     });
+  });
+
+  it('不具合報告の同期 payload 更新では null をキー削除として扱う', async () => {
+    const record = await queueIssueReportSync('00000000-0000-4000-8000-000000000001', {
+      teamId: '00000000-0000-4000-8000-000000000011',
+      wifiConfigId: '00000000-0000-4000-8000-000000000021',
+      visibility: 'team_private',
+      symptom: 'high_latency',
+      severity: 'high',
+      band: '5GHz',
+      channel: 36,
+      avgPingMs: 28,
+      description: 'stale note',
+    });
+
+    const updated = await updateIssueReportSyncPayload(record.id, {
+      avgPingMs: null,
+      description: null,
+      visibility: 'team_public',
+    });
+
+    expect(updated?.payload).toMatchObject({
+      visibility: 'team_public',
+      symptom: 'high_latency',
+      severity: 'high',
+    });
+    expect(updated?.payload).not.toHaveProperty('avgPingMs');
+    expect(updated?.payload).not.toHaveProperty('description');
   });
 });

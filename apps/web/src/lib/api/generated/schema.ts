@@ -639,6 +639,7 @@ export interface paths {
                   /** Format: uuid */
                   observedWifiId: string;
                   ssid?: string | null;
+                  bssid?: string | null;
                   /** @enum {string} */
                   source: 'wild' | 'analyzer_import' | 'manual';
                   rssi: number | null;
@@ -3775,11 +3776,8 @@ export interface paths {
             teamId?: string;
             /** Format: uuid */
             wifiConfigId?: string;
-            reporterName?: string;
-            /**
-             * @default team_private
-             * @enum {string}
-             */
+            reporterName?: string | null;
+            /** @enum {string} */
             visibility?: 'team_private' | 'team_public';
             /** @enum {string} */
             band?: '2.4GHz' | '5GHz' | '6GHz';
@@ -3796,27 +3794,29 @@ export interface paths {
               | 'unknown';
             /** @enum {string} */
             severity?: 'low' | 'medium' | 'high' | 'critical';
-            avgPingMs?: number;
-            maxPingMs?: number;
-            packetLossPercent?: number;
-            /** @enum {string} */
-            distanceCategory?: 'near' | 'mid' | 'far' | 'obstacle';
-            estimatedDistanceMeters?: number;
-            locationLabel?: string;
-            /** @enum {string} */
-            reproducibility?: 'always' | 'sometimes' | 'once';
-            description?: string;
-            mitigationTried?: (
-              | 'change_channel'
-              | 'change_width'
-              | 'change_band'
-              | 'change_device'
-              | 'move_position'
-              | 'none'
-            )[];
-            improved?: boolean;
-            apDeviceModel?: string;
-            clientDeviceModel?: string;
+            avgPingMs?: number | null;
+            maxPingMs?: number | null;
+            packetLossPercent?: number | null;
+            /** @enum {string|null} */
+            distanceCategory?: 'near' | 'mid' | 'far' | 'obstacle' | null;
+            estimatedDistanceMeters?: number | null;
+            locationLabel?: string | null;
+            /** @enum {string|null} */
+            reproducibility?: 'always' | 'sometimes' | 'once' | null;
+            description?: string | null;
+            mitigationTried?:
+              | (
+                  | 'change_channel'
+                  | 'change_width'
+                  | 'change_band'
+                  | 'change_device'
+                  | 'move_position'
+                  | 'none'
+                )[]
+              | null;
+            improved?: boolean | null;
+            apDeviceModel?: string | null;
+            clientDeviceModel?: string | null;
           };
         };
       };

@@ -1102,6 +1102,10 @@
                           "ssid": {
                             "type": ["string", "null"]
                           },
+                          "bssid": {
+                            "type": ["string", "null"],
+                            "pattern": "^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$"
+                          },
                           "source": {
                             "type": "string",
                             "enum": ["wild", "analyzer_import", "manual"]
@@ -6657,13 +6661,12 @@
                     "format": "uuid"
                   },
                   "reporterName": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 200
                   },
                   "visibility": {
                     "type": "string",
-                    "enum": ["team_private", "team_public"],
-                    "default": "team_private"
+                    "enum": ["team_private", "team_public"]
                   },
                   "band": {
                     "type": "string",
@@ -6694,40 +6697,40 @@
                     "enum": ["low", "medium", "high", "critical"]
                   },
                   "avgPingMs": {
-                    "type": "number",
+                    "type": ["number", "null"],
                     "minimum": 0
                   },
                   "maxPingMs": {
-                    "type": "number",
+                    "type": ["number", "null"],
                     "minimum": 0
                   },
                   "packetLossPercent": {
-                    "type": "number",
+                    "type": ["number", "null"],
                     "minimum": 0,
                     "maximum": 100
                   },
                   "distanceCategory": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "enum": ["near", "mid", "far", "obstacle"]
                   },
                   "estimatedDistanceMeters": {
-                    "type": "number",
+                    "type": ["number", "null"],
                     "minimum": 0
                   },
                   "locationLabel": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 200
                   },
                   "reproducibility": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "enum": ["always", "sometimes", "once"]
                   },
                   "description": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 5000
                   },
                   "mitigationTried": {
-                    "type": "array",
+                    "type": ["array", "null"],
                     "items": {
                       "type": "string",
                       "enum": [
@@ -6741,14 +6744,14 @@
                     }
                   },
                   "improved": {
-                    "type": "boolean"
+                    "type": ["boolean", "null"]
                   },
                   "apDeviceModel": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 200
                   },
                   "clientDeviceModel": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 200
                   }
                 }

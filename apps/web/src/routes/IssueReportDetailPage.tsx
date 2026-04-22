@@ -18,7 +18,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ISSUE_REPORT_VISIBILITIES, REPRODUCIBILITIES } from '@wifiman/shared';
 import { useEffect, useMemo, useState } from 'react';
-import { apiClient, type IssueReportCreateInput, type IssueReportView } from '../lib/api/client.js';
+import {
+  apiClient,
+  type IssueReportCreateInput,
+  type IssueReportUpdateInput,
+  type IssueReportView,
+} from '../lib/api/client.js';
 import { canEditTeamResources } from '../lib/authz.js';
 import {
   findIssueReportSyncRecord,
@@ -80,14 +85,38 @@ function toInitialFormValues(
 }
 
 function buildIssueReportPatch(values: DetailFormValues) {
+  const reporterName = values.reporterName.trim();
+  const locationLabel = values.locationLabel.trim();
+  const description = values.description.trim();
+
   return {
     visibility: values.visibility,
-    ...(values.reporterName ? { reporterName: values.reporterName } : {}),
-    ...(values.avgPingMs !== '' ? { avgPingMs: values.avgPingMs } : {}),
-    ...(values.reproducibility ? { reproducibility: values.reproducibility } : {}),
-    ...(values.locationLabel ? { locationLabel: values.locationLabel } : {}),
-    ...(values.description ? { description: values.description } : {}),
-  };
+    reporterName: reporterName.length > 0 ? reporterName : null,
+    avgPingMs: values.avgPingMs !== '' ? values.avgPingMs : null,
+    reproducibility: values.reproducibility || null,
+    locationLabel: locationLabel.length > 0 ? locationLabel : null,
+    description: description.length > 0 ? description : null,
+  } satisfies IssueReportUpdateInput;
+}
+
+function buildCreatePayloadForResend(
+  payload: IssueReportCreateInput,
+  patch: IssueReportUpdateInput,
+): IssueReportCreateInput {
+  const nextPayload = { ...payload };
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      delete nextPayload[key as keyof IssueReportCreateInput];
+      continue;
+    }
+
+    Object.assign(nextPayload, {
+      [key]: value,
+    });
+  }
+
+  return nextPayload;
 }
 
 export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueReportDetailPageProps) {
@@ -203,9 +232,9 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
     });
 
     try {
+      const patch = buildIssueReportPatch(values);
       const created = await apiClient.createIssueReport(tournamentId, {
-        ...localRecord.payload,
-        ...buildIssueReportPatch(values),
+        ...buildCreatePayloadForResend(localRecord.payload, patch),
       });
 
       await updateSyncRecordAfterAttempt(localRecord.id, {
@@ -283,9 +312,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
             disabled={!canEdit}
             data={ISSUE_REPORT_VISIBILITIES.map((value) => ({ value, label: value }))}
             onChange={(event) => {
+              const visibility = event.currentTarget.value as DetailFormValues['visibility'];
               setValues((current) => ({
                 ...current,
-                visibility: event.currentTarget.value as DetailFormValues['visibility'],
+                visibility,
               }));
             }}
           />
@@ -294,9 +324,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
             value={values.reporterName}
             disabled={!canEdit}
             onChange={(event) => {
+              const reporterName = event.currentTarget.value;
               setValues((current) => ({
                 ...current,
-                reporterName: event.currentTarget.value,
+                reporterName,
               }));
             }}
           />
@@ -324,9 +355,11 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
               ...REPRODUCIBILITIES.map((value) => ({ value, label: value })),
             ]}
             onChange={(event) => {
+              const reproducibility = event.currentTarget
+                .value as DetailFormValues['reproducibility'];
               setValues((current) => ({
                 ...current,
-                reproducibility: event.currentTarget.value as DetailFormValues['reproducibility'],
+                reproducibility,
               }));
             }}
           />
@@ -337,9 +370,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
           value={values.locationLabel}
           disabled={!canEdit}
           onChange={(event) => {
+            const locationLabel = event.currentTarget.value;
             setValues((current) => ({
               ...current,
-              locationLabel: event.currentTarget.value,
+              locationLabel,
             }));
           }}
         />
@@ -350,9 +384,10 @@ export function IssueReportDetailPage({ tournamentId, issueReportId }: IssueRepo
           value={values.description}
           disabled={!canEdit}
           onChange={(event) => {
+            const description = event.currentTarget.value;
             setValues((current) => ({
               ...current,
-              description: event.currentTarget.value,
+              description,
             }));
           }}
         />

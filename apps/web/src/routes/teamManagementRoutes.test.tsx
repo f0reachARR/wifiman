@@ -723,7 +723,12 @@ describe('team management routes', () => {
 
     expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '詳細モードを開く' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('平均 Ping (ms)')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('平均 Ping (ms)')).toBeInTheDocument();
+    expect(screen.getByLabelText('公開範囲')).toHaveValue('team_private');
+    expect(screen.getByLabelText('距離カテゴリ')).toBeInTheDocument();
+    expect(screen.getByLabelText('一言メモ')).toBeInTheDocument();
+    expect(screen.queryByLabelText('再現性')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('場所ラベル')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '詳細モードを開く' }));
 
@@ -738,6 +743,7 @@ describe('team management routes', () => {
       ownResponses,
       `/api/tournaments/${tournamentId}/issue-reports`,
     );
+    let capturedBody: unknown;
     const createIssueReport = vi.fn(async () => ({
       id: '00000000-0000-4000-8000-000000000081',
       tournamentId,
@@ -780,6 +786,7 @@ describe('team management routes', () => {
       const path = url.replace('http://localhost:3000', '');
 
       if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+        capturedBody = JSON.parse(String(init.body));
         return jsonResponse(await createIssueReport(), 201);
       }
 
@@ -796,12 +803,25 @@ describe('team management routes', () => {
 
     fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
     fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
+    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText('距離カテゴリ'), { target: { value: 'mid' } });
+    fireEvent.change(screen.getByLabelText('公開範囲'), { target: { value: 'team_public' } });
+    fireEvent.change(screen.getByLabelText('一言メモ'), { target: { value: 'quick note' } });
     fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
 
     await waitFor(() => {
       expect(createIssueReport).toHaveBeenCalledTimes(1);
     });
 
+    expect(capturedBody).toMatchObject({
+      wifiConfigId: ownWifiId,
+      visibility: 'team_public',
+      symptom: 'high_latency',
+      severity: 'high',
+      avgPingMs: 42,
+      distanceCategory: 'mid',
+      description: 'quick note',
+    });
     expect(window.location.pathname).toBe(`/tournaments/${tournamentId}/teams/${ownTeamId}`);
   });
 
@@ -895,6 +915,76 @@ describe('team management routes', () => {
     expect(screen.getByLabelText('公開範囲')).toHaveValue('team_private');
     expect(screen.getByDisplayValue('AP の近くで遅延増加')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '追記を保存' })).toBeInTheDocument();
+  });
+
+  it('報告詳細の追記編集で空値クリアを PATCH に含めて送信できる', async () => {
+    const ownResponses = createOwnTeamDetailResponses();
+    const issueReports = getRequiredResponse(
+      ownResponses,
+      `/api/tournaments/${tournamentId}/issue-reports`,
+    ).body as Array<Record<string, unknown>>;
+    const reportId = '00000000-0000-4000-8000-000000000061';
+    const report = issueReports[0];
+    if (!report) {
+      throw new Error('issue report fixture not found');
+    }
+    const responses: Record<string, MockResponse> = {
+      ...ownResponses,
+      [`/api/issue-reports/${reportId}`]: {
+        status: 200,
+        body: report,
+      },
+    };
+    let capturedPatchBody: Record<string, unknown> | undefined;
+
+    renderRoute(`/tournaments/${tournamentId}/issue-reports/${reportId}`, responses);
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
+
+      if (path === `/api/issue-reports/${reportId}` && init?.method === 'PATCH') {
+        capturedPatchBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return jsonResponse({
+          ...report,
+          ...capturedPatchBody,
+          reporterName: null,
+          avgPingMs: null,
+          reproducibility: null,
+          locationLabel: null,
+          description: null,
+        });
+      }
+
+      const matched = responses[path];
+
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
+
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: '不具合報告詳細' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('報告者名'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('平均 Ping (ms)'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('再現性'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('場所ラベル'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('追記メモ'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '追記を保存' }));
+
+    await waitFor(() => {
+      expect(capturedPatchBody).toEqual({
+        visibility: 'team_private',
+        reporterName: null,
+        avgPingMs: null,
+        reproducibility: null,
+        locationLabel: null,
+        description: null,
+      });
+    });
   });
 
   it('他チームからは team_private 報告詳細を閲覧できない', async () => {
