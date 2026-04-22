@@ -30,12 +30,12 @@ export const BetterAuthLoginSchema = z.object({
     .trim()
     .min(1, 'メールアドレスを入力してください')
     .email('メールアドレスを入力してください'),
-  password: z.string().trim().min(1, 'パスワードを入力してください'),
+  password: z.string().min(1, 'パスワードを入力してください'),
 });
 
 export const DevOperatorLoginSchema = z.object({
   displayName: z.string().trim().min(1, '表示名を入力してください'),
-  passphrase: z.string().trim().min(8, '8 文字以上のパスフレーズを入力してください'),
+  passphrase: z.string().min(8, '8 文字以上のパスフレーズを入力してください'),
 });
 
 export const TeamAccessLoginSchema = z.object({

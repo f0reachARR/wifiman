@@ -1991,6 +1991,67 @@ describe('team management routes', () => {
     expect(screen.queryByText('トークン検証に失敗しました')).not.toBeInTheDocument();
   });
 
+  it('team access は submit 失敗時に field error と分離して submit error を表示する', async () => {
+    renderRoute('/team-access', {
+      ...createBaseResponses(null),
+      '/api/team-accesses/verify': {
+        status: 401,
+        body: {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'トークン検証に失敗しました',
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'チームアクセス' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('アクセス トークン'), {
+      target: { value: 'a'.repeat(64) },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'チーム画面を開く' }));
+    });
+
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+    expect(screen.queryByText('トークンは 64 文字で入力してください')).not.toBeInTheDocument();
+  });
+
+  it('team access は submit error 表示後に入力変更したら submit error を消す', async () => {
+    renderRoute('/team-access', {
+      ...createBaseResponses(null),
+      '/api/team-accesses/verify': {
+        status: 401,
+        body: {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'トークン検証に失敗しました',
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'チームアクセス' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('アクセス トークン'), {
+      target: { value: 'a'.repeat(64) },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'チーム画面を開く' }));
+    });
+
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('アクセス トークン'), {
+      target: { value: 'b'.repeat(64) },
+    });
+
+    expect(screen.queryByText('API request failed')).not.toBeInTheDocument();
+  });
+
   it('自チーム詳細では報告一覧に詳細 DTO を表示し、WiFi editor で補助表示を出す', async () => {
     renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOwnTeamDetailResponses());
 

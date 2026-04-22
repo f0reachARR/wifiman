@@ -62,7 +62,7 @@ export function LoginPage() {
           email: value.email,
           password: value.password,
           displayName: parsed.displayName,
-          passphrase: parsed.passphrase,
+          passphrase: value.passphrase,
         });
       } else {
         const parsed = parseBetterAuthLoginInput({
@@ -72,7 +72,7 @@ export function LoginPage() {
 
         await signInAsOperator({
           email: parsed.email,
-          password: parsed.password,
+          password: value.password,
           displayName: value.displayName,
           passphrase: value.passphrase,
         });

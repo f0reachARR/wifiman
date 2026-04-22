@@ -5,6 +5,8 @@ import {
   getPostLoginRedirectPath,
   getProtectedRedirectPath,
   parseAuthSession,
+  parseBetterAuthLoginInput,
+  parseDevOperatorLoginInput,
 } from './auth.js';
 
 describe('auth helpers', () => {
@@ -97,5 +99,29 @@ describe('auth helpers', () => {
     vi.stubEnv('VITE_ENABLE_DEV_OPERATOR_AUTH', 'true');
 
     expect(getLoginMode()).toBe('dev-operator');
+  });
+
+  it('Better Auth の password は前後空白を含む生値を保持する', () => {
+    expect(
+      parseBetterAuthLoginInput({
+        email: ' operator@example.com ',
+        password: ' secret ',
+      }),
+    ).toEqual({
+      email: 'operator@example.com',
+      password: ' secret ',
+    });
+  });
+
+  it('dev operator の passphrase は前後空白を含む生値を保持する', () => {
+    expect(
+      parseDevOperatorLoginInput({
+        displayName: ' Operator 1 ',
+        passphrase: ' 12345678 ',
+      }),
+    ).toEqual({
+      displayName: 'Operator 1',
+      passphrase: ' 12345678 ',
+    });
   });
 });
