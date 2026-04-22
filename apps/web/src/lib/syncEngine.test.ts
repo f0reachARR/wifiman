@@ -144,10 +144,10 @@ describe('sync engine', () => {
       'fetch',
       vi.fn(
         async () =>
-          new Response(
-            JSON.stringify({ error: { code: 'FORBIDDEN', message: 'forbidden' } }),
-            { status: 403, headers: { 'content-type': 'application/json' } },
-          ),
+          new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'forbidden' } }), {
+            status: 403,
+            headers: { 'content-type': 'application/json' },
+          }),
       ),
     );
 

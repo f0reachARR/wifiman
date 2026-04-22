@@ -1296,44 +1296,46 @@ describe('team management routes', () => {
     });
   });
 
-  it.each([400, 401, 403, 409, 422])(
-    '不具合報告フォームは API %s 応答でも画面を維持してエラーを表示する',
-    async (status) => {
-      const ownResponses = createOwnTeamDetailResponses();
+  it.each([
+    400, 401, 403, 409, 422,
+  ])('不具合報告フォームは API %s 応答でも画面を維持してエラーを表示する', async (status) => {
+    const ownResponses = createOwnTeamDetailResponses();
 
-      renderRoute(
-        `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
-        ownResponses,
-        async (input: RequestInfo | URL, init?: RequestInit) => {
-          const url = String(input);
-          const path = url.replace('http://localhost:3000', '');
+    renderRoute(
+      `/tournaments/${tournamentId}/issue-reports/new?wifiConfigId=${ownWifiId}`,
+      ownResponses,
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace('http://localhost:3000', '');
 
-          if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
-            return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
-          }
+        if (path === `/api/tournaments/${tournamentId}/issue-reports` && init?.method === 'POST') {
+          return jsonResponse(
+            { error: { code: 'API_ERROR', message: `status ${status}` } },
+            status,
+          );
+        }
 
-          const matched = ownResponses[path];
+        const matched = ownResponses[path];
 
-          if (!matched) {
-            throw new Error(`Unhandled fetch: ${path}`);
-          }
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
 
-          return jsonResponse(matched.body, matched.status);
-        },
-      );
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
 
-      expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
 
-      await act(async () => {
-        fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
-        fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
-        fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
-      });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('症状'), { target: { value: 'high_latency' } });
+      fireEvent.change(screen.getByLabelText('深刻度'), { target: { value: 'high' } });
+      fireEvent.click(screen.getByRole('button', { name: '報告を保存' }));
+    });
 
-      expect(await screen.findByText('API request failed')).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
-    },
-  );
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '不具合報告を作成' })).toBeInTheDocument();
+  });
 
   it('オフライン保存すると syncRecords に pending が残る', async () => {
     renderRoute(
@@ -1452,7 +1454,9 @@ describe('team management routes', () => {
       fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
     });
 
-    expect(await screen.findByText('2 行目: 帯域 2.4GHz に対してチャンネル 149 は無効です')).toBeInTheDocument();
+    expect(
+      await screen.findByText('2 行目: 帯域 2.4GHz に対してチャンネル 149 は無効です'),
+    ).toBeInTheDocument();
   });
 
   it('operator dashboard の CSV 取込で 422 応答の行番号付きエラーを表示する', async () => {
@@ -1506,82 +1510,80 @@ describe('team management routes', () => {
     expect(await screen.findByText('4 行目: BSSID が重複しています')).toBeInTheDocument();
   });
 
-  it.each([400, 401, 403, 409])(
-    'operator dashboard の CSV 取込は API %s 応答時に generic error を表示する',
-    async (status) => {
-      const responses = createOperatorDashboardResponses();
+  it.each([
+    400, 401, 403, 409,
+  ])('operator dashboard の CSV 取込は API %s 応答時に generic error を表示する', async (status) => {
+    const responses = createOperatorDashboardResponses();
 
-      renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        const path = url.replace('http://localhost:3000', '');
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
 
-        if (
-          path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
-          init?.method === 'POST'
-        ) {
-          return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
-        }
+      if (
+        path === `/api/tournaments/${tournamentId}/observed-wifis/bulk` &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
+      }
 
-        const matched = responses[path];
+      const matched = responses[path];
 
-        if (!matched) {
-          throw new Error(`Unhandled fetch: ${path}`);
-        }
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
 
-        return jsonResponse(matched.body, matched.status);
+      return jsonResponse(matched.body, matched.status);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('CSV'), {
+        target: {
+          value: [
+            'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
+            'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
+          ].join('\n'),
+        },
       });
+      fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
+    });
 
-      expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+  });
 
-      await act(async () => {
-        fireEvent.change(screen.getByLabelText('CSV'), {
-          target: {
-            value: [
-              'source,ssid,bssid,band,channel,channelWidthMHz,rssi,locationLabel,observedAt,notes',
-              'manual,Venue WiFi,00:11:22:33:44:55,5GHz,40,20,-68,North Hall,2026-04-21T10:00:00.000Z,scanner',
-            ].join('\n'),
-          },
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'CSV を一括登録' }));
-      });
+  it.each([
+    400, 401, 403, 409, 422,
+  ])('operator dashboard の野良 WiFi 手入力は API %s 応答時にエラー alert を表示する', async (status) => {
+    const responses = createOperatorDashboardResponses();
 
-      expect(await screen.findByText('API request failed')).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-    },
-  );
+    renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = url.replace('http://localhost:3000', '');
 
-  it.each([400, 401, 403, 409, 422])(
-    'operator dashboard の野良 WiFi 手入力は API %s 応答時にエラー alert を表示する',
-    async (status) => {
-      const responses = createOperatorDashboardResponses();
+      if (path === `/api/tournaments/${tournamentId}/observed-wifis` && init?.method === 'POST') {
+        return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
+      }
 
-      renderRoute('/app', responses, async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        const path = url.replace('http://localhost:3000', '');
+      const matched = responses[path];
 
-        if (path === `/api/tournaments/${tournamentId}/observed-wifis` && init?.method === 'POST') {
-          return jsonResponse({ error: { code: 'API_ERROR', message: `status ${status}` } }, status);
-        }
+      if (!matched) {
+        throw new Error(`Unhandled fetch: ${path}`);
+      }
 
-        const matched = responses[path];
+      return jsonResponse(matched.body, matched.status);
+    });
 
-        if (!matched) {
-          throw new Error(`Unhandled fetch: ${path}`);
-        }
+    expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
 
-        return jsonResponse(matched.body, matched.status);
-      });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
+    });
 
-      expect(await screen.findByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-
-      await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: '野良 WiFi を登録' }));
-      });
-
-      expect(await screen.findByText('API request failed')).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
-    },
-  );
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'operator dashboard' })).toBeInTheDocument();
+  });
 
   it('初回マウント時にオンラインなら pending を自動同期する', async () => {
     const record = await queueIssueReportSync(tournamentId, {
@@ -1900,7 +1902,10 @@ describe('team management routes', () => {
   });
 
   it('team viewer は閲覧専用 UI となり private 情報と編集導線を表示しない', async () => {
-    renderRoute(`/tournaments/${tournamentId}/teams/${ownTeamId}`, createOtherTeamDetailResponses());
+    renderRoute(
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+      createOtherTeamDetailResponses(),
+    );
 
     expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
     expect(
@@ -1908,7 +1913,9 @@ describe('team management routes', () => {
         'この画面は閲覧専用です。編集 UI は自チーム editor または運営者にのみ表示されます。',
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '新しい WiFi 構成を追加' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '新しい WiFi 構成を追加' }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText('Ping 監視先: 192.168.10.1')).not.toBeInTheDocument();
     expect(screen.queryByText('private wifi note')).not.toBeInTheDocument();
   });
@@ -1971,7 +1978,8 @@ describe('team management routes', () => {
     responses[`/api/teams/${ownTeamId}/wifi-configs`] = {
       status: 200,
       body: [
-        ...(getRequiredResponse(responses, `/api/teams/${ownTeamId}/wifi-configs`).body as Array<unknown>),
+        ...(getRequiredResponse(responses, `/api/teams/${ownTeamId}/wifi-configs`)
+          .body as Array<unknown>),
         {
           id: '00000000-0000-4000-8000-000000000023',
           teamId: ownTeamId,
@@ -2017,58 +2025,57 @@ describe('team management routes', () => {
     expect(screen.getByText('WiFi 構成は最大 3 件までです')).toBeInTheDocument();
   });
 
-  it.each([400, 401, 403, 409, 422])(
-    'WiFi 構成フォームは API %s 応答でもクラッシュせずエラーを表示する',
-    async (status) => {
-      const responses = createOwnTeamDetailResponses();
+  it.each([
+    400, 401, 403, 409, 422,
+  ])('WiFi 構成フォームは API %s 応答でもクラッシュせずエラーを表示する', async (status) => {
+    const responses = createOwnTeamDetailResponses();
 
-      renderRoute(
-        `/tournaments/${tournamentId}/teams/${ownTeamId}`,
-        responses,
-        async (input: RequestInfo | URL, init?: RequestInit) => {
-          const url = String(input);
-          const path = url.replace('http://localhost:3000', '');
+    renderRoute(
+      `/tournaments/${tournamentId}/teams/${ownTeamId}`,
+      responses,
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const path = url.replace('http://localhost:3000', '');
 
-          if (path === `/api/teams/${ownTeamId}/wifi-configs` && init?.method === 'POST') {
-            return jsonResponse(
-              { error: { code: 'API_ERROR', message: `status ${status}` } },
-              status,
-            );
-          }
+        if (path === `/api/teams/${ownTeamId}/wifi-configs` && init?.method === 'POST') {
+          return jsonResponse(
+            { error: { code: 'API_ERROR', message: `status ${status}` } },
+            status,
+          );
+        }
 
-          const matched = responses[path];
+        const matched = responses[path];
 
-          if (!matched) {
-            throw new Error(`Unhandled fetch: ${path}`);
-          }
+        if (!matched) {
+          throw new Error(`Unhandled fetch: ${path}`);
+        }
 
-          return jsonResponse(matched.body, matched.status);
-        },
-      );
+        return jsonResponse(matched.body, matched.status);
+      },
+    );
 
-      expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
-      });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '新しい WiFi 構成を追加' }));
+    });
 
-      const nameInput = await screen.findByLabelText('構成名');
-      const form = nameInput.closest('form');
-      const saveButton = form?.querySelector('button[type="submit"]');
+    const nameInput = await screen.findByLabelText('構成名');
+    const form = nameInput.closest('form');
+    const saveButton = form?.querySelector('button[type="submit"]');
 
-      if (!(saveButton instanceof HTMLButtonElement)) {
-        throw new Error('wifi config save button not found');
-      }
+    if (!(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('wifi config save button not found');
+    }
 
-      await act(async () => {
-        fireEvent.change(nameInput, { target: { value: `Status ${status} Config` } });
-        fireEvent.click(saveButton);
-      });
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: `Status ${status} Config` } });
+      fireEvent.click(saveButton);
+    });
 
-      expect(await screen.findByText('API request failed')).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
-    },
-  );
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+  });
 
   it('自チーム詳細から local pending 報告詳細へ遷移できる', async () => {
     const record = await queueIssueReportSync(tournamentId, {

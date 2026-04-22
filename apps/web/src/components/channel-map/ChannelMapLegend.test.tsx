@@ -170,7 +170,9 @@ describe('ChannelMapDetailPanel', () => {
     );
 
     expect(screen.getByText('Control 5G')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'この構成で報告を作成する' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'この構成で報告を作成する' }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'このチームの詳細を見る' })).toBeInTheDocument();
   });
 
@@ -192,7 +194,9 @@ describe('ChannelMapDetailPanel', () => {
 
     expect(screen.getByText('Backup 5G')).toBeInTheDocument();
     expect(screen.getByText('AP 型番: AP-7000')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'この構成で報告を作成する' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'この構成で報告を作成する' }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'このチームの詳細を見る' })).toHaveAttribute(
       'href',
       '/tournaments/00000000-0000-4000-8000-000000000001/teams/00000000-0000-4000-8000-000000000012',
@@ -210,7 +214,9 @@ describe('ChannelMapDetailPanel', () => {
     expect(screen.getByText('Venue WiFi')).toBeInTheDocument();
     expect(screen.getByText('BSSID: 00:11:22:33:44:55')).toBeInTheDocument();
     expect(screen.getByText('観測ソース: wild')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'この構成で報告を作成する' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'この構成で報告を作成する' }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'チーム一覧から報告先を探す' })).toHaveAttribute(
       'href',
       '/tournaments/00000000-0000-4000-8000-000000000001/teams',
