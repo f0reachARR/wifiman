@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { betterAuthClient } from '../lib/betterAuthClient.js';
 import { appDb, queueIssueReportSync, updateSyncRecordAfterAttempt } from '../lib/db/appDb.js';
 
 vi.mock('../lib/betterAuthClient.js', () => ({
@@ -1878,6 +1879,177 @@ describe('team management routes', () => {
     expect(screen.getByRole('radio', { name: '5GHz' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: '制御用途のみ' })).toBeChecked();
     expect(screen.getByLabelText('型番フィルタ')).toHaveValue('AP-9000');
+  });
+
+  it('login は入力エラー時に submit error を表示しない', async () => {
+    renderRoute('/login', createBaseResponses(null));
+
+    expect(await screen.findByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
+
+    const form = screen.getByRole('button', { name: 'ダッシュボードへ進む' }).closest('form');
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('login form not found');
+    }
+
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    expect(await screen.findByText('メールアドレスを入力してください')).toBeInTheDocument();
+    expect(screen.getByText('パスワードを入力してください')).toBeInTheDocument();
+    expect(screen.queryByText('ログインに失敗しました')).not.toBeInTheDocument();
+  });
+
+  it('login は submit 失敗時に field error と分離して submit error を表示する', async () => {
+    vi.mocked(betterAuthClient.signIn.email).mockResolvedValueOnce({
+      data: null,
+      error: {
+        message: '認証に失敗しました',
+      },
+    });
+
+    renderRoute('/login', createBaseResponses(null));
+
+    expect(await screen.findByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('メールアドレス'), {
+      target: { value: 'operator@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('パスワード'), {
+      target: { value: 'password' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'ダッシュボードへ進む' }));
+    });
+
+    expect(await screen.findByText('認証に失敗しました')).toBeInTheDocument();
+    expect(screen.queryByText('メールアドレスを入力してください')).not.toBeInTheDocument();
+    expect(screen.queryByText('パスワードを入力してください')).not.toBeInTheDocument();
+  });
+
+  it('login は submit error 表示後に入力エラーへ遷移したら submit error を消す', async () => {
+    vi.mocked(betterAuthClient.signIn.email).mockResolvedValueOnce({
+      data: null,
+      error: {
+        message: '認証に失敗しました',
+      },
+    });
+
+    renderRoute('/login', createBaseResponses(null));
+
+    expect(await screen.findByRole('heading', { name: '運営ログイン' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('メールアドレス'), {
+      target: { value: 'operator@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('パスワード'), {
+      target: { value: 'password' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'ダッシュボードへ進む' }));
+    });
+
+    expect(await screen.findByText('認証に失敗しました')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('メールアドレス'), {
+      target: { value: '' },
+    });
+
+    const form = screen.getByRole('button', { name: 'ダッシュボードへ進む' }).closest('form');
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('login form not found');
+    }
+
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    expect(await screen.findByText('メールアドレスを入力してください')).toBeInTheDocument();
+    expect(screen.queryByText('認証に失敗しました')).not.toBeInTheDocument();
+  });
+
+  it('team access は入力エラー時に submit error を表示しない', async () => {
+    renderRoute('/team-access', createBaseResponses(null));
+
+    expect(await screen.findByRole('heading', { name: 'チームアクセス' })).toBeInTheDocument();
+
+    const form = screen.getByRole('button', { name: 'チーム画面を開く' }).closest('form');
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('team access form not found');
+    }
+
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    expect(await screen.findByText('トークンは 64 文字で入力してください')).toBeInTheDocument();
+    expect(screen.queryByText('トークン検証に失敗しました')).not.toBeInTheDocument();
+  });
+
+  it('team access は submit 失敗時に field error と分離して submit error を表示する', async () => {
+    renderRoute('/team-access', {
+      ...createBaseResponses(null),
+      '/api/team-accesses/verify': {
+        status: 401,
+        body: {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'トークン検証に失敗しました',
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'チームアクセス' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('アクセス トークン'), {
+      target: { value: 'a'.repeat(64) },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'チーム画面を開く' }));
+    });
+
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+    expect(screen.queryByText('トークンは 64 文字で入力してください')).not.toBeInTheDocument();
+  });
+
+  it('team access は submit error 表示後に入力変更したら submit error を消す', async () => {
+    renderRoute('/team-access', {
+      ...createBaseResponses(null),
+      '/api/team-accesses/verify': {
+        status: 401,
+        body: {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'トークン検証に失敗しました',
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'チームアクセス' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('アクセス トークン'), {
+      target: { value: 'a'.repeat(64) },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'チーム画面を開く' }));
+    });
+
+    expect(await screen.findByText('API request failed')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('アクセス トークン'), {
+      target: { value: 'b'.repeat(64) },
+    });
+
+    expect(screen.queryByText('API request failed')).not.toBeInTheDocument();
   });
 
   it('自チーム詳細では報告一覧に詳細 DTO を表示し、WiFi editor で補助表示を出す', async () => {

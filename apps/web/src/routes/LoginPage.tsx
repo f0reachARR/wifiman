@@ -2,7 +2,15 @@ import { Alert, Button, Card, PasswordInput, Stack, Text, TextInput, Title } fro
 import { useForm } from '@tanstack/react-form';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
-import { getLoginMode, getPostLoginRedirectPath } from '../lib/auth.js';
+import {
+  BetterAuthLoginSchema,
+  DevOperatorLoginSchema,
+  getLoginMode,
+  getPostLoginRedirectPath,
+  parseBetterAuthLoginInput,
+  parseDevOperatorLoginInput,
+} from '../lib/auth.js';
+import { createTanStackFormZodHelpers } from '../lib/tanstackFormZod.js';
 import { useAuthActions } from '../lib/useAuthSession.js';
 
 type LoginFormValues = {
@@ -21,6 +29,16 @@ export function LoginPage() {
   );
   const loginMode = getLoginMode();
   const usesDevOperatorLogin = loginMode === 'dev-operator';
+  const betterAuthZodForm = createTanStackFormZodHelpers(
+    BetterAuthLoginSchema,
+    setSubmitError,
+    'ログインに失敗しました',
+  );
+  const devOperatorZodForm = createTanStackFormZodHelpers(
+    DevOperatorLoginSchema,
+    setSubmitError,
+    'ログインに失敗しました',
+  );
   const form = useForm({
     defaultValues: {
       email: '',
@@ -28,9 +46,38 @@ export function LoginPage() {
       displayName: '',
       passphrase: '',
     } satisfies LoginFormValues,
+    onSubmitInvalid: () => {
+      setSubmitError(null);
+    },
     onSubmit: async ({ value }) => {
       setSubmitError(null);
-      await signInAsOperator(value);
+
+      if (usesDevOperatorLogin) {
+        const parsed = parseDevOperatorLoginInput({
+          displayName: value.displayName,
+          passphrase: value.passphrase,
+        });
+
+        await signInAsOperator({
+          email: value.email,
+          password: value.password,
+          displayName: parsed.displayName,
+          passphrase: value.passphrase,
+        });
+      } else {
+        const parsed = parseBetterAuthLoginInput({
+          email: value.email,
+          password: value.password,
+        });
+
+        await signInAsOperator({
+          email: parsed.email,
+          password: value.password,
+          displayName: value.displayName,
+          passphrase: value.passphrase,
+        });
+      }
+
       await navigate({ href: postLoginRedirectPath });
     },
   });
@@ -74,8 +121,7 @@ export function LoginPage() {
                 <form.Field
                   name='displayName'
                   validators={{
-                    onChange: ({ value }) =>
-                      value.trim().length === 0 ? '表示名を入力してください' : undefined,
+                    onChange: devOperatorZodForm.getFieldValidator('displayName'),
                   }}
                 >
                   {(field) => (
@@ -84,7 +130,11 @@ export function LoginPage() {
                       placeholder='Operator 1'
                       value={field.state.value}
                       onBlur={field.handleBlur}
-                      onChange={(event) => field.handleChange(event.currentTarget.value)}
+                      onChange={(event) =>
+                        devOperatorZodForm.getChangeHandler(field.handleChange)(
+                          event.currentTarget.value,
+                        )
+                      }
                       error={field.state.meta.errors[0]}
                     />
                   )}
@@ -93,10 +143,7 @@ export function LoginPage() {
                 <form.Field
                   name='passphrase'
                   validators={{
-                    onChange: ({ value }) =>
-                      value.trim().length < 8
-                        ? '8 文字以上のパスフレーズを入力してください'
-                        : undefined,
+                    onChange: devOperatorZodForm.getFieldValidator('passphrase'),
                   }}
                 >
                   {(field) => (
@@ -105,7 +152,11 @@ export function LoginPage() {
                       placeholder='local-dev-passphrase'
                       value={field.state.value}
                       onBlur={field.handleBlur}
-                      onChange={(event) => field.handleChange(event.currentTarget.value)}
+                      onChange={(event) =>
+                        devOperatorZodForm.getChangeHandler(field.handleChange)(
+                          event.currentTarget.value,
+                        )
+                      }
                       error={field.state.meta.errors[0]}
                     />
                   )}
@@ -116,8 +167,7 @@ export function LoginPage() {
                 <form.Field
                   name='email'
                   validators={{
-                    onChange: ({ value }) =>
-                      value.includes('@') ? undefined : 'メールアドレスを入力してください',
+                    onChange: betterAuthZodForm.getFieldValidator('email'),
                   }}
                 >
                   {(field) => (
@@ -126,7 +176,11 @@ export function LoginPage() {
                       placeholder='operator@example.com'
                       value={field.state.value}
                       onBlur={field.handleBlur}
-                      onChange={(event) => field.handleChange(event.currentTarget.value)}
+                      onChange={(event) =>
+                        betterAuthZodForm.getChangeHandler(field.handleChange)(
+                          event.currentTarget.value,
+                        )
+                      }
                       error={field.state.meta.errors[0]}
                     />
                   )}
@@ -135,8 +189,7 @@ export function LoginPage() {
                 <form.Field
                   name='password'
                   validators={{
-                    onChange: ({ value }) =>
-                      value.trim().length === 0 ? 'パスワードを入力してください' : undefined,
+                    onChange: betterAuthZodForm.getFieldValidator('password'),
                   }}
                 >
                   {(field) => (
@@ -145,7 +198,11 @@ export function LoginPage() {
                       placeholder='password'
                       value={field.state.value}
                       onBlur={field.handleBlur}
-                      onChange={(event) => field.handleChange(event.currentTarget.value)}
+                      onChange={(event) =>
+                        betterAuthZodForm.getChangeHandler(field.handleChange)(
+                          event.currentTarget.value,
+                        )
+                      }
                       error={field.state.meta.errors[0]}
                     />
                   )}

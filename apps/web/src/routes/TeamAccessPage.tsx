@@ -2,6 +2,8 @@ import { Alert, Button, Card, Stack, Text, TextInput, Title } from '@mantine/cor
 import { useForm } from '@tanstack/react-form';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
+import { parseTeamAccessLoginInput, TeamAccessLoginSchema } from '../lib/auth.js';
+import { createTanStackFormZodHelpers } from '../lib/tanstackFormZod.js';
 import { useAuthActions } from '../lib/useAuthSession.js';
 
 type TeamAccessFormValues = {
@@ -16,13 +18,22 @@ export function TeamAccessPage() {
     typeof window === 'undefined'
       ? ''
       : (new URLSearchParams(window.location.search).get('token') ?? '');
+  const zodForm = createTanStackFormZodHelpers(
+    TeamAccessLoginSchema,
+    setSubmitError,
+    'トークン検証に失敗しました',
+  );
   const form = useForm({
     defaultValues: {
       token: initialToken,
     } satisfies TeamAccessFormValues,
+    onSubmitInvalid: () => {
+      zodForm.handleSubmitInvalid();
+    },
     onSubmit: async ({ value }) => {
-      setSubmitError(null);
-      await signInWithTeamAccess(value.token);
+      zodForm.clearSubmitError();
+      const parsed = parseTeamAccessLoginInput(value);
+      await signInWithTeamAccess(parsed.token);
       await navigate({ to: '/app' });
     },
   });
@@ -53,7 +64,7 @@ export function TeamAccessPage() {
             event.preventDefault();
             event.stopPropagation();
             void form.handleSubmit().catch((error: unknown) => {
-              setSubmitError(error instanceof Error ? error.message : 'トークン検証に失敗しました');
+              zodForm.handleSubmitError(error);
             });
           }}
         >
@@ -61,8 +72,7 @@ export function TeamAccessPage() {
             <form.Field
               name='token'
               validators={{
-                onChange: ({ value }) =>
-                  value.trim().length !== 64 ? 'トークンは 64 文字で入力してください' : undefined,
+                onChange: zodForm.getFieldValidator('token'),
               }}
             >
               {(field) => (
@@ -71,7 +81,9 @@ export function TeamAccessPage() {
                   placeholder='64 文字の編集リンクトークン'
                   value={field.state.value}
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onChange={(event) =>
+                    zodForm.getChangeHandler(field.handleChange)(event.currentTarget.value)
+                  }
                   error={field.state.meta.errors[0]}
                 />
               )}
